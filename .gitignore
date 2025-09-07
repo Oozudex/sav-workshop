@@ -1,0 +1,25 @@
+# Node / Vite
+node_modules/
+dist/
+.vite/
+.cache/
+.tmp/
+
+# IDE / OS
+.DS_Store
+.vscode/
+.idea/
+
+# Env (ne JAMAIS commiter vos secrets)
+.env
+.env.*.local
+*.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Misc
+coverage/

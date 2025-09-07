@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function hasRole(roles) {
+      return isSignedIn() && roles.hasAny([userDoc(request.auth.uid).data.role]);
+    }
+
+    // Users collection: users manage their own profile; admins can read all.
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Tickets
+    match /tickets/{ticketId} {
+      allow read: if isSignedIn();
+
+      // Create: staff or admin
+      allow create: if isSignedIn() && (
+        userDoc(request.auth.uid).data.role in ['admin', 'staff']
+      );
+
+      // Update: owner of change must be active user. Mechanics can update status & history; staff/admin can update most fields.
+      allow update: if isSignedIn() && (
+        (userDoc(request.auth.uid).data.role in ['admin', 'staff']) ||
+        (userDoc(request.auth.uid).data.role == 'mechanic' &&
+          request.resource.data.diff(resource.data).changedKeys().hasOnly(['status','updatedAt','history','assignedTo']))
+      );
+
+      // Delete: admin only
+      allow delete: if isSignedIn() && userDoc(request.auth.uid).data.role == 'admin';
+    }
+  }
+}

@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+    height: 100%;
+}
+
+body {
+    @apply font-sans bg-gray-50 text-gray-900 dark:bg-neutral-950 dark:text-neutral-100;
+}
+
+/* Si tu avais .font-heading quelque part, on le mappe aussi sur la même police */
+.font-heading {
+    @apply font-sans;
+}
+
+
+/* Entrées uniformes (clair + sombre) */
+.Input {
+    @apply w-full rounded-xl px-3 py-2 border bg-white text-gray-900 border-gray-300 focus:outline-none focus:ring-2 focus:ring-black/80 focus:border-black/80 dark:bg-neutral-900 dark:text-neutral-100 dark:border-neutral-700 dark:focus:ring-white/70 dark:focus:border-white/70;
+}
+
+/* Scrollbars fines */
+*::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, .18);
+    border-radius: 9999px;
+}
+
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, .18) transparent;
+}
+
+.dark *::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, .22);
+}
+
+.dark * {
+    scrollbar-color: rgba(255, 255, 255, .22) transparent;
+}
