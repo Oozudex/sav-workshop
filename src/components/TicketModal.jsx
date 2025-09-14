@@ -4,7 +4,8 @@ import { useAuth } from '../store/useAuth'
 import { db } from '../lib/firebase'
 import {
     collection, addDoc, onSnapshot, query, orderBy,
-    serverTimestamp, doc, updateDoc, arrayUnion
+    serverTimestamp, doc, updateDoc, arrayUnion,
+    deleteDoc, getDocs, writeBatch
 } from 'firebase/firestore'
 
 const LABELS = {
@@ -33,10 +34,10 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo 
 
     // --- Edition
     const myRole = role || profile?.role
-    const canAdmin = myRole === 'admin' || myRole === 'buyer'        // buyer = admin
+    const canAdmin = myRole === 'admin' || myRole === 'buyer' // buyer = admin
     const canEdit = ['admin', 'buyer', 'staff', 'mechanic'].includes(myRole)
-    const canEditAll = ['admin', 'buyer', 'staff'].includes(myRole)    // full édition
-    const canEditLimited = ['mechanic'].includes(myRole)                   // limité = mécano seul
+    const canEditAll = ['admin', 'buyer', 'staff'].includes(myRole)
+    const canEditLimited = ['mechanic'].includes(myRole)
 
     const [editing, setEditing] = useState(false)
     const [saving, setSaving] = useState(false)
@@ -50,7 +51,7 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo 
         return () => window.removeEventListener('keydown', onKey)
     }, [onClose])
 
-    // Live comments
+    // Live comments (sous-collection)
     useEffect(() => {
         if (!ticket?.id) return
         const q = query(collection(db, 'tickets', ticket.id, 'comments'), orderBy('createdAt', 'asc'))
@@ -60,28 +61,81 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo 
         return unsub
     }, [ticket?.id])
 
+    const [sendingComment, setSendingComment] = useState(false)
+
     async function submitComment(e) {
         e?.preventDefault?.()
         const text = commentText.trim()
-        if (!text) return
+        if (!text || !user || sendingComment) return
+
+        setSendingComment(true)
         const author = profile?.displayName || user?.email || 'Utilisateur'
 
-        await addDoc(collection(db, 'tickets', ticket.id, 'comments'), {
-            text, createdAt: serverTimestamp(), createdBy: user.uid, author,
-        })
+        try {
+            // 1) Enregistrer le commentaire (OK)
+            await addDoc(collection(db, 'tickets', ticket.id, 'comments'), {
+                text,
+                createdAt: serverTimestamp(),  // OK ici
+                createdBy: user.uid,
+                author,
+            })
 
-        const excerpt = text.length > 120 ? text.slice(0, 117) + '…' : text
-        await updateDoc(doc(db, 'tickets', ticket.id), {
-            updatedAt: serverTimestamp(),
-            history: arrayUnion({
-                at: new Date().toISOString(),
-                by: user.uid,
-                action: 'comment',
-                note: excerpt,
-            }),
-        })
-        setCommentText('')
+            // 2) Pousser un résumé dans l’historique
+            // IMPORTANT : pas de serverTimestamp() à l'intérieur d'arrayUnion.
+            const excerpt = text.length > 120 ? text.slice(0, 117) + '…' : text
+
+            // On met le vrai serverTimestamp sur updatedAt (au niveau racine) — OK
+            // Et on met une date "classique" (ISO string) dans l'entrée d'historique.
+            await updateDoc(doc(db, 'tickets', ticket.id), {
+                updatedAt: serverTimestamp(),
+                history: arrayUnion({
+                    at: new Date().toISOString(),   // ✅ PAS serverTimestamp() ici
+                    by: author,
+                    action: 'comment',
+                    note: excerpt,
+                }),
+            })
+
+            setCommentText('')
+        } catch (err) {
+            console.error('submitComment error', err)
+            // Comme le commentaire a peut-être été créé, on n'affiche plus d'alerte bloquante :
+            // alert("Impossible d'envoyer le commentaire (règles Firestore ?)")
+        } finally {
+            setSendingComment(false)
+        }
     }
+
+    const [deleting, setDeleting] = useState(false)
+
+    async function handleDeleteLocal(e) {
+        e?.stopPropagation?.()
+        if (deleting) return
+
+        // Si l'utilisateur n'a pas le droit, on n'affiche même pas le bouton normalement.
+        // Mais on sécurise :
+        if (!(role === 'admin' || role === 'buyer' || profile?.role === 'admin' || profile?.role === 'buyer')) {
+            alert("Vous n'avez pas les droits pour supprimer ce ticket.")
+            return
+        }
+
+        const ok = confirm('Supprimer ce ticket ? Cette action est irréversible.')
+        if (!ok) return
+
+        try {
+            setDeleting(true)
+            await deleteTicketWithSubs(ticket.id)
+            // Si le parent avait fourni un onDelete, on l’appelle juste pour qu’il rafraîchisse sa liste
+            try { await onDelete?.() } catch { }
+            onClose?.()
+        } catch (err) {
+            console.error('DELETE ERROR', err)
+            alert('Suppression impossible : ' + (err?.message || 'inconnue'))
+        } finally {
+            setDeleting(false)
+        }
+    }
+
 
     function onChange(k, v) { setDraft(d => ({ ...d, [k]: v })) }
 
@@ -122,8 +176,8 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo 
                 ...changed,
                 updatedAt: serverTimestamp(),
                 history: arrayUnion({
-                    at: new Date().toISOString(),
-                    by: user.uid,
+                    at: serverTimestamp(),
+                    by: profile?.displayName || user?.email || '—',
                     action: 'edit',
                     note: `Champs modifiés : ${note}`,
                 }),
@@ -142,7 +196,7 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo 
         <div
             ref={overlayRef}
             onClick={onOverlayClick}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+            className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
         >
             <div className="w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden
                       rounded-3xl shadow-2xl border border-gray-200 bg-white
@@ -189,10 +243,13 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo 
                             )}
                             {canAdmin && (
                                 <button
-                                    onClick={onDelete}
+                                    onClick={handleDeleteLocal}
+                                    disabled={deleting}
                                     className="px-3 py-2 rounded-xl border text-red-600 hover:bg-red-50
-                             border-red-200 dark:text-red-300 dark:border-red-500/30 dark:hover:bg-red-500/10">
-                                    Supprimer
+               border-red-200 dark:text-red-300 dark:border-red-500/30 dark:hover:bg-red-500/10
+               disabled:opacity-60"
+                                >
+                                    {deleting ? 'Suppression…' : 'Supprimer'}
                                 </button>
                             )}
                             <button
@@ -294,7 +351,7 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo 
 
                     {/* Colonne droite */}
                     <div className="md:col-span-6 space-y-4">
-                        {/* Statut : inchangé (boutons) */}
+                        {/* Statut */}
                         <Section title="Changer le statut">
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                 {STATUSES.map((s) => {
@@ -360,7 +417,7 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo 
                                 {(ticket.history || []).slice().reverse().map((h, i) => (
                                     <div key={i} className="px-2 py-1 rounded hover:bg-black/5 dark:hover:bg-white/5 flex gap-2">
                                         <span className="font-medium w-44 shrink-0 text-gray-700 dark:text-neutral-300">
-                                            {formatDate(h.at)}
+                                            {formatTS(h.at)}
                                         </span>
                                         <span className="text-gray-500 dark:text-neutral-400">{h.action}</span>
                                         <span className="text-gray-900 dark:text-neutral-100">— {h.note}</span>
@@ -389,7 +446,7 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo 
                                             <span>•</span>
                                             <span>{formatTS(c.createdAt)}</span>
                                         </div>
-                                        <div className="mt-0.5">{c.text}</div>
+                                        <div className="mt-0.5 whitespace-pre-wrap">{c.text}</div>
                                     </div>
                                 ))}
                             </div>
@@ -505,11 +562,10 @@ function makeDraft(t) {
 }
 
 function sanitizeDraft(d) {
-    // Vide -> null pour les champs optionnels
     const n = { ...d }
-        ;['customerPhone', 'customerEmail', 'bikeBrand', 'bikeModel', 'serialNumber', 'purchaseDate', 'issueDescription', 'accessoriesLeft', 'dueDate', 'assignedTo'].forEach(k => {
-            if (n[k] === '') n[k] = null
-        })
+        ;['customerPhone', 'customerEmail', 'bikeBrand', 'bikeModel', 'serialNumber',
+            'purchaseDate', 'issueDescription', 'accessoriesLeft', 'dueDate', 'assignedTo']
+            .forEach(k => { if (n[k] === '') n[k] = null })
     return n
 }
 
@@ -517,7 +573,6 @@ function diff(before, after) {
     const changed = {}
     for (const k of Object.keys(after)) {
         const a = after[k]; const b = before[k]
-        // comparaison strict mais tolère null/'' déjà normalisé dans sanitizeDraft
         if (JSON.stringify(a) !== JSON.stringify(b)) changed[k] = a
     }
     return changed
@@ -526,14 +581,43 @@ function diff(before, after) {
 function formatTS(ts) {
     try {
         if (!ts) return '—'
-        const d = ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts)
-        return d.toLocaleString('fr-FR')
+        // support Timestamp, string ISO, Date
+        if (ts.seconds) return new Date(ts.seconds * 1000).toLocaleString('fr-FR')
+        if (typeof ts === 'string') return new Date(ts).toLocaleString('fr-FR')
+        if (ts instanceof Date) return ts.toLocaleString('fr-FR')
+        return '—'
     } catch { return '—' }
-}
-function formatDate(iso) {
-    try { return new Date(iso).toLocaleString('fr-FR') } catch { return iso || '—' }
 }
 function formatDateYMD(ymd) {
     if (!ymd) return '—'
     try { return new Date(ymd).toLocaleDateString('fr-FR') } catch { return ymd }
+}
+
+// Supprime tous les docs d'une collection en plusieurs batchs (sécurise la limite 500 écritures)
+async function deleteAllDocs(colRef) {
+    const snap = await getDocs(colRef)
+    if (snap.empty) return
+    let batch = writeBatch(db)
+    let count = 0
+    const commits = []
+
+    snap.forEach(d => {
+        batch.delete(d.ref)
+        count++
+        if (count >= 450) {
+            commits.push(batch.commit())
+            batch = writeBatch(db)
+            count = 0
+        }
+    })
+    if (count) commits.push(batch.commit())
+    await Promise.all(commits)
+}
+
+async function deleteTicketWithSubs(ticketId) {
+    const tRef = doc(db, 'tickets', ticketId)
+    // Sous-collections connues (met celles que tu utilises)
+    await deleteAllDocs(collection(tRef, 'comments')).catch(() => { })
+    await deleteAllDocs(collection(tRef, 'history')).catch(() => { })
+    await deleteDoc(tRef)
 }

@@ -1,159 +1,142 @@
-// src/components/NotificationsBell.jsx
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { collection, onSnapshot, query, where, updateDoc, deleteDoc, doc } from 'firebase/firestore'
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { db } from '../lib/firebase'
+import {
+    collection,
+    deleteDoc,
+    doc,
+    onSnapshot,
+    query,
+    where,
+} from 'firebase/firestore'
 import { useAuth } from '../store/useAuth'
 
 export default function NotificationsBell() {
-    const { user } = useAuth(s => ({ user: s.user }))
-    const [items, setItems] = useState([])
+    const { user } = useAuth()
     const [open, setOpen] = useState(false)
-    const btnRef = useRef(null)
-    const [pos, setPos] = useState({ top: 0, left: 0, width: 0 })
+    const [items, setItems] = useState([])
+    const [error, setError] = useState(null)
+    const navigate = useNavigate()
 
-    // stream notifs (sans orderBy => pas d’index nécessaire)
     useEffect(() => {
         if (!user) return
-        const qRef = query(collection(db, 'notifications'), where('toUid', '==', user.uid))
-        return onSnapshot(qRef, snap => {
-            const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-            rows.sort((a, b) => tsToMs(b.createdAt) - tsToMs(a.createdAt))
-            setItems(rows)
-        })
+        // Fallback sans orderBy -> pas besoin d'index
+        const qRef = query(
+            collection(db, 'notifications'),
+            where('toUid', '==', user.uid)
+        )
+        const unsub = onSnapshot(
+            qRef,
+            (snap) => {
+                const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+                // tri client sur createdAt desc
+                rows.sort((a, b) => {
+                    const ta = a.createdAt?.seconds || 0
+                    const tb = b.createdAt?.seconds || 0
+                    return tb - ta
+                })
+                setItems(rows)
+                setError(null)
+            },
+            (err) => {
+                console.error('[Notifications] onSnapshot error:', err)
+                setError(err.message || 'Erreur notifications')
+            }
+        )
+        return () => unsub()
     }, [user])
 
-    const unread = useMemo(() => items.filter(i => !i.read).length, [items])
+    const unread = items.length
 
-    // calcule la position (ancrage au bouton)
-    function recalc() {
-        const r = btnRef.current?.getBoundingClientRect()
-        if (!r) return
-        setPos({ top: r.bottom + 8, left: r.right, width: r.width })
-    }
-    useEffect(() => { if (open) recalc() }, [open])
-    useEffect(() => {
-        if (!open) return
-        const f = () => recalc()
-        window.addEventListener('scroll', f, { passive: true })
-        window.addEventListener('resize', f)
-        return () => { window.removeEventListener('scroll', f); window.removeEventListener('resize', f) }
-    }, [open])
-
-    async function markAllRead() {
-        await Promise.all(items.filter(i => !i.read).map(i => updateDoc(doc(db, 'notifications', i.id), { read: true })))
+    const onClickNotif = async (n) => {
+        try { await deleteDoc(doc(db, 'notifications', n.id)) } catch { }
+        navigate(n.link || '/requests')
+        setOpen(false)
     }
 
-    async function removeNotif(id) {
-        await deleteDoc(doc(db, 'notifications', id))
+    const markAllRead = async () => {
+        if (!items.length) return
+        try {
+            await Promise.all(items.map(n => deleteDoc(doc(db, 'notifications', n.id))))
+        } catch (e) {
+            console.warn('[Notifications] markAllRead error:', e)
+        } finally {
+            setOpen(false)
+        }
     }
 
     return (
         <div className="relative">
+            {/* Bouton pill identique aux autres (h-10 / rounded-2xl / border) */}
             <button
-                ref={btnRef}
-                onClick={() => setOpen(o => !o)}
-                className="h-10 w-10 rounded-full border flex items-center justify-center
-                   border-gray-300 hover:bg-gray-50
-                   dark:border-neutral-700 dark:hover:bg-neutral-800"
+                onClick={() => setOpen(v => !v)}
+                className="relative inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/10 px-3 hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/5"
                 title="Notifications"
             >
-                <BellIcon className="h-5 w-5" />
+                {/* Icône cloche (Heroicons) */}
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                    fill="none" stroke="currentColor" className="h-5 w-5">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8"
+                        d="M14.25 18.75a2.25 2.25 0 11-4.5 0m9-6v-1.5a6.75 6.75 0 10-13.5 0v1.5c0 .861-.352 1.687-.977 2.278L3.5 16.5h17l-1.773-1.472a3.375 3.375 0 01-1.977-3.278z" />
+                </svg>
                 {unread > 0 && (
-                    <span className="absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full text-[10px]
-                           bg-red-500 text-white">{unread}</span>
+                    <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-xs font-semibold text-white">
+                        {unread}
+                    </span>
                 )}
             </button>
 
-            {open && createPortal(
-                <>
-                    {/* overlay cliquable pour fermer */}
-                    <div
-                        className="fixed inset-0 z-[9998]"
-                        onClick={() => setOpen(false)}
-                    />
-                    {/* panneau fixé à l’écran, aligné à droite du bouton */}
-                    <div
-                        className="fixed z-[9999] w-80 rounded-2xl border bg-white shadow-xl
-                       dark:bg-neutral-900 dark:border-neutral-800"
-                        style={{ top: pos.top, left: pos.left - 320 }} // 320px ≈ w-80, on colle à droite du bouton
-                    >
-                        <div className="px-3 py-2 flex items-center justify-between">
-                            <div className="text-sm font-medium">Notifications</div>
-                            <button className="text-xs opacity-70 hover:opacity-100" onClick={markAllRead}>
-                                Tout marquer lu
+            {/* Menu : z-index max pour passer au-dessus de tout */}
+            {open && (
+                <div
+                    className="absolute right-0 z-[9999] mt-2 w-80 overflow-hidden rounded-2xl border border-black/10 bg-white shadow-xl dark:border-white/10 dark:bg-neutral-900"
+                // si tu préfères, tu peux passer en fixed pour 0 risque de stacking:
+                // className="fixed top-[3.75rem] right-4 z-[9999] ..."
+                >
+                    <div className="max-h-[320px] overflow-y-auto">
+                        {error && (
+                            <div className="p-3 text-xs text-red-500">{error}</div>
+                        )}
+                        {!error && items.length === 0 && (
+                            <div className="p-4 text-sm text-gray-500 dark:text-neutral-400">
+                                Aucune notification
+                            </div>
+                        )}
+                        {!error && items.map((n) => (
+                            <button
+                                key={n.id}
+                                onClick={() => onClickNotif(n)}
+                                className="block w-full cursor-pointer border-b border-black/5 p-3 text-left hover:bg-black/5 dark:border-white/5 dark:hover:bg-white/5"
+                            >
+                                <div className="text-sm">{n.message || 'Notification'}</div>
+                                <div className="mt-0.5 text-xs text-gray-500 dark:text-neutral-400">
+                                    {n.type || 'info'}
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 p-2 text-xs text-gray-600 dark:text-neutral-400">
+                        <span>{unread} notif(s)</span>
+
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={markAllRead}
+                                disabled={!unread}
+                                className="rounded-lg border border-black/10 px-2 py-1 hover:bg-black/5 disabled:opacity-40 dark:border-white/10 dark:hover:bg-white/5"
+                            >
+                                Tout marquer comme lu
+                            </button>
+                            <button
+                                onClick={() => setOpen(false)}
+                                className="rounded-lg border border-black/10 px-2 py-1 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
+                            >
+                                Fermer
                             </button>
                         </div>
-                        <div className="max-h-80 overflow-auto divide-y divide-gray-100 dark:divide-neutral-800">
-                            {items.length === 0 ? (
-                                <div className="p-3 text-sm text-gray-500 dark:text-neutral-400">Rien à signaler</div>
-                            ) : items.map(it => (
-                                <div key={it.id} className="p-3 text-sm group">
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div className="min-w-0">
-                                            <div className="font-medium truncate">{labelForType(it.type)}</div>
-                                            <div className="opacity-80 break-words">{it.message}</div>
-                                        </div>
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            {!it.read && <span className="h-2 w-2 rounded-full bg-blue-500" />}
-                                            <button
-                                                title="Supprimer"
-                                                aria-label="Supprimer"
-                                                onClick={() => removeNotif(it.id)}
-                                                className="p-1 rounded-md border border-red-300 text-red-600 hover:bg-red-50
-                      dark:border-red-900/40 dark:text-red-400 dark:hover:bg-red-900/20"
-                                            >
-                                                <TrashIcon className="h-4 w-4" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div className="mt-1 text-[11px] opacity-60">{fmtDateTime(it.createdAt)}</div>
-                                </div>
-                            ))}
-                        </div>
                     </div>
-                </>,
-                document.body
+                </div>
             )}
         </div>
-    )
-}
-
-/* utils */
-function BellIcon({ className = '' }) {
-    return (
-        <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.7">
-            <path d="M6 8a6 6 0 1 1 12 0v5l1.5 3H4.5L6 13V8Z" />
-            <path d="M9 19a3 3 0 0 0 6 0" />
-        </svg>
-    )
-}
-function labelForType(t) {
-    return ({
-        request_created: 'Nouvelle demande',
-        request_approved: 'Demande validée',
-        request_rejected: 'Demande refusée',
-        request_notified: 'Client prévenu',
-    }[t] || 'Notification')
-}
-function tsToMs(ts) {
-    if (!ts) return 0
-    if (ts.seconds) return ts.seconds * 1000 + Math.floor((ts.nanoseconds || 0) / 1e6)
-    const d = new Date(ts); return isNaN(+d) ? 0 : +d
-}
-function fmtDateTime(ts) {
-    const ms = tsToMs(ts)
-    if (!ms) return '—'
-    return new Date(ms).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-}
-
-function TrashIcon({ className = '' }) {
-    return (
-        <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8">
-            <path d="M3 6h18" strokeLinecap="round" />
-            <path d="M8 6V4.8c0-.995.805-1.8 1.8-1.8h4.4c.995 0 1.8.805 1.8 1.8V6" />
-            <path d="M19 6l-1 13a2 2 0 0 1-2 1.8H8a2 2 0 0 1-2-1.8L5 6" />
-            <path d="M10 10v7M14 10v7" strokeLinecap="round" />
-        </svg>
     )
 }

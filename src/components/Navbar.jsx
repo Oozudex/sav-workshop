@@ -31,9 +31,11 @@ export default function Navbar() {
   const initial = firstName?.[0]?.toUpperCase() || 'U'
 
   return (
-    <div className="w-full sticky top-0 z-10 border-b border-gray-200 bg-white/90 backdrop-blur
-                    dark:border-neutral-800 dark:bg-neutral-900/90">
-      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div className="sticky top-0 z-[200] border-b border-black/10 dark:border-white/10
+                 bg-white/70 dark:bg-neutral-900/70 backdrop-blur supports-[backdrop-filter]:bg-white/60
+                 dark:supports-[backdrop-filter]:bg-neutral-900/60"
+    >
+      <div className="mx-auto max-w-7xl h-16 px-4 sm:px-6 lg:px-8 flex items-center justify-between">
         <div className="font-heading text-xl" onClick={() => navigate('/')}>Atelier SAV</div>
 
 
