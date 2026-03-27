@@ -126,7 +126,7 @@ export default function Tickets() {
             <span className="text-xs font-medium px-2 py-0.5 rounded-full
                              bg-gray-100 text-gray-500
                              dark:bg-neutral-800 dark:text-neutral-400">
-              {filtered.length}
+              {tickets.filter(t => t.status !== 'Closed').length}
             </span>
 
             <div className="w-px h-4 bg-gray-200 dark:bg-neutral-700 mx-1" />
