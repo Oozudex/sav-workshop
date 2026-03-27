@@ -4,12 +4,12 @@ import { auth } from '../lib/firebase'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 
-export const useAuth = create((set, get) => ({
+export const useAuth = create((set) => ({
   user: null,
   profile: null,
   loading: true,
-  async init() {
-    onAuthStateChanged(auth, async (user) => {
+  init() {
+    return onAuthStateChanged(auth, async (user) => {
       if (user) {
         const snap = await getDoc(doc(db, 'users', user.uid))
         set({ user, profile: snap.exists() ? snap.data() : null, loading: false })

@@ -5,16 +5,14 @@ import { useTheme } from './store/useTheme'
 import Login from './pages/Login'
 import Tickets from './pages/Tickets'
 import Profile from './pages/Profile'
-import AdminUsers from './pages/AdminUsers'
 import Orders from './pages/Orders'
 import Requests from './pages/Requests'
+import StoreSettings from './pages/StoreSettings'
 
 function PrivateRoute({ children }) {
-  const { user, loading, profile } = useAuth(s => ({ user: s.user, loading: s.loading, profile: s.profile }))
-  // si tu as un indicateur dédié type s.profileLoading, utilise-le.
-  const profileLoading = !!user && profile === undefined // profil pas encore fetché
+  const { user, loading } = useAuth(s => ({ user: s.user, loading: s.loading }))
   const location = useLocation()
-  if (loading || profileLoading) return <div className="p-6">Chargement…</div>
+  if (loading) return <div className="p-6">Chargement…</div>
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />
   return children
 }
@@ -31,7 +29,11 @@ function RoleRoute({ children, roles }) {
 export default function App() {
   const initAuth = useAuth(s => s.init)
   const initTheme = useTheme(s => s.init)
-  useEffect(() => { initAuth(); initTheme() }, [initAuth, initTheme])
+  useEffect(() => {
+    const unsub = initAuth()
+    initTheme()
+    return unsub
+  }, [initAuth, initTheme])
 
   return (
     <Routes>
@@ -40,10 +42,10 @@ export default function App() {
       <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
       <Route
-        path="/admin"
+        path="/settings"
         element={
-          <RoleRoute roles={['admin', 'buyer']}>
-            <AdminUsers />
+          <RoleRoute roles={['directeurmag', 'acheteur', 'directeurgen']}>
+            <StoreSettings />
           </RoleRoute>
         }
       />

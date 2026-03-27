@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
+import { getAuth, sendPasswordResetEmail } from 'firebase/auth'
 import { useAuth } from '../store/useAuth'
 
 export default function Login() {
@@ -11,19 +11,16 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const nav = useNavigate()
   const loc = useLocation()
-  const { user, loading: authLoading } = useAuth(s => ({ user: s.user, loading: s.loading }))
+  const { user, login } = useAuth(s => ({ user: s.user, login: s.login }))
 
   async function onSubmit(e) {
     e.preventDefault()
     setErr('')
     setLoading(true)
     try {
-      await signInWithEmailAndPassword(getAuth(), email.trim(), pwd)
-      const to = (loc.state && loc.state.from && loc.state.from.pathname) || '/'
-      nav(to, { replace: true })
-    } catch (e) {
+      await login(email.trim(), pwd)
+    } catch {
       setErr("Email ou mot de passe invalide.")
-      console.error(e)
     } finally {
       setLoading(false)
     }
@@ -34,17 +31,15 @@ export default function Login() {
     setErr('')
     try {
       await sendPasswordResetEmail(getAuth(), email.trim())
-      setErr("✉️ Lien de réinitialisation envoyé (si l’email existe).")
-    } catch (e) {
-      setErr("Impossible d’envoyer le lien. Vérifie l’email.")
-      console.error(e)
+      setErr("✉️ Lien de réinitialisation envoyé (si l'email existe).")
+    } catch {
+      setErr("Impossible d'envoyer le lien. Vérifie l'email.")
     }
   }
 
-  // Quand `user` devient non-null, on redirige une seule fois
   useEffect(() => {
     if (!user) return
-    const to = (loc.state && loc.state.from && loc.state.from.pathname) || '/'
+    const to = loc.state?.from?.pathname || '/'
     nav(to, { replace: true })
   }, [user, nav, loc.state])
 
@@ -111,7 +106,7 @@ export default function Login() {
           </form>
 
           <div className="mt-3 flex items-center justify-between text-xs text-neutral-400">
-            <span>Besoin d’aide ?</span>
+            <span>Besoin d'aide ?</span>
             <button onClick={onReset} className="underline hover:text-neutral-200">
               Mot de passe oublié
             </button>
