@@ -3,6 +3,10 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './store/useAuth'
 import { useTheme } from './store/useTheme'
 import Login from './pages/Login'
+import Home from './pages/Home'
+import B2B from './pages/B2B'
+import RH from './pages/RH'
+import Service from './pages/Service'
 import Tickets from './pages/Tickets'
 import Profile from './pages/Profile'
 import Orders from './pages/Orders'
@@ -38,7 +42,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/" element={<PrivateRoute><Tickets /></PrivateRoute>} />
+      <Route path="/" element={<PrivateRoute><Home /></PrivateRoute>} />
+      <Route path="/tickets" element={<PrivateRoute><Tickets /></PrivateRoute>} />
       <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
       <Route
@@ -49,6 +54,9 @@ export default function App() {
           </RoleRoute>
         }
       />
+      <Route path="/b2b" element={<PrivateRoute><B2B /></PrivateRoute>} />
+      <Route path="/rh" element={<PrivateRoute><RH /></PrivateRoute>} />
+      <Route path="/service" element={<PrivateRoute><Service /></PrivateRoute>} />
       <Route path="/orders" element={<PrivateRoute><Orders /></PrivateRoute>} />
       <Route path="/requests" element={<PrivateRoute><Requests /></PrivateRoute>} />
     </Routes>

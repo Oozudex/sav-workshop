@@ -7,7 +7,7 @@ import {
   orderBy, query, serverTimestamp, updateDoc, setDoc, where,
 } from 'firebase/firestore'
 import { getApp, getApps, initializeApp, deleteApp } from 'firebase/app'
-import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail, updateProfile } from 'firebase/auth'
+import { getAuth, connectAuthEmulator, createUserWithEmailAndPassword, sendPasswordResetEmail, updateProfile } from 'firebase/auth'
 import { STAFF_POSTES, STAFF_POSTE_LABELS, GLOBAL_ROLES } from '../lib/constants'
 import { useMagasin } from '../store/useMagasin'
 
@@ -138,6 +138,9 @@ export default function StoreSettings() {
       const options = getApp().options
       secApp = getApps().find(a => a.name === secName) || initializeApp(options, secName)
       const secAuth = getAuth(secApp)
+      if (import.meta.env.DEV && import.meta.env.VITE_USE_EMULATOR === 'true') {
+        try { connectAuthEmulator(secAuth, 'http://localhost:9099', { disableWarnings: true }) } catch {}
+      }
       const tempPwd = Math.random().toString(36).slice(2) + 'A9!'
       const cred = await createUserWithEmailAndPassword(secAuth, dmEmail.trim(), tempPwd)
       await updateProfile(cred.user, { displayName: dmName.trim() })
