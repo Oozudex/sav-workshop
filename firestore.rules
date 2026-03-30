@@ -147,6 +147,12 @@ service cloud.firestore {
       );
     }
 
+    /* ── B2B Tools ───────────────────────────────────────────────────────── */
+    match /b2b_tools/{toolId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn() && isGlobal();
+    }
+
     /* ── Notifications ───────────────────────────────────────────────────── */
     match /notifications/{notifId} {
       allow get: if isSignedIn() && (
