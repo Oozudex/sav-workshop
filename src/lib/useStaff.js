@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { db } from './firebase'
-import { collection, onSnapshot, orderBy, query } from 'firebase/firestore'
+import { collectionGroup, onSnapshot, orderBy, query, where } from 'firebase/firestore'
 
 /**
- * Retourne la liste du personnel d'un magasin (sans compte Auth).
+ * Retourne tous les membres de tous les rayons d'un magasin.
  * Utilisé pour les dropdowns "Assigné à" / "Créé par".
+ * Chaque doc staff doit avoir un champ `magasinId`.
  */
 export function useStaff(magasinId) {
   const [staff, setStaff] = useState([])
@@ -12,7 +13,8 @@ export function useStaff(magasinId) {
   useEffect(() => {
     if (!magasinId) return
     const q = query(
-      collection(db, 'magasins', magasinId, 'staff'),
+      collectionGroup(db, 'staff'),
+      where('magasinId', '==', magasinId),
       orderBy('nom', 'asc'),
     )
     return onSnapshot(q, snap =>

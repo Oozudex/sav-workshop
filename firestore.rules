@@ -5,7 +5,6 @@ service cloud.firestore {
     /* ── Helpers ──────────────────────────────────────────────────────────── */
     function isSignedIn() { return request.auth != null; }
 
-    // exists() vérifie d'abord l'existence pour éviter .data sur null
     function role() {
       return exists(/databases/$(database)/documents/users/$(request.auth.uid))
         ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', null)
@@ -17,28 +16,30 @@ service cloud.firestore {
         : null;
     }
 
-    // Accès global (tous les magasins)
     function isGlobal() {
       return role() == 'acheteur' || role() == 'directeurgen';
     }
 
-    // Directeur de magasin (son magasin uniquement)
     function isDirMag() { return role() == 'directeurmag'; }
 
-    // Compte partagé du magasin
-    function isVendeur() { return role() == 'vendeur'; }
+    // Rôles rayon (anciennement "vendeur")
+    function isRayonRole() {
+      return role() in ['velo', 'chaussure', 'textile', 'randonnee', 'caisse'];
+    }
 
-    // Peut supprimer
+    // Tout utilisateur lié à un magasin (local)
+    function isLocalUser() {
+      return isDirMag() || isRayonRole();
+    }
+
     function canDelete() {
       return role() == 'acheteur' || role() == 'directeurmag' || role() == 'directeurgen';
     }
 
-    // Le document appartient au magasin de l'utilisateur
     function sameStore(data) {
       return data.get('magasinId', null) == magasinId();
     }
 
-    // Le nouveau document sera dans le bon magasin
     function sameStoreNew() {
       return request.resource.data.get('magasinId', null) == magasinId();
     }
@@ -61,23 +62,51 @@ service cloud.firestore {
       allow create, delete: if isSignedIn() && isGlobal();
       allow update: if isSignedIn() && (isGlobal() || (isDirMag() && magasinId() == magId));
 
-      match /staff/{staffId} {
+      /* Rayons */
+      match /rayons/{rayonId} {
         allow read: if isSignedIn();
         allow create, update, delete: if isSignedIn() && (
           isGlobal() || (isDirMag() && magasinId() == magId)
         );
+
+        /* Staff du rayon */
+        match /staff/{staffId} {
+          allow read: if isSignedIn();
+          allow create, update, delete: if isSignedIn() && (
+            isGlobal() || (isLocalUser() && magasinId() == magId)
+          );
+        }
       }
+
+      /* Paramètres calendrier par rayon */
+      match /rayon_settings/{rayonType} {
+        allow read: if isSignedIn() && (
+          isGlobal() ||
+          ((isDirMag() || isRayonRole()) && magasinId() == magId)
+        );
+        allow write: if isSignedIn() && (
+          isGlobal() ||
+          (isDirMag() && magasinId() == magId) ||
+          (isRayonRole() && magasinId() == magId && role() == rayonType)
+        );
+      }
+    }
+
+    /* ── CollectionGroup staff (pour les dropdowns cross-rayons) ─────────── */
+    match /{path=**}/staff/{staffId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn() && (
+        isGlobal() || isLocalUser()
+      );
     }
 
     /* ── Tickets SAV ─────────────────────────────────────────────────────── */
     match /tickets/{ticketId} {
-      // get = lecture d'un doc précis (resource.data dispo)
       allow get: if isSignedIn() && (
         isGlobal() || sameStore(resource.data)
       );
-      // list = requête onSnapshot (resource est null → on vérifie juste le rôle)
       allow list: if isSignedIn() && (
-        isGlobal() || (magasinId() != null && (isVendeur() || isDirMag()))
+        isGlobal() || (magasinId() != null && isLocalUser())
       );
       allow create: if isSignedIn() && (
         isGlobal() || sameStoreNew()
@@ -105,16 +134,16 @@ service cloud.firestore {
     /* ── Commandes ───────────────────────────────────────────────────────── */
     match /orders/{orderId} {
       allow get: if isSignedIn() && (
-        isGlobal() || (isDirMag() && sameStore(resource.data)) || (isVendeur() && sameStore(resource.data))
+        isGlobal() || sameStore(resource.data)
       );
       allow list: if isSignedIn() && (
-        isGlobal() || (magasinId() != null && (isDirMag() || isVendeur()))
+        isGlobal() || (magasinId() != null && isLocalUser())
       );
       allow create: if isSignedIn() && (
         isGlobal() || sameStoreNew()
       );
       allow update: if isSignedIn() && (
-        isGlobal() || isDirMag() && sameStore(resource.data) || isVendeur() && sameStore(resource.data)
+        isGlobal() || sameStore(resource.data)
       );
       allow delete: if isSignedIn() && (
         isGlobal() || (isDirMag() && sameStore(resource.data))
@@ -149,6 +178,81 @@ service cloud.firestore {
 
     /* ── B2B Tools ───────────────────────────────────────────────────────── */
     match /b2b_tools/{toolId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn() && isGlobal();
+    }
+
+    /* ── Calendrier ─────────────────────────────────────────────────────── */
+    match /calendar_events/{eventId} {
+      allow read: if isSignedIn() && (
+        isGlobal() || sameStore(resource.data) || resource.data.createdBy == request.auth.uid
+      );
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && (
+        isGlobal() || sameStoreNew()
+      );
+      allow update, delete: if isSignedIn() && (
+        isGlobal() || isDirMag() ||
+        resource.data.createdBy == request.auth.uid
+      );
+    }
+
+    /* ── Flocage ─────────────────────────────────────────────────────────── */
+    match /flocage_commandes/{id} {
+      allow read: if isSignedIn() && (isGlobal() || sameStore(resource.data));
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && (isGlobal() || sameStoreNew());
+      allow update, delete: if isSignedIn() && (isGlobal() || sameStore(resource.data));
+    }
+
+    match /flocage_stock/{magasinId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (isGlobal() || magasinId() == magasinId);
+    }
+
+    /* ── Transferts vélo ────────────────────────────────────────────────── */
+    match /transferts/{transfertId} {
+      allow read: if isSignedIn();
+      // Seul le rôle velo (+ globaux) peut créer une demande
+      allow create: if isSignedIn() && (isGlobal() || role() == 'velo');
+      // Le destinataire répond, le demandeur marque comme lu — seul velo + globaux
+      allow update: if isSignedIn() && (
+        isGlobal() ||
+        (role() == 'velo' && (
+          resource.data.toMagasinId == magasinId() ||    // répondre
+          resource.data.fromMagasinId == magasinId()     // marquer lu / readByFrom
+        ))
+      );
+      // Le demandeur clôture quand le vélo arrive, ou les globaux
+      allow delete: if isSignedIn() && (
+        isGlobal() ||
+        (role() == 'velo' && resource.data.fromMagasinId == magasinId())
+      );
+    }
+
+    /* ── Infos importantes (acheteurs → équipes rayon) ─────────────────── */
+    match /infos_importantes/{infoId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (role() == 'acheteur' || role() == 'directeurgen');
+      allow update, delete: if isSignedIn() && (
+        role() == 'directeurgen' ||
+        (role() == 'acheteur' && resource.data.createdBy == request.auth.uid)
+      );
+    }
+
+    /* ── Opérations Commerciales ────────────────────────────────────────── */
+    match /op_commerciales/{opId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn() && isGlobal();
+
+      match /produits/{produitId} {
+        allow read: if isSignedIn();
+        allow create, update, delete: if isSignedIn() && isGlobal();
+      }
+    }
+
+    /* CollectionGroup produits (pour la recherche cross-OPs) */
+    match /{path=**}/produits/{produitId} {
       allow read: if isSignedIn();
       allow create, update, delete: if isSignedIn() && isGlobal();
     }

@@ -9,14 +9,16 @@ import { collection, doc, onSnapshot, orderBy, query } from 'firebase/firestore'
 import { GLOBAL_ROLES } from '../lib/constants'
 
 const PAGE_TITLES = {
-  '/tickets':  'Réparation / SAV',
-  '/orders':   'Commandes',
-  '/requests': 'Transferts',
-  '/settings': 'Admin',
-  '/b2b':      'B2B',
-  '/rh':       'Ressources Humaines',
-  '/service':  'Services Vélo',
-  '/profile':  'Mon profil',
+  '/tickets':    'Réparation / SAV',
+  '/orders':     'Commandes',
+  '/requests':   'Transferts',
+  '/settings':   'Admin',
+  '/b2b':        'B2B',
+  '/rh':         'Ressources Humaines',
+  '/service':    'Services Vélo',
+  '/profile':    'Mon profil',
+  '/operations': 'Opérations Commerciales',
+  '/flocage':    'Flocage',
 }
 
 export default function Navbar() {
@@ -60,6 +62,7 @@ export default function Navbar() {
 
   const isHome = location.pathname === '/'
   const pageTitle = PAGE_TITLES[location.pathname]
+    ?? (location.pathname.startsWith('/operations/') ? 'Opérations Commerciales' : undefined)
 
   return (
     <header className="sticky top-0 z-[200] border-b border-gray-200 dark:border-neutral-800

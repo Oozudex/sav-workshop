@@ -12,6 +12,10 @@ import Profile from './pages/Profile'
 import Orders from './pages/Orders'
 import Requests from './pages/Requests'
 import StoreSettings from './pages/StoreSettings'
+import Operations from './pages/Operations'
+import OperationDetail from './pages/OperationDetail'
+import Flocage from './pages/Flocage'
+import Transfert from './pages/Transfert'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth(s => ({ user: s.user, loading: s.loading }))
@@ -21,12 +25,16 @@ function PrivateRoute({ children }) {
   return children
 }
 
-function RoleRoute({ children, roles }) {
+function RoleRoute({ children, roles, acheteurRayons }) {
   const { user, loading, profile } = useAuth(s => ({ user: s.user, loading: s.loading, profile: s.profile }))
   const location = useLocation()
   if (loading) return <div className="p-6">Chargement…</div>
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />
   if (!roles.includes(profile?.role)) return <Navigate to="/" replace />
+  if (profile?.role === 'acheteur' && acheteurRayons) {
+    const profileRayons = profile?.rayons || []
+    if (!acheteurRayons.some(r => profileRayons.includes(r))) return <Navigate to="/" replace />
+  }
   return children
 }
 
@@ -59,6 +67,24 @@ export default function App() {
       <Route path="/service" element={<PrivateRoute><Service /></PrivateRoute>} />
       <Route path="/orders" element={<PrivateRoute><Orders /></PrivateRoute>} />
       <Route path="/requests" element={<PrivateRoute><Requests /></PrivateRoute>} />
+      <Route path="/operations" element={<PrivateRoute><Operations /></PrivateRoute>} />
+      <Route path="/operations/:id" element={<PrivateRoute><OperationDetail /></PrivateRoute>} />
+      <Route
+        path="/flocage"
+        element={
+          <RoleRoute roles={['chaussure', 'directeurmag', 'acheteur', 'directeurgen']} acheteurRayons={['chaussure']}>
+            <Flocage />
+          </RoleRoute>
+        }
+      />
+      <Route
+        path="/transfert"
+        element={
+          <RoleRoute roles={['velo', 'directeurmag', 'acheteur', 'directeurgen']} acheteurRayons={['velo']}>
+            <Transfert />
+          </RoleRoute>
+        }
+      />
     </Routes>
   )
 }

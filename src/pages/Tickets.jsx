@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams, useLocation } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import KanbanBoard from '../components/KanbanBoard'
 import TicketForm from '../components/TicketForm'
@@ -14,6 +15,63 @@ import { STATUSES, GLOBAL_ROLES, CAN_DELETE_ROLES } from '../lib/constants'
 import { useStaff } from '../lib/useStaff'
 import { useMagasin } from '../store/useMagasin'
 
+function EasterEgg({ onClose }) {
+  const hearts = Array.from({ length: 30 }, (_, i) => ({
+    id: i,
+    left: `${Math.random() * 100}%`,
+    delay: `${Math.random() * 3}s`,
+    duration: `${3 + Math.random() * 3}s`,
+    size: `${1.2 + Math.random() * 2.5}rem`,
+  }))
+
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-[999] flex flex-col items-center justify-center cursor-pointer overflow-hidden"
+      style={{ background: 'linear-gradient(135deg, #ff6b9d 0%, #ff8fab 40%, #ffb3c6 100%)' }}
+    >
+      {/* Cœurs flottants */}
+      {hearts.map(h => (
+        <span
+          key={h.id}
+          className="absolute select-none pointer-events-none"
+          style={{
+            left: h.left,
+            bottom: '-2rem',
+            fontSize: h.size,
+            animation: `floatUp ${h.duration} ${h.delay} ease-in infinite`,
+          }}
+        >
+          ❤️
+        </span>
+      ))}
+
+      {/* Message */}
+      <div className="relative z-10 text-center px-8 select-none" style={{ animation: 'pulse 1.5s ease-in-out infinite' }}>
+        <p className="text-white/80 text-lg font-semibold mb-2 tracking-widest uppercase">Un petit message pour toi 🚲</p>
+        <h1 className="text-white font-black tracking-tight drop-shadow-lg"
+          style={{ fontSize: 'clamp(2.5rem, 8vw, 6rem)', textShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
+          Je t'aime Thomas
+        </h1>
+        <p className="text-white/60 text-sm mt-6 font-medium">Clique n'importe où pour fermer 🤫</p>
+      </div>
+
+      <style>{`
+        @keyframes floatUp {
+          0%   { transform: translateY(0) rotate(-10deg); opacity: 0; }
+          10%  { opacity: 1; }
+          90%  { opacity: 0.8; }
+          100% { transform: translateY(-110vh) rotate(10deg); opacity: 0; }
+        }
+        @keyframes pulse {
+          0%, 100% { transform: scale(1); }
+          50%       { transform: scale(1.04); }
+        }
+      `}</style>
+    </div>
+  )
+}
+
 export default function Tickets() {
   const { user, profile } = useAuth((s) => ({ user: s.user, profile: s.profile }))
   const { selectedId } = useMagasin()
@@ -25,7 +83,11 @@ export default function Tickets() {
   const effectiveMagasinId = isGlobal ? selectedId : profile?.magasinId
   const staff = useStaff(effectiveMagasinId)
 
-  const [showForm, setShowForm]             = useState(false)
+  const [searchParams] = useSearchParams()
+  const location = useLocation()
+
+  const [showForm, setShowForm]             = useState(!!location.state?.openForm)
+  const [formInitialValues, setFormInitialValues] = useState(location.state?.initialValues || {})
   const [tickets, setTickets]               = useState([])
   const [activeTicket, setActiveTicket]     = useState(null)
   const [error, setError]                   = useState('')
@@ -46,7 +108,13 @@ export default function Tickets() {
       ? query(base, where('magasinId', '==', effectiveMagasinId))
       : base
     const unsub = onSnapshot(qRef, snap => {
-      setTickets(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      setTickets(list)
+      const openId = searchParams.get('open')
+      if (openId) {
+        const target = list.find(t => t.id === openId)
+        if (target) setActiveTicket(target)
+      }
     }, err => setError(err.message))
     return () => unsub()
   }, [effectiveMagasinId, profile, isGlobal])
@@ -110,6 +178,10 @@ export default function Tickets() {
 
   const assignedOptions = [...new Set(tickets.map(t => t.assignedTo).filter(Boolean))]
   const hasFilters = q || filterPriority || filterAssigned
+
+  const easterEgg = q.trim().toLowerCase() === 'ah bah'
+
+  if (easterEgg) return <EasterEgg onClose={() => setQ('')} />
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
@@ -223,7 +295,7 @@ export default function Tickets() {
       </div>
 
       {showForm && (
-        <TicketForm onSubmit={createTicket} onClose={() => setShowForm(false)} users={staff} />
+        <TicketForm onSubmit={createTicket} onClose={() => setShowForm(false)} users={staff} initialValues={formInitialValues} />
       )}
 
       {activeTicket && (

@@ -9,8 +9,8 @@ const INITIAL = {
   priority: 'Normal', dueDate: '', createdByName: '',
 }
 
-export default function TicketForm({ onSubmit, onClose, users = [] }) {
-  const [form, setForm] = useState(INITIAL)
+export default function TicketForm({ onSubmit, onClose, users = [], initialValues = {} }) {
+  const [form, setForm] = useState({ ...INITIAL, ...initialValues })
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const overlayRef = useRef(null)
