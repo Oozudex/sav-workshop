@@ -50,7 +50,7 @@ export default function Login() {
         <div className="rounded-3xl border border-white/10 bg-neutral-900/80 backdrop-blur shadow-2xl p-6">
           {/* En-tête */}
           <div className="mb-5">
-            <div className="text-2xl font-semibold tracking-tight">Atelier SAV</div>
+            <div className="text-2xl font-semibold tracking-tight">Groupe Nivault</div>
             <div className="text-sm text-neutral-400 mt-1">Connexion</div>
           </div>
 

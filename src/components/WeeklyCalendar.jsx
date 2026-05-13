@@ -341,6 +341,7 @@ export default function WeeklyCalendar({ magasinId }) {
   const [activeFilters, setActiveFilters] = useState(new Set(Object.keys(EVENT_TYPES)))
   const [modal, setModal] = useState(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [filterOpen, setFilterOpen] = useState(false)
   const [rayonSettings, setRayonSettings] = useState({}) // { [rayonType]: { quotas: {...} } }
   const [pendingForm, setPendingForm] = useState(null)
   const [quotaWarning, setQuotaWarning] = useState(null) // { rayonType, quota, count }
@@ -494,7 +495,7 @@ export default function WeeklyCalendar({ magasinId }) {
 
       // Planning shifts : filtrage par rayon
       if (ev.type === 'planning_shift') {
-        if (profile?.role === 'directeurgen') return false
+        if (profile?.role === 'directeurgen') return true
         if (profile?.role === 'directeurmag') return true
         if (profile?.role === 'acheteur') return (profile?.rayons || []).includes(ev.rayonType)
         return ev.rayonType === profile?.role
@@ -560,6 +561,7 @@ export default function WeeklyCalendar({ magasinId }) {
             .join(' · ')
           return { name, times, isCp, isEco }
         })
+        .filter(entry => entry.times)
     }
     return result
   }, [allEvents])
@@ -567,7 +569,7 @@ export default function WeeklyCalendar({ magasinId }) {
   /* Types visibles pour les filtres */
   const visibleTypes = useMemo(() => {
     if (isPersonal) return ['rdv_perso']
-    if (profile?.role === 'directeurgen') return ['rdv_client', 'op_commerciale', 'teams', 'ticket_rendu']
+    if (profile?.role === 'directeurgen') return ['rdv_client', 'op_commerciale', 'teams', 'ticket_rendu', 'planning_shift']
     if (isChaussure) return ['rdv_client', 'op_commerciale', 'teams', 'flocage', 'planning_shift']
     if (isRayonRole) return ['rdv_client', 'op_commerciale', 'teams', 'ticket_rendu', 'planning_shift']
     return ['rdv_client', 'op_commerciale', 'teams', 'ticket_rendu', 'planning_shift']
@@ -693,7 +695,7 @@ export default function WeeklyCalendar({ magasinId }) {
   if (!magasinId) return null
 
   return (
-    <div className="w-full rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-hidden">
+    <div className="h-full flex flex-col rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-hidden">
 
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 dark:border-neutral-800">
@@ -739,19 +741,69 @@ export default function WeeklyCalendar({ magasinId }) {
             </button>
           </div>
 
-          {/* Filtres */}
-          <div className="flex items-center gap-1">
-            {visibleTypes.map(type => (
-              <button key={type} onClick={() => toggleFilter(type)}
-                className={['h-6 px-2 rounded-md text-[11px] font-semibold transition-colors flex items-center gap-1',
-                  activeFilters.has(type)
-                    ? EVENT_TYPES[type].pill
-                    : 'text-gray-400 dark:text-neutral-600 bg-gray-50 dark:bg-neutral-800',
-                ].join(' ')}>
-                <span className={`h-1.5 w-1.5 rounded-full ${activeFilters.has(type) ? EVENT_TYPES[type].dot : 'bg-gray-300 dark:bg-neutral-600'}`} />
-                {EVENT_TYPES[type].label}
-              </button>
-            ))}
+          {/* Bouton Filtres */}
+          <div className="relative">
+            {filterOpen && (
+              <div className="fixed inset-0 z-[200]" onClick={() => setFilterOpen(false)} />
+            )}
+            <button
+              onClick={() => setFilterOpen(o => !o)}
+              className={['h-7 px-2.5 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 border transition-colors',
+                visibleTypes.some(t => !activeFilters.has(t))
+                  ? 'border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-400'
+                  : 'border-gray-200 dark:border-neutral-700 text-gray-500 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800',
+              ].join(' ')}
+            >
+              <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
+              </svg>
+              Filtres
+              {visibleTypes.some(t => !activeFilters.has(t)) && (
+                <span className="h-4 min-w-[16px] px-1 rounded-full bg-indigo-500 text-white text-[9px] font-bold flex items-center justify-center">
+                  {visibleTypes.filter(t => !activeFilters.has(t)).length}
+                </span>
+              )}
+            </button>
+
+            {filterOpen && (
+              <div className="absolute left-0 top-9 z-[300] w-52 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 shadow-xl overflow-hidden">
+                <div className="px-3 py-2 border-b border-gray-100 dark:border-neutral-800 flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Afficher</span>
+                  <button
+                    onClick={() => setActiveFilters(new Set(visibleTypes))}
+                    className="text-[10px] font-semibold text-indigo-500 hover:text-indigo-600 dark:text-indigo-400"
+                  >
+                    Tout afficher
+                  </button>
+                </div>
+                <div className="p-1.5 space-y-0.5">
+                  {visibleTypes.map(type => {
+                    const active = activeFilters.has(type)
+                    return (
+                      <button
+                        key={type}
+                        onClick={() => toggleFilter(type)}
+                        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors text-left"
+                      >
+                        <span className={['h-2 w-2 rounded-full shrink-0 transition-colors', EVENT_TYPES[type].dot].join(' ')} />
+                        <span className={['flex-1 text-xs font-medium transition-colors',
+                          active ? 'text-gray-800 dark:text-neutral-200' : 'text-gray-400 dark:text-neutral-600 line-through',
+                        ].join(' ')}>
+                          {EVENT_TYPES[type].label}
+                        </span>
+                        <span className={['h-4 w-7 rounded-full transition-all relative shrink-0',
+                          active ? 'bg-gray-900 dark:bg-white' : 'bg-gray-200 dark:bg-neutral-700',
+                        ].join(' ')}>
+                          <span className={['absolute top-0.5 h-3 w-3 rounded-full bg-white dark:bg-neutral-900 shadow transition-all',
+                            active ? 'left-3.5' : 'left-0.5',
+                          ].join(' ')} />
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -780,7 +832,7 @@ export default function WeeklyCalendar({ magasinId }) {
       </div>
 
       {/* Grille hebdomadaire */}
-      <div className="grid grid-cols-7 divide-x divide-gray-100 dark:divide-neutral-800">
+      <div className="flex-1 min-h-0 grid grid-cols-7 divide-x divide-gray-100 dark:divide-neutral-800 overflow-hidden">
         {days.map((day, i) => {
           const dateStr = toDateStr(day)
           const dayEvents = byDate[dateStr] || []
@@ -788,7 +840,7 @@ export default function WeeklyCalendar({ magasinId }) {
           const quotaInfo = getDayQuotaInfo(dateStr)
 
           return (
-            <div key={dateStr} className="flex flex-col min-h-[160px]">
+            <div key={dateStr} className="flex flex-col overflow-hidden">
               {/* En-tête du jour */}
               <div className={['flex flex-col items-center py-2 border-b border-gray-100 dark:border-neutral-800 gap-0.5',
                 today ? 'bg-gray-50 dark:bg-neutral-800/50' : '',
@@ -819,7 +871,7 @@ export default function WeeklyCalendar({ magasinId }) {
 
               {/* Événements */}
               <div
-                className="flex-1 p-1.5 space-y-1 cursor-pointer group"
+                className="flex-1 p-1.5 space-y-1 overflow-y-auto cursor-pointer group"
                 onClick={() => setModal({ event: null, date: dateStr })}
               >
                 {dayEvents.map(ev => (

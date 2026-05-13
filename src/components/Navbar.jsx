@@ -9,16 +9,16 @@ import { collection, doc, onSnapshot, orderBy, query } from 'firebase/firestore'
 import { GLOBAL_ROLES } from '../lib/constants'
 
 const PAGE_TITLES = {
-  '/tickets':    'Réparation / SAV',
-  '/orders':     'Commandes',
-  '/requests':   'Transferts',
-  '/settings':   'Admin',
-  '/b2b':        'B2B',
-  '/rh':         'Ressources Humaines',
-  '/service':    'Services Vélo',
-  '/profile':    'Mon profil',
+  '/tickets': 'Réparation / SAV',
+  '/orders': 'Commandes',
+  '/transfert': 'Transferts',
+  '/settings': 'Admin',
+  '/b2b': 'B2B',
+  '/rh': 'Ressources Humaines',
+  '/service': 'Services Vélo',
+  '/profile': 'Mon profil',
   '/operations': 'Opérations Commerciales',
-  '/flocage':    'Flocage',
+  '/flocage': 'Flocage',
 }
 
 export default function Navbar() {

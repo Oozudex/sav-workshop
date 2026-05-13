@@ -257,6 +257,18 @@ service cloud.firestore {
       allow create, update, delete: if isSignedIn() && isGlobal();
     }
 
+    /* ── Catalogue produits (base de données stock) ─────────────────────── */
+    match /catalogue_produits/{docId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn() && isGlobal();
+    }
+
+    /* ── Prix promo exclu team ───────────────────────────────────────────── */
+    match /prix_exclu_team/{docId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn() && isGlobal();
+    }
+
     /* ── Notifications ───────────────────────────────────────────────────── */
     match /notifications/{notifId} {
       allow get: if isSignedIn() && (

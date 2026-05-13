@@ -349,24 +349,20 @@ export default function Home() {
   })
 
   const firstName = profile?.displayName?.split(' ')[0] || ''
+  const [calendarExpanded, setCalendarExpanded] = useState(false)
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
       <Navbar />
 
-      <main className="flex-1 flex flex-col items-center justify-center p-6">
-        <div className="w-full">
+      <main className="flex-1 flex items-start">
 
-          {/* Infos importantes + alertes OP */}
+        {/* Colonne gauche : outils */}
+        <div className={['shrink-0 flex flex-col p-6 overflow-hidden transition-[width] duration-300 ease-in-out',
+          calendarExpanded ? 'w-1/5' : 'w-1/2',
+        ].join(' ')}>
           <InfosBanner magasinId={effectiveMagasinId} />
-
-          {/* Calendrier hebdomadaire */}
-          <div className="mb-8">
-            <WeeklyCalendar magasinId={effectiveMagasinId} />
-          </div>
-
-          {/* Cards */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className={['grid gap-4', calendarExpanded ? 'grid-cols-1' : 'grid-cols-3'].join(' ')}>
             {visibleSections.map(s => {
               const c = COLOR[s.color]
               return (
@@ -412,6 +408,33 @@ export default function Home() {
             })}
           </div>
         </div>
+
+        {/* Séparateur vertical + bouton expand */}
+        <div className="relative shrink-0 w-px bg-gray-200 dark:bg-neutral-800 self-stretch">
+          <button
+            onClick={() => setCalendarExpanded(e => !e)}
+            title={calendarExpanded ? 'Réduire le calendrier' : 'Agrandir le calendrier'}
+            className="absolute top-4 left-1/2 -translate-x-1/2 h-5 w-5 rounded-full bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-700 shadow-sm flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-neutral-200 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors z-10"
+          >
+            {calendarExpanded ? (
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+              </svg>
+            ) : (
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+              </svg>
+            )}
+          </button>
+        </div>
+
+        {/* Colonne droite : calendrier */}
+        <div className={['shrink-0 sticky top-12 h-[calc(100vh-3rem)] flex flex-col p-6 transition-[width] duration-300 ease-in-out',
+          calendarExpanded ? 'w-4/5' : 'w-1/2',
+        ].join(' ')}>
+          <WeeklyCalendar magasinId={effectiveMagasinId} />
+        </div>
+
       </main>
     </div>
   )

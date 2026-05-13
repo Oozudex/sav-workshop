@@ -163,12 +163,12 @@ function PreviewModal({ preview, rayonType, onConfirm, onClose, importing }) {
 
 /* ── Section import Tamigo ────────────────────────────────────────────────── */
 function TamigoImportSection({ magasinId, userId, userRayonType }) {
-  const [dragging,  setDragging]  = useState(false)
-  const [parsing,   setParsing]   = useState(false)
-  const [preview,   setPreview]   = useState(null)
+  const [dragging, setDragging] = useState(false)
+  const [parsing, setParsing] = useState(false)
+  const [preview, setPreview] = useState(null)
   const [importing, setImporting] = useState(false)
-  const [success,   setSuccess]   = useState(null)
-  const [error,     setError]     = useState(null)
+  const [success, setSuccess] = useState(null)
+  const [error, setError] = useState(null)
   const [rayonType, setRayonType] = useState(userRayonType || '')
   const inputRef = useRef()
 
@@ -386,10 +386,10 @@ export default function RH() {
   const { user, profile } = useAuth(s => ({ user: s.user, profile: s.profile }))
   const selectedId = useMagasin(s => s.selectedId)
 
-  const isGlobal      = GLOBAL_ROLES.includes(profile?.role)
-  const isRayonRole   = RAYON_TYPES.includes(profile?.role)
-  const canImport     = IMPORT_ROLES.includes(profile?.role)
-  const magasinId     = isGlobal ? selectedId : profile?.magasinId
+  const isGlobal = GLOBAL_ROLES.includes(profile?.role)
+  const isRayonRole = RAYON_TYPES.includes(profile?.role)
+  const canImport = IMPORT_ROLES.includes(profile?.role)
+  const magasinId = isGlobal ? selectedId : profile?.magasinId
   const userRayonType = isRayonRole ? profile?.role : null
 
   const visibleTools = RH_TOOLS.filter(t => t.roles === null || t.roles.includes(profile?.role))
