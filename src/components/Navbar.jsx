@@ -18,6 +18,7 @@ const PAGE_TITLES = {
   '/profile': 'Mon profil',
   '/operations': 'Opérations Commerciales',
   '/flocage': 'Flocage',
+  '/obut': 'Commandes OBUT',
 }
 
 export default function Navbar() {

@@ -269,6 +269,25 @@ service cloud.firestore {
       allow create, update, delete: if isSignedIn() && isGlobal();
     }
 
+    /* ── Commandes OBUT ────────────────────────────────────────────────────── */
+    match /obut_commandes/{cmdId} {
+      allow get: if isSignedIn() && (
+        isGlobal() || sameStore(resource.data)
+      );
+      allow list: if isSignedIn() && (
+        isGlobal() || (magasinId() != null && (isDirMag() || role() == 'velo'))
+      );
+      allow create: if isSignedIn() && (
+        isGlobal() || sameStoreNew()
+      );
+      allow update: if isSignedIn() && (
+        isGlobal() || sameStore(resource.data)
+      );
+      allow delete: if isSignedIn() && (
+        isGlobal() || (isDirMag() && sameStore(resource.data))
+      );
+    }
+
     /* ── Notifications ───────────────────────────────────────────────────── */
     match /notifications/{notifId} {
       allow get: if isSignedIn() && (

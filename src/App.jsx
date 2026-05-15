@@ -16,6 +16,7 @@ import Operations from './pages/Operations'
 import OperationDetail from './pages/OperationDetail'
 import Flocage from './pages/Flocage'
 import Transfert from './pages/Transfert'
+import Obut from './pages/Obut'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth(s => ({ user: s.user, loading: s.loading }))
@@ -82,6 +83,14 @@ export default function App() {
         element={
           <RoleRoute roles={['velo', 'directeurmag', 'acheteur', 'directeurgen']} acheteurRayons={['velo']}>
             <Transfert />
+          </RoleRoute>
+        }
+      />
+      <Route
+        path="/obut"
+        element={
+          <RoleRoute roles={['velo', 'directeurmag', 'acheteur', 'directeurgen']} acheteurRayons={['velo']}>
+            <Obut />
           </RoleRoute>
         }
       />
