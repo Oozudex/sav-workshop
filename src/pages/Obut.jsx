@@ -369,38 +369,7 @@ function ObutBarChart({ data }) {
   )
 }
 
-// ── (ancien ComparisonCard supprimé — remplacé par StatCard) ──────────────────
-function ComparisonCard({ title, curr, prev, currYear, prevYear, format }) {
-  const diff = curr - prev
-  const pct  = prev > 0 ? Math.round((diff / prev) * 100) : null
-  const positive = diff >= 0
-  return (
-    <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 p-5">
-      <p className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide mb-3">{title}</p>
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">{format(curr)}</p>
-          <p className="text-[11px] text-gray-400 dark:text-neutral-500 mt-0.5">{currYear}</p>
-        </div>
-        {pct !== null && (
-          <span className={`text-xs font-bold px-2 py-1 rounded-lg ${positive ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400' : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'}`}>
-            {positive ? '↑' : '↓'} {Math.abs(pct)} %
-          </span>
-        )}
-        <div className="text-right">
-          <p className="text-sm font-semibold text-gray-400 dark:text-neutral-500">{format(prev)}</p>
-          <p className="text-[11px] text-gray-400 dark:text-neutral-500 mt-0.5">{prevYear}</p>
-        </div>
-      </div>
-      <div className="mt-3 h-1 rounded-full bg-gray-100 dark:bg-neutral-800">
-        <div
-          className={`h-1 rounded-full transition-all ${positive ? 'bg-emerald-500' : 'bg-red-500'}`}
-          style={{ width: `${Math.max(curr, prev) > 0 ? (Math.min(curr, Math.max(curr, prev)) / Math.max(curr, prev)) * 100 : 0}%` }}
-        />
-      </div>
-    </div>
-  )
-}
+
 
 function StatsSection({ commandes, magasins }) {
   const now          = new Date()
