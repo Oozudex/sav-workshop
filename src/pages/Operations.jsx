@@ -150,7 +150,7 @@ export function OpModal({ op, onClose, onSave }) {
               className={['flex-1 h-8 rounded-lg text-xs font-semibold transition-colors',
                 form.globale ? 'bg-amber-500 text-white' : 'text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-700',
               ].join(' ')}>
-              🌐 OP Globale
+              OP Animation
             </button>
           </div>
           {form.globale && (
@@ -516,12 +516,163 @@ function PrixExcluImportModal({ onClose }) {
   )
 }
 
+// ── Modal ajout manuel catalogue ──────────────────────────────────────────────
+function AddCatalogueModal({ onClose }) {
+  const empty = { chrono: '', reference: '', nom: '', couleur: '', famille: '', marque: '', univers: '', segment: '' }
+  const [form, setForm] = useState(empty)
+  const [saving, setSaving] = useState(false)
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })) }
+
+  async function handleSave(e) {
+    e.preventDefault()
+    if (!form.nom.trim() && !form.reference.trim()) return
+    setSaving(true)
+    try {
+      const data = {}
+      Object.entries(form).forEach(([k, v]) => { if (v.trim()) data[k] = v.trim() })
+      await addDoc(collection(db, 'catalogue_produits'), { ...data, importedAt: serverTimestamp() })
+      onClose()
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
+          <span className="text-sm font-semibold text-gray-900 dark:text-white">Ajouter une référence catalogue</span>
+          <button onClick={onClose} className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <form onSubmit={handleSave} className="p-5 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="space-y-1">
+              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Chrono</span>
+              <input className="Input" value={form.chrono} onChange={e => set('chrono', e.target.value)} />
+            </label>
+            <label className="space-y-1">
+              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Référence</span>
+              <input className="Input" value={form.reference} onChange={e => set('reference', e.target.value)} />
+            </label>
+            <label className="col-span-2 space-y-1">
+              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Nom / Désignation *</span>
+              <input className="Input" value={form.nom} onChange={e => set('nom', e.target.value)} autoFocus />
+            </label>
+            <label className="space-y-1">
+              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Marque</span>
+              <input className="Input" value={form.marque} onChange={e => set('marque', e.target.value)} />
+            </label>
+            <label className="space-y-1">
+              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Couleur</span>
+              <input className="Input" value={form.couleur} onChange={e => set('couleur', e.target.value)} />
+            </label>
+            <label className="space-y-1">
+              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Famille</span>
+              <input className="Input" value={form.famille} onChange={e => set('famille', e.target.value)} />
+            </label>
+            <label className="space-y-1">
+              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Univers</span>
+              <input className="Input" value={form.univers} onChange={e => set('univers', e.target.value)} />
+            </label>
+            <label className="space-y-1">
+              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Segment</span>
+              <input className="Input" value={form.segment} onChange={e => set('segment', e.target.value)} />
+            </label>
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" onClick={onClose} className="h-8 px-3 rounded-lg text-xs border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800">Annuler</button>
+            <button type="submit" disabled={saving || (!form.nom.trim() && !form.reference.trim())}
+              className="h-8 px-4 rounded-lg text-xs font-semibold disabled:opacity-50 bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
+              {saving ? 'Ajout…' : 'Ajouter'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── Modal ajout manuel prix exclu team ────────────────────────────────────────
+function AddPrixExcluModal({ onClose }) {
+  const empty = { nom: '', marque: '', chrono: '', segment: '', prixFort: '', prixExcluTeam: '' }
+  const [form, setForm] = useState(empty)
+  const [saving, setSaving] = useState(false)
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })) }
+
+  async function handleSave(e) {
+    e.preventDefault()
+    if (!form.chrono.trim()) return
+    setSaving(true)
+    try {
+      const data = {}
+      Object.entries(form).forEach(([k, v]) => {
+        if (!v.toString().trim()) return
+        if (k === 'prixFort' || k === 'prixExcluTeam') {
+          const n = parseFloat(v.replace(',', '.').replace(/\s/g, ''))
+          if (!isNaN(n)) data[k] = n
+        } else { data[k] = v.trim() }
+      })
+      await addDoc(collection(db, 'prix_exclu_team'), { ...data, importedAt: serverTimestamp() })
+      onClose()
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
+          <span className="text-sm font-semibold text-gray-900 dark:text-white">Ajouter un prix exclu team</span>
+          <button onClick={onClose} className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <form onSubmit={handleSave} className="p-5 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="col-span-2 space-y-1">
+              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Nom</span>
+              <input className="Input" value={form.nom} onChange={e => set('nom', e.target.value)} autoFocus />
+            </label>
+            <label className="space-y-1">
+              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Marque</span>
+              <input className="Input" value={form.marque} onChange={e => set('marque', e.target.value)} />
+            </label>
+            <label className="space-y-1">
+              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Chrono *</span>
+              <input className="Input" value={form.chrono} onChange={e => set('chrono', e.target.value)} />
+            </label>
+            <label className="col-span-2 space-y-1">
+              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Segment</span>
+              <input className="Input" value={form.segment} onChange={e => set('segment', e.target.value)} />
+            </label>
+            <label className="space-y-1">
+              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Prix fort (€)</span>
+              <input className="Input" inputMode="decimal" value={form.prixFort} onChange={e => set('prixFort', e.target.value)} placeholder="0.00" />
+            </label>
+            <label className="space-y-1">
+              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Prix exclu team (€)</span>
+              <input className="Input" inputMode="decimal" value={form.prixExcluTeam} onChange={e => set('prixExcluTeam', e.target.value)} placeholder="0.00" />
+            </label>
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" onClick={onClose} className="h-8 px-3 rounded-lg text-xs border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800">Annuler</button>
+            <button type="submit" disabled={saving || !form.chrono.trim()}
+              className="h-8 px-4 rounded-lg text-xs font-semibold disabled:opacity-50 bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
+              {saving ? 'Ajout…' : 'Ajouter'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ── Section catalogue ─────────────────────────────────────────────────────────
 function CatalogueSection({ canCreate }) {
   const [produits, setProduits] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [showImport, setShowImport] = useState(false)
+  const [showAdd, setShowAdd] = useState(false)
 
   useEffect(() => {
     return onSnapshot(
@@ -569,6 +720,10 @@ function CatalogueSection({ canCreate }) {
                 Vider
               </button>
             )}
+            <button onClick={() => setShowAdd(true)}
+              className="h-8 px-3 rounded-lg text-xs font-medium border border-gray-200 dark:border-neutral-700 text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors">
+              + Ajouter
+            </button>
             <button onClick={() => setShowImport(true)}
               className="h-8 px-4 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
               Importer Excel
@@ -618,6 +773,7 @@ function CatalogueSection({ canCreate }) {
         </div>
       )}
       {showImport && <CatalogueImportModal catalogueCount={produits.length} onClose={() => setShowImport(false)} />}
+      {showAdd && <AddCatalogueModal onClose={() => setShowAdd(false)} />}
     </div>
   )
 }
@@ -627,7 +783,9 @@ function PrixExcluSection({ canCreate }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [segmentFilter, setSegmentFilter] = useState('')
   const [showImport, setShowImport] = useState(false)
+  const [showAdd, setShowAdd] = useState(false)
 
   useEffect(() => {
     return onSnapshot(
@@ -642,15 +800,23 @@ function PrixExcluSection({ canCreate }) {
     )
   }, [])
 
+  const segments = useMemo(() => {
+    const s = new Set(items.map(p => p.segment).filter(Boolean))
+    return [...s].sort((a, b) => a.localeCompare(b, 'fr'))
+  }, [items])
+
   const filtered = useMemo(() => {
     const t = search.trim().toLowerCase()
-    if (!t) return items
-    return items.filter(p =>
-      (p.reference || '').toLowerCase().includes(t) ||
-      (p.nom || '').toLowerCase().includes(t) ||
-      (p.famille || '').toLowerCase().includes(t)
-    )
-  }, [items, search])
+    return items.filter(p => {
+      if (segmentFilter && p.segment !== segmentFilter) return false
+      if (!t) return true
+      return (
+        (p.nom || '').toLowerCase().includes(t) ||
+        (p.marque || '').toLowerCase().includes(t) ||
+        (p.chrono || '').toLowerCase().includes(t)
+      )
+    })
+  }, [items, search, segmentFilter])
 
   async function handleDelete(item) {
     if (!confirm(`Supprimer "${item.nom}" ?`)) return
@@ -678,6 +844,10 @@ function PrixExcluSection({ canCreate }) {
             {items.length > 0 && (
               <button onClick={handleClear} className="h-8 px-3 rounded-lg text-xs border border-red-200 text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10">Vider</button>
             )}
+            <button onClick={() => setShowAdd(true)}
+              className="h-8 px-3 rounded-lg text-xs font-medium border border-gray-200 dark:border-neutral-700 text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors">
+              + Ajouter
+            </button>
             <button onClick={() => setShowImport(true)}
               className="h-8 px-4 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
               Importer Excel
@@ -685,10 +855,27 @@ function PrixExcluSection({ canCreate }) {
           </div>
         )}
       </div>
-      <div className="relative">
-        <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 104.5 4.5a7.5 7.5 0 0012.15 12.15z" /></svg>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher par référence, nom ou famille…"
-          className="w-full h-9 pl-9 pr-4 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-white/10" />
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 104.5 4.5a7.5 7.5 0 0012.15 12.15z" /></svg>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher par nom, marque ou chrono…"
+            className="w-full h-9 pl-9 pr-4 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-white/10" />
+        </div>
+        {segments.length > 0 && (
+          <select
+            value={segmentFilter}
+            onChange={e => setSegmentFilter(e.target.value)}
+            className={[
+              'h-9 pl-3 pr-7 rounded-xl border text-xs outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-white/10 cursor-pointer transition-colors',
+              segmentFilter
+                ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-500/50 dark:bg-blue-500/10 dark:text-blue-300'
+                : 'border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-gray-700 dark:text-neutral-300',
+            ].join(' ')}
+          >
+            <option value="">Tous les segments</option>
+            {segments.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        )}
       </div>
       {loading ? (
         <div className="text-center py-12 text-sm text-gray-400">Chargement…</div>
@@ -734,6 +921,7 @@ function PrixExcluSection({ canCreate }) {
         </div>
       )}
       {showImport && <PrixExcluImportModal onClose={() => setShowImport(false)} />}
+      {showAdd && <AddPrixExcluModal onClose={() => setShowAdd(false)} />}
     </div>
   )
 }
@@ -745,6 +933,7 @@ export default function Operations() {
 
   const [ops, setOps] = useState([])
   const [allProduits, setAllProduits] = useState([])
+  const [prixExcluItems, setPrixExcluItems] = useState([])
   const [modal, setModal] = useState(null) // null | {} | {id,...}
   const [section, setSection] = useState('en_cours')
   const [search, setSearch] = useState('')
@@ -765,18 +954,41 @@ export default function Operations() {
     }))))
   }, [])
 
+  // Chargement des prix exclu team pour la recherche globale
+  useEffect(() => {
+    return onSnapshot(collection(db, 'prix_exclu_team'), snap =>
+      setPrixExcluItems(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    )
+  }, [])
+
   const searchResults = useMemo(() => {
     const term = search.trim().toLowerCase()
-    if (!term) return []
-    return allProduits.filter(p =>
+    if (!term) return { opResults: [], prixResults: [] }
+
+    // Produits des OPs en cours ou à venir uniquement
+    const opResults = allProduits
+      .filter(p => {
+        const op = ops.find(o => o.id === p.opId)
+        if (!op) return false
+        return getStatus(op) !== 'terminee'
+      })
+      .filter(p =>
+        (p.nom || '').toLowerCase().includes(term) ||
+        (p.reference || '').toLowerCase().includes(term) ||
+        (p.refFournisseur || '').toLowerCase().includes(term)
+      )
+      .map(p => ({ ...p, op: ops.find(o => o.id === p.opId) }))
+
+    // Prix exclu team
+    const prixResults = prixExcluItems.filter(p =>
       (p.nom || '').toLowerCase().includes(term) ||
-      (p.reference || '').toLowerCase().includes(term) ||
-      (p.refFournisseur || '').toLowerCase().includes(term)
-    ).map(p => ({
-      ...p,
-      op: ops.find(o => o.id === p.opId),
-    }))
-  }, [search, allProduits, ops])
+      (p.marque || '').toLowerCase().includes(term) ||
+      (p.chrono || '').toLowerCase().includes(term) ||
+      (p.segment || '').toLowerCase().includes(term)
+    )
+
+    return { opResults, prixResults }
+  }, [search, allProduits, ops, prixExcluItems])
 
   async function handleSave(form) {
     const data = {
@@ -920,65 +1132,99 @@ export default function Operations() {
           </div>
 
           {/* Résultats de recherche */}
-          {search.trim() && (
-            <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 overflow-hidden">
-              {searchResults.length === 0 ? (
-                <div className="py-10 text-center text-sm text-gray-400 dark:text-neutral-500">
-                  Aucun produit trouvé pour « {search.trim()} »
-                </div>
-              ) : (
-                <>
-                  <div className="px-4 py-2.5 border-b border-gray-100 dark:border-neutral-800 bg-gray-50/50 dark:bg-neutral-800/30">
-                    <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">
-                      {searchResults.length} résultat{searchResults.length > 1 ? 's' : ''}
-                    </span>
+          {search.trim() && (() => {
+            const { opResults, prixResults } = searchResults
+            const total = opResults.length + prixResults.length
+            const hl = s => s?.toLowerCase().includes(search.trim().toLowerCase())
+            const Mark = ({ v }) => v
+              ? <span className={hl(v) ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 px-0.5 rounded' : ''}>{v}</span>
+              : <span className="text-gray-300 dark:text-neutral-600">—</span>
+
+            return (
+              <div className="space-y-3">
+                {total === 0 && (
+                  <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 py-10 text-center text-sm text-gray-400 dark:text-neutral-500">
+                    Aucun résultat pour « {search.trim()} »
                   </div>
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-gray-100 dark:border-neutral-800">
-                        {['Opération', 'Statut', 'Produit', 'Marque', 'Réf. produit', 'Réf. fourn.', 'Prix fort', 'Prix OP'].map(h => (
-                          <th key={h} className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {searchResults.map(p => {
-                        const st = p.op ? getStatus(p.op) : null
-                        return (
-                          <tr key={`${p.opId}_${p.id}`}
-                            className="border-b last:border-0 border-gray-100 dark:border-neutral-800 hover:bg-gray-50 dark:hover:bg-neutral-800/50 transition-colors cursor-pointer"
-                            onClick={() => navigate(`/operations/${p.opId}`)}>
-                            <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{p.op?.nom || p.opId}</td>
-                            <td className="px-4 py-3">
-                              {st && <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${st.pill}`}>{st.label}</span>}
-                            </td>
-                            <td className="px-4 py-3 text-gray-700 dark:text-neutral-300">
-                              <span className={p.nom?.toLowerCase().includes(search.trim().toLowerCase()) ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 px-1 rounded' : ''}>
-                                {p.nom}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-gray-500 dark:text-neutral-400">{p.marque || '—'}</td>
-                            <td className="px-4 py-3 font-mono text-gray-500 dark:text-neutral-400">
-                              <span className={p.reference?.toLowerCase().includes(search.trim().toLowerCase()) ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 px-1 rounded' : ''}>
-                                {p.reference || '—'}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 font-mono text-gray-500 dark:text-neutral-400">
-                              <span className={p.refFournisseur?.toLowerCase().includes(search.trim().toLowerCase()) ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 px-1 rounded' : ''}>
-                                {p.refFournisseur || '—'}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-gray-500 dark:text-neutral-400">{p.prixFort != null ? `${p.prixFort} €` : '—'}</td>
-                            <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">{p.prixOp != null ? `${p.prixOp} €` : '—'}</td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </>
-              )}
-            </div>
-          )}
+                )}
+
+                {/* Résultats OPs (en cours + à venir) */}
+                {opResults.length > 0 && (
+                  <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 overflow-hidden">
+                    <div className="px-4 py-2.5 border-b border-gray-100 dark:border-neutral-800 bg-gray-50/50 dark:bg-neutral-800/30 flex items-center gap-2">
+                      <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Opérations commerciales</span>
+                      <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-gray-100 text-gray-500 dark:bg-neutral-800 dark:text-neutral-400">{opResults.length}</span>
+                    </div>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-gray-100 dark:border-neutral-800">
+                          {['Opération', 'Statut', 'Produit', 'Marque', 'Réf. produit', 'Réf. fourn.', 'Prix fort', 'Prix OP'].map(h => (
+                            <th key={h} className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {opResults.map(p => {
+                          const st = p.op ? STATUS_CONFIG[getStatus(p.op)] : null
+                          return (
+                            <tr key={`${p.opId}_${p.id}`}
+                              className="border-b last:border-0 border-gray-100 dark:border-neutral-800 hover:bg-gray-50 dark:hover:bg-neutral-800/50 transition-colors cursor-pointer"
+                              onClick={() => navigate(`/operations/${p.opId}`)}>
+                              <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{p.op?.nom || p.opId}</td>
+                              <td className="px-4 py-3">
+                                {st && <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${st.pill}`}>{st.label}</span>}
+                              </td>
+                              <td className="px-4 py-3 text-gray-700 dark:text-neutral-300"><Mark v={p.nom} /></td>
+                              <td className="px-4 py-3 text-gray-500 dark:text-neutral-400">{p.marque || '—'}</td>
+                              <td className="px-4 py-3 font-mono text-gray-500 dark:text-neutral-400"><Mark v={p.reference} /></td>
+                              <td className="px-4 py-3 font-mono text-gray-500 dark:text-neutral-400"><Mark v={p.refFournisseur} /></td>
+                              <td className="px-4 py-3 text-gray-500 dark:text-neutral-400">{p.prixFort != null ? `${p.prixFort} €` : '—'}</td>
+                              <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">{p.prixOp != null ? `${p.prixOp} €` : '—'}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Résultats prix exclu team */}
+                {prixResults.length > 0 && (
+                  <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 overflow-hidden">
+                    <div className="px-4 py-2.5 border-b border-gray-100 dark:border-neutral-800 bg-gray-50/50 dark:bg-neutral-800/30 flex items-center gap-2">
+                      <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Prix exclu team</span>
+                      <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-gray-100 text-gray-500 dark:bg-neutral-800 dark:text-neutral-400">{prixResults.length}</span>
+                    </div>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-gray-100 dark:border-neutral-800">
+                          {['Nom', 'Marque', 'Chrono', 'Segment', 'Prix fort', 'Prix exclu team', 'Remise'].map(h => (
+                            <th key={h} className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {prixResults.map(p => {
+                          const rem = p.prixFort && p.prixExcluTeam ? Math.round((1 - p.prixExcluTeam / p.prixFort) * 100) : null
+                          return (
+                            <tr key={p.id} className="border-b last:border-0 border-gray-100 dark:border-neutral-800 hover:bg-gray-50 dark:hover:bg-neutral-800/50">
+                              <td className="px-4 py-2.5 font-medium text-gray-900 dark:text-white"><Mark v={p.nom} /></td>
+                              <td className="px-4 py-2.5 text-gray-500 dark:text-neutral-400"><Mark v={p.marque} /></td>
+                              <td className="px-4 py-2.5 font-mono text-gray-700 dark:text-neutral-300"><Mark v={p.chrono} /></td>
+                              <td className="px-4 py-2.5 text-gray-500 dark:text-neutral-400"><Mark v={p.segment} /></td>
+                              <td className="px-4 py-2.5 text-gray-500 dark:text-neutral-400">{p.prixFort != null ? `${Number(p.prixFort).toFixed(2)} €` : '—'}</td>
+                              <td className="px-4 py-2.5 font-semibold text-blue-600 dark:text-blue-400">{p.prixExcluTeam != null ? `${Number(p.prixExcluTeam).toFixed(2)} €` : '—'}</td>
+                              <td className="px-4 py-2.5 font-semibold text-emerald-600 dark:text-emerald-400">{rem != null ? `-${rem}%` : '—'}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {/* Tabs + Contenu (masqués pendant la recherche) */}
           {!search.trim() && (<>
