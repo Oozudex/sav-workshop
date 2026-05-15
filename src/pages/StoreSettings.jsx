@@ -100,6 +100,9 @@ export default function StoreSettings() {
   const [newMagasinLoading, setNewMagasinLoading] = useState(false)
   const [newMagasinErr,     setNewMagasinErr]     = useState(null)
 
+  // Nouveau directeur magasin (toggle)
+  const [showNewDirMag, setShowNewDirMag] = useState(false)
+
   useEffect(() => {
     if (!isGlobal) return
     const q = query(collection(db, 'magasins'), orderBy('nom', 'asc'))
@@ -313,7 +316,8 @@ export default function StoreSettings() {
       })
       try { await sendPasswordResetEmail(getAuth(), dmEmail.trim()) } catch {}
       setDmMsg(`Compte créé · email de définition du mot de passe envoyé à ${dmEmail.trim()}`)
-      setDmName(''); setDmEmail('')
+      setDmName(''); setDmEmail(''); setDmMagasinId('')
+      setShowNewDirMag(false)
     } catch (err) {
       const map = { 'auth/email-already-in-use': 'Cet email existe déjà.', 'auth/invalid-email': 'Email invalide.' }
       setDmErr(map[err.code] || err.message)
@@ -358,32 +362,20 @@ export default function StoreSettings() {
   const selectedRayon = rayons.find(r => r.id === selectedRayonId)
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
       <Navbar />
 
-      <main className="flex-1 p-5">
+      <main className="flex-1 p-6">
         <div className="max-w-3xl mx-auto space-y-5">
 
           {/* Header */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-sm font-semibold text-gray-900 dark:text-white">
-                {isDirecteurGen ? 'Admin' : 'Paramètres magasin'}
-              </h1>
-              <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">
-                {isDirecteurGen ? "Gestion des magasins et de l'équipe" : "Gestion des équipes par rayon"}
-              </p>
-            </div>
-            {isDirecteurGen && (
-              <button
-                onClick={() => setShowNewMagasin(v => !v)}
-                className="h-8 px-4 rounded-lg text-xs font-semibold transition-colors
-                           bg-gray-900 text-white hover:bg-gray-700
-                           dark:bg-white dark:text-black dark:hover:bg-gray-100"
-              >
-                + Nouveau magasin
-              </button>
-            )}
+          <div>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+              {isDirecteurGen ? 'Admin' : 'Paramètres magasin'}
+            </h1>
+            <p className="text-sm text-gray-400 dark:text-neutral-500 mt-1">
+              {isDirecteurGen ? "Gestion des magasins, directeurs et acheteurs" : "Gestion des rayons et de l'équipe"}
+            </p>
           </div>
 
           {/* Acheteurs (directeurgen uniquement) */}
@@ -532,36 +524,51 @@ export default function StoreSettings() {
           {/* Directeurs de magasin (directeurgen uniquement) */}
           {isDirecteurGen && (
             <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 dark:border-neutral-800 bg-gray-50/50 dark:bg-neutral-800/30">
-                <span className="h-1.5 w-1.5 rounded-full bg-gray-300 dark:bg-neutral-600" />
-                <span className="text-[11px] font-semibold text-gray-600 dark:text-neutral-400 uppercase tracking-wide">Directeurs de magasin</span>
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-neutral-800 bg-gray-50/50 dark:bg-neutral-800/30">
+                <div className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-gray-300 dark:bg-neutral-600" />
+                  <span className="text-[11px] font-semibold text-gray-600 dark:text-neutral-400 uppercase tracking-wide">Directeurs de magasin</span>
+                </div>
+                <button
+                  onClick={() => { setShowNewDirMag(v => !v); setDmErr(null); setDmMsg(null) }}
+                  className="h-6 px-2.5 rounded-lg text-[11px] font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100 transition-colors">
+                  + Nouveau directeur
+                </button>
               </div>
               <div className="p-4 space-y-4">
                 {dmErr && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2 dark:text-red-300 dark:bg-red-900/20 dark:border-red-500/30">{dmErr}</p>}
                 {dmMsg && <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 dark:text-emerald-300 dark:bg-emerald-500/10 dark:border-emerald-500/20">{dmMsg}</p>}
-                <form onSubmit={createDirecteurmag} className="grid grid-cols-3 gap-3">
-                  <label className="space-y-1">
-                    <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Nom</span>
-                    <input className="Input" value={dmName} onChange={e => setDmName(e.target.value)} placeholder="Prénom Nom" />
-                  </label>
-                  <label className="space-y-1">
-                    <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Email</span>
-                    <input type="email" className="Input" value={dmEmail} onChange={e => setDmEmail(e.target.value)} placeholder="directeur@exemple.com" />
-                  </label>
-                  <label className="space-y-1">
-                    <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Magasin</span>
-                    <select className="Input" value={dmMagasinId} onChange={e => setDmMagasinId(e.target.value)}>
-                      <option value="">— Sélectionner</option>
-                      {magasins.map(m => <option key={m.id} value={m.id}>{m.nom}</option>)}
-                    </select>
-                  </label>
-                  <div className="col-span-3 flex justify-end">
+                {showNewDirMag && (
+                <form onSubmit={createDirecteurmag} className="p-3 rounded-xl border border-gray-100 dark:border-neutral-800 bg-gray-50 dark:bg-neutral-800/30 space-y-3">
+                  <div className="grid grid-cols-3 gap-3">
+                    <label className="space-y-1">
+                      <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Nom</span>
+                      <input className="Input" value={dmName} onChange={e => setDmName(e.target.value)} placeholder="Prénom Nom" autoFocus />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Email</span>
+                      <input type="email" className="Input" value={dmEmail} onChange={e => setDmEmail(e.target.value)} placeholder="directeur@exemple.com" />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Magasin</span>
+                      <select className="Input" value={dmMagasinId} onChange={e => setDmMagasinId(e.target.value)}>
+                        <option value="">— Sélectionner</option>
+                        {magasins.map(m => <option key={m.id} value={m.id}>{m.nom}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button type="button" onClick={() => setShowNewDirMag(false)}
+                      className="h-8 px-3 rounded-lg text-xs border border-gray-200 dark:border-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-800 text-gray-600 dark:text-neutral-400">
+                      Annuler
+                    </button>
                     <button type="submit" disabled={dmLoading}
                       className="h-8 px-4 rounded-lg text-xs font-semibold disabled:opacity-50 bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
-                      {dmLoading ? 'Création…' : 'Créer le directeur'}
+                      {dmLoading ? 'Création…' : 'Créer'}
                     </button>
                   </div>
                 </form>
+                )}
                 {directeurs.length > 0 && (
                   <div className="border border-gray-100 dark:border-neutral-800 rounded-xl overflow-hidden">
                     {directeurs.map(d => {
@@ -621,23 +628,51 @@ export default function StoreSettings() {
           {/* Sélecteur de magasin (rôles globaux) */}
           {isGlobal && (
             <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 dark:border-neutral-800 bg-gray-50/50 dark:bg-neutral-800/30">
-                <span className="h-1.5 w-1.5 rounded-full bg-gray-300 dark:bg-neutral-600" />
-                <span className="text-[11px] font-semibold text-gray-600 dark:text-neutral-400 uppercase tracking-wide">Magasins</span>
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-neutral-800 bg-gray-50/50 dark:bg-neutral-800/30">
+                <div className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-gray-300 dark:bg-neutral-600" />
+                  <span className="text-[11px] font-semibold text-gray-600 dark:text-neutral-400 uppercase tracking-wide">Magasins</span>
+                </div>
+                {isDirecteurGen && (
+                  <button
+                    onClick={() => setShowNewMagasin(v => !v)}
+                    className="h-6 px-2.5 rounded-lg text-[11px] font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100 transition-colors">
+                    + Nouveau magasin
+                  </button>
+                )}
               </div>
               <div className="p-4">
                 {magasins.length === 0 ? (
-                  <p className="text-xs text-gray-400 dark:text-neutral-500">Aucun magasin créé.</p>
+                  <p className="text-xs text-gray-400 dark:text-neutral-500 text-center py-2">Aucun magasin créé.</p>
                 ) : (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     {magasins.map(m => (
                       <button key={m.id} onClick={() => setGlobalSelectedId(m.id)}
-                        className={['h-8 px-3 rounded-lg text-xs font-medium transition-colors',
+                        className={[
+                          'flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all',
                           globalSelectedId === m.id
-                            ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
-                            : 'text-gray-600 border border-gray-200 hover:bg-gray-50 dark:text-neutral-400 dark:border-neutral-700 dark:hover:bg-neutral-800',
+                            ? 'bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
+                            : 'bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-700 hover:border-gray-300 dark:hover:border-neutral-600',
                         ].join(' ')}>
-                        {m.nom}
+                        <span className={[
+                          'h-8 w-8 rounded-lg grid place-items-center shrink-0 text-sm font-bold',
+                          globalSelectedId === m.id
+                            ? 'bg-white/20 text-white dark:bg-black/20 dark:text-black'
+                            : 'bg-gray-100 dark:bg-neutral-800 text-gray-500 dark:text-neutral-400',
+                        ].join(' ')}>
+                          {m.nom[0]?.toUpperCase()}
+                        </span>
+                        <span className={[
+                          'text-sm font-medium',
+                          globalSelectedId === m.id ? 'text-white dark:text-black' : 'text-gray-900 dark:text-white',
+                        ].join(' ')}>
+                          {m.nom}
+                        </span>
+                        {globalSelectedId === m.id && (
+                          <svg className="h-4 w-4 text-white dark:text-black ml-auto shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
                       </button>
                     ))}
                   </div>
