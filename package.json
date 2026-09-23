@@ -32,7 +32,7 @@
     "@types/react-dom": "^18.2.15",
     "@vitejs/plugin-react": "^6.0.2",
     "autoprefixer": "^10.5.0",
-    "eslint": "^9.39.5",
+    "eslint": "^10.11.0",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",
     "firebase-admin": "^14.4.0",
