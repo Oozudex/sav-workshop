@@ -171,9 +171,9 @@ service cloud.firestore {
       allow update: if isSignedIn() && canUpdateStoreDoc();
       allow delete: if isSignedIn() && (isGlobal() || (isDirMag() && inMyStore(resource.data)));
 
+      // Comptes rayon partagés : tout compte du magasin du ticket peut corriger un commentaire
       match /comments/{commentId} {
-        allow read, create: if isSignedIn() && ticketInScope();
-        allow update, delete: if isSignedIn() && canDelete() && ticketInScope();
+        allow read, create, update, delete: if isSignedIn() && ticketInScope();
       }
 
       match /history/{histId} {

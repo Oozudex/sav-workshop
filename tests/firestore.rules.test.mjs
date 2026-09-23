@@ -8,7 +8,7 @@ import {
   assertFails, assertSucceeds, initializeTestEnvironment,
 } from '@firebase/rules-unit-testing'
 import {
-  collection, collectionGroup, doc, getDoc, getDocs, query,
+  collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, query,
   serverTimestamp, setDoc, updateDoc, where,
 } from 'firebase/firestore'
 
@@ -102,6 +102,15 @@ describe('tickets', () => {
   it("un vendeur ne lit pas un ticket d'un autre magasin", async () => {
     await assertFails(getDoc(doc(as('veloA'), 'tickets', 'tB')))
     await assertFails(getDocs(collection(as('veloA'), 'tickets', 'tB', 'comments')))
+  })
+  it("un vendeur modifie et supprime les commentaires des tickets de son magasin uniquement", async () => {
+    await env.withSecurityRulesDisabled(async ctx => {
+      await setDoc(doc(ctx.firestore(), 'tickets', 'tA', 'comments', 'cA'), { text: 'à corriger' })
+    })
+    await assertSucceeds(updateDoc(doc(as('veloA'), 'tickets', 'tA', 'comments', 'cA'), { text: 'corrigé' }))
+    await assertSucceeds(deleteDoc(doc(as('veloA'), 'tickets', 'tA', 'comments', 'cA')))
+    await assertFails(updateDoc(doc(as('veloA'), 'tickets', 'tB', 'comments', 'c1'), { text: 'x' }))
+    await assertFails(deleteDoc(doc(as('veloA'), 'tickets', 'tB', 'comments', 'c1')))
   })
   it("un vendeur ne peut pas déplacer un ticket vers un autre magasin", async () => {
     await assertFails(updateDoc(doc(as('veloA'), 'tickets', 'tA'), { magasinId: 'B' }))

@@ -6,12 +6,13 @@ import { db } from '../lib/firebase'
 import {
     collection, addDoc, onSnapshot, query, orderBy,
     serverTimestamp, doc, updateDoc, arrayUnion,
-    deleteDoc, getDocs, writeBatch
+    deleteDoc, getDocs, writeBatch, runTransaction
 } from 'firebase/firestore'
-import { BIKE_TYPES, PRIORITIES, CONTACT_PREFS, STATUSES, STATUS_LABELS, CAN_DELETE_ROLES } from '../lib/constants'
+import { BIKE_TYPES, PRIORITIES, CAN_DELETE_ROLES } from '../lib/constants'
 import { useStaff } from '../lib/useStaff'
+import { commentExcerpt, withCommentEdited, withCommentRemoved } from '../lib/ticketHistory'
 
-export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo }) {
+export default function TicketModal({ ticket, role, onClose, onDelete }) {
     const overlayRef = useRef(null)
     const urgent = ticket.priority === 'Urgent'
     const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
@@ -36,6 +37,8 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo 
     const [commentAuthor, setCommentAuthor] = useState('')
     const [authorError, setAuthorError] = useState(false)
     const [sendingComment, setSendingComment] = useState(false)
+    const [editingCommentId, setEditingCommentId] = useState(null)
+    const [editingText, setEditingText] = useState('')
 
     // --- N° de suivi SAV (fournisseur)
     const [tracking, setTracking] = useState(ticket.trackingNumber || '')
@@ -107,13 +110,12 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo 
         setAuthorError(false)
         setSendingComment(true)
         try {
-            await addDoc(collection(db, 'tickets', ticket.id, 'comments'), {
+            const ref = await addDoc(collection(db, 'tickets', ticket.id, 'comments'), {
                 text, createdAt: serverTimestamp(), createdBy: user.uid, author: commentAuthor,
             })
-            const excerpt = text.length > 120 ? text.slice(0, 117) + '…' : text
             await updateDoc(doc(db, 'tickets', ticket.id), {
                 updatedAt: serverTimestamp(),
-                history: arrayUnion({ at: new Date().toISOString(), by: commentAuthor, action: 'comment', note: excerpt }),
+                history: arrayUnion({ at: new Date().toISOString(), by: commentAuthor, action: 'comment', note: commentExcerpt(text), commentId: ref.id }),
             })
             setCommentText('')
             setCommentAuthor('')
@@ -121,6 +123,43 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo 
             console.error('submitComment error', err)
         } finally {
             setSendingComment(false)
+        }
+    }
+
+    function startEditComment(c) {
+        setEditingCommentId(c.id)
+        setEditingText(c.text || '')
+    }
+
+    async function saveComment(c) {
+        const text = editingText.trim()
+        if (!text || text === c.text) { setEditingCommentId(null); return }
+        const ticketRef = doc(db, 'tickets', ticket.id)
+        try {
+            await runTransaction(db, async tx => {
+                const snap = await tx.get(ticketRef)
+                tx.update(doc(ticketRef, 'comments', c.id), { text, editedAt: serverTimestamp() })
+                tx.update(ticketRef, { history: withCommentEdited(snap.data()?.history, c, text), updatedAt: serverTimestamp() })
+            })
+            setEditingCommentId(null)
+            setToast('Commentaire modifié ✓')
+        } catch (err) {
+            alert('Modification impossible : ' + (err.message || 'inconnue'))
+        }
+    }
+
+    async function removeComment(c) {
+        if (!confirm(`Supprimer le commentaire de ${c.author || '—'} ?`)) return
+        const ticketRef = doc(db, 'tickets', ticket.id)
+        try {
+            await runTransaction(db, async tx => {
+                const snap = await tx.get(ticketRef)
+                tx.delete(doc(ticketRef, 'comments', c.id))
+                tx.update(ticketRef, { history: withCommentRemoved(snap.data()?.history, c), updatedAt: serverTimestamp() })
+            })
+            setToast('Commentaire supprimé ✓')
+        } catch (err) {
+            alert('Suppression impossible : ' + (err.message || 'inconnue'))
         }
     }
 
@@ -176,8 +215,7 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo 
             const after = diff(sanitizeDraft(makeDraft(ticket)), sanitizeDraft(draft))
             if (Object.keys(after).length === 0) { setEditing(false); setSaving(false); return }
             const FIELD_LABELS = {
-                customerName: 'client', customerPhone: 'téléphone', customerEmail: 'email',
-                preferredContact: 'contact préféré', bikeType: 'type vélo', bikeBrand: 'marque',
+                customerName: 'client', customerPhone: 'téléphone', bikeType: 'type vélo', bikeBrand: 'marque',
                 bikeModel: 'modèle', serialNumber: 'n° série', purchaseDate: "date d'achat",
                 underWarranty: 'garantie', issueDescription: 'problème', accessoriesLeft: 'accessoires',
                 priority: 'priorité', dueDate: 'date prévue', createdByName: 'créé par',
@@ -228,9 +266,27 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo 
                                 ⚡ Urgent
                             </span>
                         )}
-                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                            {ticket.customerName || 'Client inconnu'}
-                        </h3>
+                        {editing ? (
+                            <div className="flex items-center gap-2 min-w-0">
+                                <input className="Input h-8 !w-44 text-sm" placeholder="Nom du client" aria-label="Nom du client"
+                                    value={draft.customerName} onChange={e => onChange('customerName', e.target.value)} />
+                                <input className="Input h-8 !w-36 text-sm" type="tel" placeholder="Téléphone" aria-label="Téléphone"
+                                    value={draft.customerPhone || ''} onChange={e => onChange('customerPhone', e.target.value)} />
+                            </div>
+                        ) : (
+                            <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                                {ticket.customerName || 'Client inconnu'}
+                                {ticket.customerPhone && (
+                                    <>
+                                        <span className="text-gray-400 dark:text-neutral-500"> - </span>
+                                        <a href={`tel:${ticket.customerPhone.replace(/\s/g, '')}`} title="Appeler le client"
+                                            className="font-medium text-gray-700 dark:text-neutral-300 hover:underline underline-offset-2">
+                                            {ticket.customerPhone}
+                                        </a>
+                                    </>
+                                )}
+                            </h3>
+                        )}
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
@@ -263,35 +319,103 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo 
                 {/* ── BODY ── */}
                 <div className="p-5 grid grid-cols-1 md:grid-cols-12 gap-4">
 
+                    {/* ── Commentaires (en haut, pleine largeur) ── */}
+                    <div className="md:col-span-12">
+                        <Card title="Commentaires" action={comments.length > 0 && <CopyBtn onClick={copyComments} label="Copier l'historique" />}>
+                            <form onSubmit={submitComment} className="space-y-1.5 mb-3">
+                                <div className="flex gap-2 items-center">
+                                    {users.length > 0 ? (
+                                        <select
+                                            value={commentAuthor}
+                                            onChange={e => { setCommentAuthor(e.target.value); setAuthorError(false) }}
+                                            className={`h-9 px-2 rounded-xl border text-xs font-medium bg-white dark:bg-neutral-800 text-gray-700 dark:text-neutral-200 shrink-0 w-32 ${authorError ? 'border-red-400 dark:border-red-500' : 'border-gray-200 dark:border-neutral-700'}`}
+                                        >
+                                            <option value="">— Auteur</option>
+                                            {users.map(u => <option key={u.id} value={u.nom}>{u.nom}</option>)}
+                                        </select>
+                                    ) : (
+                                        <input
+                                            value={commentAuthor}
+                                            onChange={e => { setCommentAuthor(e.target.value); setAuthorError(false) }}
+                                            placeholder="Votre nom"
+                                            className={`Input h-9 w-32 shrink-0 ${authorError ? 'border-red-400 dark:border-red-500' : ''}`}
+                                        />
+                                    )}
+                                    <input
+                                        value={commentText}
+                                        onChange={e => setCommentText(e.target.value)}
+                                        placeholder="Ajouter un commentaire…"
+                                        className="Input flex-1 h-9"
+                                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment() } }}
+                                    />
+                                    <button
+                                        type="submit"
+                                        disabled={!commentText.trim() || sendingComment}
+                                        className="h-9 px-4 rounded-xl bg-gray-900 text-white text-sm font-medium shrink-0
+                                                   hover:bg-gray-700 disabled:opacity-40 transition-colors
+                                                   dark:bg-white dark:text-black dark:hover:bg-gray-100"
+                                    >
+                                        Envoyer
+                                    </button>
+                                </div>
+                                {authorError && (
+                                    <p className="text-xs text-red-500 dark:text-red-400">Veuillez sélectionner la personne qui a écrit le commentaire.</p>
+                                )}
+                            </form>
+                            <div className="max-h-56 overflow-y-auto space-y-3">
+                                {comments.length === 0 && (
+                                    <p className="text-xs text-gray-400 dark:text-neutral-500 py-1">Aucun commentaire.</p>
+                                )}
+                                {comments.slice().reverse().map(c => (
+                                    <div key={c.id} className="group flex gap-3">
+                                        <div className="h-7 w-7 rounded-full bg-gray-100 dark:bg-neutral-800 text-gray-600 dark:text-neutral-300
+                                                         text-xs font-semibold grid place-items-center shrink-0">
+                                            {(c.author || '?')[0].toUpperCase()}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-baseline gap-2 mb-0.5">
+                                                <span className="text-xs font-semibold text-gray-700 dark:text-neutral-300">{c.author || '—'}</span>
+                                                <span className="text-[11px] text-gray-400 dark:text-neutral-500">
+                                                    {formatTS(c.createdAt)}{c.editedAt ? ' · modifié' : ''}
+                                                </span>
+                                                {canEdit && editingCommentId !== c.id && (
+                                                    <span className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                                                        <button type="button" onClick={() => startEditComment(c)}
+                                                            className="text-[11px] px-1.5 py-0.5 rounded text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-neutral-400 dark:hover:text-white dark:hover:bg-neutral-800">
+                                                            Modifier
+                                                        </button>
+                                                        <button type="button" onClick={() => removeComment(c)}
+                                                            className="text-[11px] px-1.5 py-0.5 rounded text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10">
+                                                            Supprimer
+                                                        </button>
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {editingCommentId === c.id ? (
+                                                <div className="space-y-1.5">
+                                                    <textarea rows={2} className="Input text-sm" value={editingText} autoFocus
+                                                        onChange={e => setEditingText(e.target.value)}
+                                                        onKeyDown={e => {
+                                                            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveComment(c) }
+                                                            if (e.key === 'Escape') { e.stopPropagation(); setEditingCommentId(null) }
+                                                        }} />
+                                                    <div className="flex gap-2">
+                                                        <Btn primary onClick={() => saveComment(c)} disabled={!editingText.trim()}>Enregistrer</Btn>
+                                                        <Btn onClick={() => setEditingCommentId(null)}>Annuler</Btn>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <p className="text-sm text-gray-800 dark:text-neutral-200 leading-relaxed whitespace-pre-wrap">{c.text}</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </Card>
+                    </div>
+
                     {/* ── Colonne gauche ── */}
                     <div className="md:col-span-7 space-y-4">
-
-                        <Card title="Client">
-                            <Grid>
-                                <Field label="Nom">
-                                    {editing
-                                        ? <input className="Input" value={draft.customerName} onChange={e => onChange('customerName', e.target.value)} />
-                                        : <Val>{ticket.customerName}</Val>}
-                                </Field>
-                                <Field label="Téléphone">
-                                    {editing
-                                        ? <input className="Input" value={draft.customerPhone || ''} onChange={e => onChange('customerPhone', e.target.value)} />
-                                        : <Val>{ticket.customerPhone}</Val>}
-                                </Field>
-                                <Field label="Email">
-                                    {editing
-                                        ? <input type="email" className="Input" value={draft.customerEmail || ''} onChange={e => onChange('customerEmail', e.target.value)} />
-                                        : <Val>{ticket.customerEmail}</Val>}
-                                </Field>
-                                <Field label="Contact préféré">
-                                    {editing
-                                        ? <select className="Input" value={draft.preferredContact || 'Téléphone'} onChange={e => onChange('preferredContact', e.target.value)}>
-                                            {CONTACT_PREFS.map(v => <option key={v}>{v}</option>)}
-                                        </select>
-                                        : <Val>{ticket.preferredContact}</Val>}
-                                </Field>
-                            </Grid>
-                        </Card>
 
                         <Card title="Vélo">
                             <Grid>
@@ -354,50 +478,38 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo 
                     {/* ── Colonne droite ── */}
                     <div className="md:col-span-5 space-y-4">
 
-                        <Card title="N° de suivi SAV" action={ticket.trackingNumber && <CopyBtn onClick={copyTracking} label="Copier" />}>
-                            <form onSubmit={saveTracking} className="flex gap-2">
-                                <input
-                                    className="Input h-9 flex-1 font-mono"
-                                    value={tracking}
-                                    onChange={e => setTracking(e.target.value)}
-                                    placeholder="Numéro donné par le fournisseur"
-                                    disabled={!canEdit}
-                                />
-                                <Btn
-                                    onClick={saveTracking}
-                                    primary
-                                    disabled={!canEdit || savingTracking || tracking.trim() === (ticket.trackingNumber || '')}
-                                >
-                                    {savingTracking ? '…' : 'Enregistrer'}
-                                </Btn>
-                            </form>
-                            <p className="text-[11px] text-gray-400 dark:text-neutral-500 mt-1.5">
-                                Permet de retrouver le ticket depuis la recherche à la réception d'un colis.
-                            </p>
-                        </Card>
-
                         <Card title="Suivi">
-                            {/* Statut */}
-                            <div className="mb-4">
-                                <p className="text-[11px] font-medium text-gray-400 dark:text-neutral-500 uppercase tracking-wide mb-2">Statut</p>
-                                <div className="flex flex-wrap gap-1.5">
-                                    {STATUSES.map(s => (
-                                        <button
-                                            key={s}
-                                            type="button"
-                                            onClick={() => onMoveTo?.(s)}
-                                            disabled={ticket.status === s}
-                                            className={[
-                                                'h-7 px-2.5 rounded-lg text-[11px] font-medium transition-colors border',
-                                                ticket.status === s
-                                                    ? 'bg-gray-900 text-white border-transparent dark:bg-white dark:text-black'
-                                                    : 'text-gray-600 border-gray-200 hover:bg-gray-50 dark:text-neutral-400 dark:border-neutral-700 dark:hover:bg-neutral-800',
-                                            ].join(' ')}
-                                        >
-                                            {STATUS_LABELS[s]}
-                                        </button>
-                                    ))}
+                            <div className="flex items-center justify-between gap-3 mb-3">
+                                <div>
+                                    <p className="text-[11px] font-medium text-gray-400 dark:text-neutral-500 uppercase tracking-wide mb-1">Statut</p>
+                                    <StatusBadge status={ticket.status} />
                                 </div>
+                                <p className="text-[11px] text-gray-400 dark:text-neutral-500 text-right">Pour changer de statut,<br />déplace le ticket dans le tableau.</p>
+                            </div>
+                            <div className="mb-4">
+                                <div className="flex items-center justify-between mb-1">
+                                    <p className="text-[11px] font-medium text-gray-400 dark:text-neutral-500 uppercase tracking-wide">N° de suivi SAV</p>
+                                    {ticket.trackingNumber && <CopyBtn onClick={copyTracking} label="Copier" />}
+                                </div>
+                                <form onSubmit={saveTracking} className="flex gap-2">
+                                    <input
+                                        className="Input h-9 flex-1 font-mono placeholder:font-sans placeholder:text-xs"
+                                        value={tracking}
+                                        onChange={e => setTracking(e.target.value)}
+                                        placeholder="Numéro donné par le fournisseur"
+                                        disabled={!canEdit}
+                                    />
+                                    <Btn
+                                        onClick={saveTracking}
+                                        primary
+                                        disabled={!canEdit || savingTracking || tracking.trim() === (ticket.trackingNumber || '')}
+                                    >
+                                        {savingTracking ? '…' : 'Enregistrer'}
+                                    </Btn>
+                                </form>
+                                <p className="text-[11px] text-gray-400 dark:text-neutral-500 mt-1">
+                                    Permet de retrouver le ticket depuis la recherche à la réception d'un colis.
+                                </p>
                             </div>
                             <Grid>
                                 <Field label="Priorité">
@@ -451,71 +563,6 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo 
                         </Card>
                     </div>
 
-                    {/* ── Commentaires (pleine largeur) ── */}
-                    <div className="md:col-span-12">
-                        <Card title="Commentaires" action={comments.length > 0 && <CopyBtn onClick={copyComments} label="Copier l'historique" />}>
-                            <div className="max-h-48 overflow-y-auto space-y-3 mb-3">
-                                {comments.length === 0 && (
-                                    <p className="text-xs text-gray-400 dark:text-neutral-500 py-2">Aucun commentaire.</p>
-                                )}
-                                {comments.map(c => (
-                                    <div key={c.id} className="flex gap-3">
-                                        <div className="h-7 w-7 rounded-full bg-gray-100 dark:bg-neutral-800 text-gray-600 dark:text-neutral-300
-                                                         text-xs font-semibold grid place-items-center shrink-0">
-                                            {(c.author || '?')[0].toUpperCase()}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-baseline gap-2 mb-0.5">
-                                                <span className="text-xs font-semibold text-gray-700 dark:text-neutral-300">{c.author || '—'}</span>
-                                                <span className="text-[11px] text-gray-400 dark:text-neutral-500">{formatTS(c.createdAt)}</span>
-                                            </div>
-                                            <p className="text-sm text-gray-800 dark:text-neutral-200 leading-relaxed whitespace-pre-wrap">{c.text}</p>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                            <form onSubmit={submitComment} className="space-y-1.5">
-                                <div className="flex gap-2 items-center">
-                                    {users.length > 0 ? (
-                                        <select
-                                            value={commentAuthor}
-                                            onChange={e => { setCommentAuthor(e.target.value); setAuthorError(false) }}
-                                            className={`h-9 px-2 rounded-xl border text-xs font-medium bg-white dark:bg-neutral-800 text-gray-700 dark:text-neutral-200 shrink-0 w-32 ${authorError ? 'border-red-400 dark:border-red-500' : 'border-gray-200 dark:border-neutral-700'}`}
-                                        >
-                                            <option value="">— Auteur</option>
-                                            {users.map(u => <option key={u.id} value={u.nom}>{u.nom}</option>)}
-                                        </select>
-                                    ) : (
-                                        <input
-                                            value={commentAuthor}
-                                            onChange={e => { setCommentAuthor(e.target.value); setAuthorError(false) }}
-                                            placeholder="Votre nom"
-                                            className={`Input h-9 w-32 shrink-0 ${authorError ? 'border-red-400 dark:border-red-500' : ''}`}
-                                        />
-                                    )}
-                                    <input
-                                        value={commentText}
-                                        onChange={e => setCommentText(e.target.value)}
-                                        placeholder="Ajouter un commentaire…"
-                                        className="Input flex-1 h-9"
-                                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment() } }}
-                                    />
-                                    <button
-                                        type="submit"
-                                        disabled={!commentText.trim() || sendingComment}
-                                        className="h-9 px-4 rounded-xl bg-gray-900 text-white text-sm font-medium shrink-0
-                                                   hover:bg-gray-700 disabled:opacity-40 transition-colors
-                                                   dark:bg-white dark:text-black dark:hover:bg-gray-100"
-                                    >
-                                        Envoyer
-                                    </button>
-                                </div>
-                                {authorError && (
-                                    <p className="text-xs text-red-500 dark:text-red-400">Veuillez sélectionner la personne qui a écrit le commentaire.</p>
-                                )}
-                            </form>
-                        </Card>
-                    </div>
                 </div>
 
                 {/* Toast */}
@@ -605,7 +652,6 @@ function Val({ children, urgent }) {
 function makeDraft(t) {
     return {
         customerName: t.customerName || '', customerPhone: t.customerPhone || '',
-        customerEmail: t.customerEmail || '', preferredContact: t.preferredContact || 'Téléphone',
         bikeType: t.bikeType || 'VTT', bikeBrand: t.bikeBrand || '',
         bikeModel: t.bikeModel || '', serialNumber: t.serialNumber || '',
         purchaseDate: t.purchaseDate || '', underWarranty: !!t.underWarranty,
@@ -616,7 +662,7 @@ function makeDraft(t) {
 
 function sanitizeDraft(d) {
     const n = { ...d }
-        ;['customerPhone', 'customerEmail', 'bikeBrand', 'bikeModel', 'serialNumber',
+        ;['customerPhone', 'bikeBrand', 'bikeModel', 'serialNumber',
             'purchaseDate', 'issueDescription', 'accessoriesLeft', 'dueDate', 'createdByName']
             .forEach(k => { if (n[k] === '') n[k] = null })
     return n

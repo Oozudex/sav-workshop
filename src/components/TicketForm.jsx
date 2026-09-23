@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { BIKE_TYPES, PRIORITIES, CONTACT_PREFS } from '../lib/constants'
+import { BIKE_TYPES, PRIORITIES } from '../lib/constants'
 
 const INITIAL = {
-  customerName: '', customerPhone: '', customerEmail: '', preferredContact: 'Téléphone',
+  customerName: '', customerPhone: '',
   bikeType: 'VTT', bikeBrand: '', bikeModel: '', serialNumber: '',
   purchaseDate: '', underWarranty: false,
   issueDescription: '', accessoriesLeft: '',
@@ -30,12 +30,9 @@ export default function TicketForm({ onSubmit, onClose, users = [], initialValue
     setError('')
     if (!form.customerName.trim()) return setError('Le nom du client est obligatoire.')
     if (!form.issueDescription.trim()) return setError('Décris le problème constaté.')
-    if (form.customerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.customerEmail))
-      return setError("L'email saisi n'est pas valide.")
     setSubmitting(true)
     await onSubmit({
       customerName: clean(form.customerName), customerPhone: clean(form.customerPhone),
-      customerEmail: clean(form.customerEmail), preferredContact: form.preferredContact,
       bikeType: form.bikeType, bikeBrand: clean(form.bikeBrand),
       bikeModel: clean(form.bikeModel), serialNumber: clean(form.serialNumber),
       purchaseDate: form.purchaseDate || null, underWarranty: form.underWarranty,
@@ -90,15 +87,7 @@ export default function TicketForm({ onSubmit, onClose, users = [], initialValue
                   <input className="Input" value={form.customerName} onChange={e => set('customerName', e.target.value)} autoFocus />
                 </Field>
                 <Field label="Téléphone">
-                  <input className="Input" value={form.customerPhone} onChange={e => set('customerPhone', e.target.value)} />
-                </Field>
-                <Field label="Email">
-                  <input type="email" className="Input" value={form.customerEmail} onChange={e => set('customerEmail', e.target.value)} />
-                </Field>
-                <Field label="Contact préféré">
-                  <select className="Input" value={form.preferredContact} onChange={e => set('preferredContact', e.target.value)}>
-                    {CONTACT_PREFS.map(v => <option key={v}>{v}</option>)}
-                  </select>
+                  <input className="Input" type="tel" value={form.customerPhone} onChange={e => set('customerPhone', e.target.value)} />
                 </Field>
               </Grid>
             </Card>

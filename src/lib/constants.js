@@ -14,7 +14,6 @@ export const ORDER_CLOSED_STATUTS = ['retiree', 'annulee', 'livree']
 
 export const BIKE_TYPES = ['VTT', 'Route', 'Gravel', 'Urbain', 'Enfant', 'Électrique']
 export const PRIORITIES = ['Normal', 'Urgent']
-export const CONTACT_PREFS = ['Téléphone', 'Email', 'Indifférent']
 
 // ── Rayons ────────────────────────────────────────────────────────────────────
 export const RAYON_TYPES = ['velo', 'chaussure', 'textile', 'randonnee', 'caisse']
