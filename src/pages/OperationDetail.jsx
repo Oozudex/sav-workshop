@@ -9,7 +9,7 @@ import {
 } from 'firebase/firestore'
 import { GLOBAL_ROLES, RAYON_TYPE_LABELS } from '../lib/constants'
 import { OpModal } from './Operations'
-import * as XLSX from 'xlsx'
+import { readSheetRows } from '../lib/excel'
 
 const SEGMENTS = ['velo', 'trottinette', 'roller', 'accessoires']
 const SEGMENT_LABELS = { velo: 'Vélo', trottinette: 'Trottinette', roller: 'Roller', accessoires: 'Accessoires' }
@@ -393,12 +393,8 @@ function ImportModal({ opId, onClose }) {
     const file = e.target.files[0]
     if (!file) return
     setFileName(file.name); setError(''); setAnomalies([]); setRows(null)
-    const reader = new FileReader()
-    reader.onload = ev => {
+    readSheetRows(file).then(raw => {
       try {
-        const wb = XLSX.read(ev.target.result, { type: 'array' })
-        const ws = wb.Sheets[wb.SheetNames[0]]
-        const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
         const parsed = parseOpRows(raw)
         if (!parsed.length) { setError('Aucune ligne valide trouvée. Vérifiez les en-têtes.'); return }
 
@@ -412,8 +408,7 @@ function ImportModal({ opId, onClose }) {
         setRows({ parsed, built })
         if (anom.length > 0) setShowAnomaly(true)
       } catch { setError('Impossible de lire le fichier.') }
-    }
-    reader.readAsArrayBuffer(file)
+    }).catch(() => setError('Impossible de lire le fichier.'))
   }
 
   function handleAnomalyResolve(selections) {

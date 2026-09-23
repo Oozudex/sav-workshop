@@ -9,8 +9,8 @@ import {
   collectionGroup, writeBatch, getDocs,
 } from 'firebase/firestore'
 import { GLOBAL_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
-import * as XLSX from 'xlsx'
 import { safeUrl } from '../lib/security'
+import { readSheetRows } from '../lib/excel'
 
 // ── Parseurs catalogue ────────────────────────────────────────────────────────
 const CAT_COLS = {
@@ -279,18 +279,13 @@ function CatalogueImportModal({ catalogueCount, onClose }) {
     const file = e.target.files[0]
     if (!file) return
     setFileName(file.name); setError('')
-    const reader = new FileReader()
-    reader.onload = ev => {
+    readSheetRows(file).then(raw => {
       try {
-        const wb = XLSX.read(ev.target.result, { type: 'array' })
-        const ws = wb.Sheets[wb.SheetNames[0]]
-        const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
         const parsed = parseCatalogueRows(raw)
         if (!parsed.length) { setError('Aucune ligne valide. Vérifiez les en-têtes (Chrono, Référence, Article…)'); return }
         setRows(parsed)
       } catch { setError('Impossible de lire le fichier.') }
-    }
-    reader.readAsArrayBuffer(file)
+    }).catch(() => setError('Impossible de lire le fichier.'))
   }
 
   async function handleImport(mode) {
@@ -417,18 +412,13 @@ function PrixExcluImportModal({ onClose }) {
     const file = e.target.files[0]
     if (!file) return
     setFileName(file.name); setError('')
-    const reader = new FileReader()
-    reader.onload = ev => {
+    readSheetRows(file).then(raw => {
       try {
-        const wb = XLSX.read(ev.target.result, { type: 'array' })
-        const ws = wb.Sheets[wb.SheetNames[0]]
-        const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
         const parsed = parsePrixExcluRows(raw)
         if (!parsed.length) { setError('Aucune ligne valide. En-têtes : Famille, Référence, Nom, Prix fort, Prix promo'); return }
         setRows(parsed)
       } catch { setError('Impossible de lire le fichier.') }
-    }
-    reader.readAsArrayBuffer(file)
+    }).catch(() => setError('Impossible de lire le fichier.'))
   }
 
   async function handleImport() {
