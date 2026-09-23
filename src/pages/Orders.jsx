@@ -8,7 +8,7 @@ import {
   orderBy, query, where, serverTimestamp, updateDoc, deleteDoc,
 } from 'firebase/firestore'
 import { getNextOrderNumber } from '../lib/counters'
-import { GLOBAL_ROLES, CAN_DELETE_ROLES } from '../lib/constants'
+import { GLOBAL_ROLES, CAN_DELETE_ROLES, ORDER_CLOSED_STATUTS } from '../lib/constants'
 import { useMagasin } from '../store/useMagasin'
 import { useStaff } from '../lib/useStaff'
 
@@ -146,6 +146,7 @@ export default function Orders() {
         prix:         parseFloat(String(form.prix).replace(',', '.')) || null,
         date:         form.date               || null,
         statut:       form.statut,
+        closedAt:     ORDER_CLOSED_STATUTS.includes(form.statut) ? serverTimestamp() : null,
         createur:     form.createur?.trim()   || null,
         commentaire:  form.commentaire.trim() || null,
         magasinId:    effectiveMagasinId || null,
@@ -161,14 +162,19 @@ export default function Orders() {
 
   /* Changement de statut */
   async function changeStatut(order, statut) {
-    await updateDoc(doc(db, 'orders', order.id), { statut, updatedAt: serverTimestamp() })
+    await updateDoc(doc(db, 'orders', order.id), {
+      statut,
+      // Date de clôture : point de départ du délai d'anonymisation RGPD (lib/cleanup.js)
+      closedAt: ORDER_CLOSED_STATUTS.includes(statut) ? serverTimestamp() : null,
+      updatedAt: serverTimestamp(),
+    })
     if (activeOrder?.id === order.id) setActiveOrder(o => ({ ...o, statut }))
   }
 
   /* Suppression */
   async function remove(order) {
     if (!canDelete) return
-    if (!confirm(`Supprimer la commande #${order.numero} de ${order.client} ?`)) return
+    if (!confirm(`Supprimer la commande #${order.numero} de ${order.client || 'client anonymisé'} ?`)) return
     await deleteDoc(doc(db, 'orders', order.id))
     if (activeOrder?.id === order.id) setActiveOrder(null)
   }
@@ -284,7 +290,7 @@ export default function Orders() {
                         #{o.numero || '—'}
                       </td>
                       <td className="px-3 py-2.5 font-medium text-gray-900 dark:text-white whitespace-nowrap">
-                        {o.client || '—'}
+                        {o.client || (o.anonymizedAt ? 'Client anonymisé' : '—')}
                       </td>
                       <td className="px-3 py-2.5 text-gray-500 dark:text-neutral-400 whitespace-nowrap">
                         {o.tel || '—'}
@@ -434,7 +440,7 @@ function OrderModal({ order, canEdit, canDelete, onClose, onChangeStatut, onSave
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
           <div className="flex items-center gap-2.5">
             <span className="font-mono text-xs text-gray-400 dark:text-neutral-500">#{order.numero || '—'}</span>
-            <span className="font-semibold text-sm text-gray-900 dark:text-white">{order.client}</span>
+            <span className="font-semibold text-sm text-gray-900 dark:text-white">{order.client || (order.anonymizedAt ? 'Client anonymisé' : '—')}</span>
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-medium ${meta.badge}`}>
               <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
               {meta.label}

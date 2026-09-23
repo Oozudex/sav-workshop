@@ -9,6 +9,9 @@ export const STATUS_LABELS = {
   Closed: 'Clôturé',
 }
 
+// Commandes clients considérées comme terminées (départ du délai d'anonymisation RGPD)
+export const ORDER_CLOSED_STATUTS = ['livree', 'annulee']
+
 export const BIKE_TYPES = ['VTT', 'Route', 'Gravel', 'Urbain', 'Enfant', 'Électrique']
 export const PRIORITIES = ['Normal', 'Urgent']
 export const CONTACT_PREFS = ['Téléphone', 'Email', 'Indifférent']

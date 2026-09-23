@@ -139,6 +139,8 @@ export default function Tickets() {
     if (!ticket || !STATUSES.includes(nextStatus)) return
     await updateDoc(doc(db, 'tickets', ticket.id), {
       status: nextStatus,
+      // Date de clôture : point de départ du délai d'anonymisation RGPD (lib/cleanup.js)
+      closedAt: nextStatus === 'Closed' ? serverTimestamp() : null,
       updatedAt: serverTimestamp(),
       // arrayUnion : n'écrase pas les entrées ajoutées entre-temps (commentaires, suivi…)
       history: arrayUnion({
@@ -158,6 +160,7 @@ export default function Tickets() {
   }
 
   const filtered = tickets.filter(t => {
+    if (t.anonymizedAt) return false
     if (filterPriority && t.priority !== filterPriority) return false
     if (filterAssigned && t.assignedTo !== filterAssigned) return false
     if (!needle) return true
