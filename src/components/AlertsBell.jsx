@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useTicketAlerts } from '../store/useTicketAlerts'
+import { useAlerts } from '../store/useAlerts'
 
-/** Cloche des alertes atelier (seuils dépassés), affichée au directeur de magasin. */
+/** Cloche des alertes du magasin (tickets SAV et commandes), affichée au directeur de magasin. */
 export default function AlertsBell() {
-  const alerts = useTicketAlerts(s => s.alerts)
+  const alerts = useAlerts(s => s.alerts)
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
   const navigate = useNavigate()
@@ -24,8 +24,8 @@ export default function AlertsBell() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(v => !v)}
-        title={count ? `${count} alerte${count > 1 ? 's' : ''} atelier` : 'Aucune alerte atelier'}
-        aria-label="Alertes atelier"
+        title={count ? `${count} alerte${count > 1 ? 's' : ''} rayon vélo` : 'Aucune alerte rayon vélo'}
+        aria-label="Alertes rayon vélo"
         aria-expanded={open}
         className="relative h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100
                    dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors"
@@ -43,18 +43,18 @@ export default function AlertsBell() {
       {open && (
         <div className="absolute right-0 mt-1.5 w-80 rounded-2xl border shadow-lg overflow-hidden bg-white border-gray-200 dark:bg-neutral-900 dark:border-neutral-800">
           <div className="px-3 py-2 border-b border-gray-100 dark:border-neutral-800">
-            <p className="text-xs font-semibold text-gray-900 dark:text-white">Alertes atelier vélo</p>
+            <p className="text-xs font-semibold text-gray-900 dark:text-white">Alertes rayon vélo</p>
           </div>
           {count === 0 ? (
             <p className="px-3 py-4 text-xs text-gray-400 dark:text-neutral-500">
-              Aucun seuil dépassé. Les seuils se règlent depuis la page Réparation / SAV, bouton « Alertes ».
+              Aucun seuil dépassé. Les seuils se règlent avec le bouton « Alertes » des pages Réparation / SAV et Commandes.
             </p>
           ) : (
             <ul className="max-h-80 overflow-y-auto divide-y divide-gray-100 dark:divide-neutral-800">
               {alerts.map(a => (
-                <li key={a.key}>
+                <li key={`${a.scope}-${a.key}`}>
                   <button
-                    onClick={() => { setOpen(false); navigate(`/tickets?alerte=${a.key}`) }}
+                    onClick={() => { setOpen(false); navigate(`${a.path}?alerte=${a.key}`) }}
                     className="w-full text-left px-3 py-2.5 flex gap-2 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors"
                   >
                     <span aria-hidden className="text-red-600 dark:text-red-400 text-sm leading-5">⚠</span>

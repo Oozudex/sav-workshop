@@ -4,7 +4,7 @@ import { useAuth } from './store/useAuth'
 import { useShallow } from 'zustand/react/shallow'
 import { useTheme } from './store/useTheme'
 import Login from './pages/Login'
-import TicketAlertsWatcher from './components/TicketAlertsWatcher'
+import AlertsWatcher from './components/AlertsWatcher'
 
 // Pages chargées à la demande : chaque route devient un fichier JS séparé
 const Home            = lazy(() => import('./pages/Home'))
@@ -53,7 +53,7 @@ export default function App() {
 
   return (
     <>
-      <TicketAlertsWatcher />
+      <AlertsWatcher />
       <Suspense fallback={<div className="p-6">Chargement…</div>}>
         <Routes>
           <Route path="/login" element={<Login />} />

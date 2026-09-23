@@ -1,9 +1,12 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  closedDateOf, computeAlerts, computePeriodStats, computeSnapshot, isOverdue,
+  TICKET_ALERTS, closedDateOf, computePeriodStats, computeSnapshot, isOverdue,
   monthlyCreated, periodRange, previousYear, timeInStatus,
 } from '../../src/lib/ticketStats.js'
+import { computeAlerts as computeAlertsFor } from '../../src/lib/alerts.js'
+
+const computeAlerts = (items, settings, now) => computeAlertsFor(items, settings, TICKET_ALERTS, now)
 
 const NOW = new Date('2026-09-23T12:00:00')
 const daysAgo = n => new Date(NOW.getTime() - n * 86400000)
@@ -78,11 +81,11 @@ describe('alertes', () => {
   })
   it('seuil de durée : liste les tickets concernés', () => {
     const [a] = computeAlerts(TICKETS, { maxOpenDays: { enabled: true, threshold: 10 } }, NOW)
-    assert.deepEqual(a.ticketIds.sort(), ['o1', 'o2'])
+    assert.deepEqual(a.itemIds.sort(), ['o1', 'o2'])
     const [w] = computeAlerts(TICKETS, { maxWaitingPartsDays: { enabled: true, threshold: 10 } }, NOW)
-    assert.deepEqual(w.ticketIds, ['o2'])
+    assert.deepEqual(w.itemIds, ['o2'])
     const [r] = computeAlerts(TICKETS, { maxReadyDays: { enabled: true, threshold: 7 } }, NOW)
-    assert.deepEqual(r.ticketIds, ['o3'])
+    assert.deepEqual(r.itemIds, ['o3'])
   })
   it('urgents et retards', () => {
     const alerts = computeAlerts(TICKETS, {

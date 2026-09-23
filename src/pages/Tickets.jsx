@@ -13,8 +13,9 @@ import {
 import { DragDropContext } from '@hello-pangea/dnd'
 import TicketModal from '../components/TicketModal'
 import TicketStatsModal from '../components/TicketStatsModal'
-import TicketAlertsModal from '../components/TicketAlertsModal'
-import { useTicketAlerts } from '../store/useTicketAlerts'
+import AlertSettingsModal from '../components/AlertSettingsModal'
+import { TICKET_ALERTS } from '../lib/ticketStats'
+import { useAlerts } from '../store/useAlerts'
 import { STATUSES, GLOBAL_ROLES } from '../lib/constants'
 import { useStaff } from '../lib/useStaff'
 import { useMagasin } from '../store/useMagasin'
@@ -103,7 +104,7 @@ export default function Tickets() {
   }, [canManage, effectiveMagasinId])
 
   // Filtre ouvert depuis la cloche : ?alerte=<clé> n'affiche que les tickets concernés
-  const alerts = useTicketAlerts(s => s.alerts)
+  const alerts = useAlerts(s => s.alerts).filter(a => a.scope === 'tickets')
   const alertKey = searchParams.get('alerte')
   const alertFilter = alertKey ? alerts.find(a => a.key === alertKey) : null
   function clearAlertFilter() {
@@ -187,7 +188,7 @@ export default function Tickets() {
 
   const filtered = tickets.filter(t => {
     if (t.anonymizedAt) return false
-    if (alertKey && !alertFilter?.ticketIds.includes(t.id)) return false
+    if (alertKey && !alertFilter?.itemIds.includes(t.id)) return false
     if (filterPriority && t.priority !== filterPriority) return false
     if (filterAssigned && t.assignedTo !== filterAssigned) return false
     if (!needle) return true
@@ -366,7 +367,7 @@ export default function Tickets() {
       )}
 
       {showAlerts && effectiveMagasinId && (
-        <TicketAlertsModal magasinId={effectiveMagasinId} magasinNom={magasinNom} tickets={tickets} onClose={() => setShowAlerts(false)} />
+        <AlertSettingsModal ruleSet={TICKET_ALERTS} magasinId={effectiveMagasinId} magasinNom={magasinNom} items={tickets} onClose={() => setShowAlerts(false)} />
       )}
 
       {activeTicket && (

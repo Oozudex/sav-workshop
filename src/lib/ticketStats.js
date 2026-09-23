@@ -177,80 +177,58 @@ export function monthlyCreated(tickets, year) {
   return months
 }
 
-// ── Seuils d'alerte ─────────────────────────────────────────────────────────
-// kind 'count'    : alerte si la valeur mesurée dépasse le seuil
-// kind 'duration' : alerte si au moins un ticket dépasse le seuil (en jours)
-export const ALERT_RULES = [
-  {
-    key: 'maxOpen', kind: 'count', unit: 'vélos', defaultThreshold: 15,
-    label: "Vélos à l'atelier en même temps",
-    help: 'Tickets en cours, tous statuts sauf Clôturé.',
-    measure: open => open,
-    message: (n, s) => `${n} vélos à l'atelier (seuil : ${s})`,
-  },
-  {
-    key: 'maxOpenDays', kind: 'duration', unit: 'jours', defaultThreshold: 21,
-    label: "Durée d'un ticket en cours",
-    help: 'Temps depuis la création, pour les tickets non clôturés.',
-    measure: open => open,
-    age: (t, now) => days(now - toDate(t.createdAt)),
-    message: (n, s) => `${n} ticket${n > 1 ? 's' : ''} ouvert${n > 1 ? 's' : ''} depuis plus de ${s} jours`,
-  },
-  {
-    key: 'maxOverdue', kind: 'count', unit: 'tickets', defaultThreshold: 3,
-    label: 'Tickets en retard',
-    help: 'Date prévue dépassée et vélo pas encore prêt.',
-    measure: (open, now) => open.filter(t => isOverdue(t, now)),
-    message: (n, s) => `${n} tickets en retard sur la date prévue (seuil : ${s})`,
-  },
-  {
-    key: 'maxWaitingPartsDays', kind: 'duration', unit: 'jours', defaultThreshold: 10,
-    label: 'Attente de pièces',
-    help: 'Temps passé dans le statut « En attente pièces ».',
-    measure: open => open.filter(t => t.status === 'WaitingParts'),
-    age: (t, now) => days(now - currentStatusSince(t)),
-    message: (n, s) => `${n} vélo${n > 1 ? 's' : ''} en attente de pièces depuis plus de ${s} jours`,
-  },
-  {
-    key: 'maxReadyDays', kind: 'duration', unit: 'jours', defaultThreshold: 7,
-    label: 'Vélos prêts non récupérés',
-    help: 'Temps passé dans le statut « Prêt à rendre ».',
-    measure: open => open.filter(t => t.status === 'Ready'),
-    age: (t, now) => days(now - currentStatusSince(t)),
-    message: (n, s) => `${n} vélo${n > 1 ? 's' : ''} prêt${n > 1 ? 's' : ''} non récupéré${n > 1 ? 's' : ''} depuis plus de ${s} jours`,
-  },
-  {
-    key: 'maxUrgent', kind: 'count', unit: 'tickets', defaultThreshold: 3,
-    label: 'Tickets urgents en cours',
-    help: 'Tickets en priorité « Urgent » non clôturés.',
-    measure: open => open.filter(t => t.priority === 'Urgent'),
-    message: (n, s) => `${n} tickets urgents en cours (seuil : ${s})`,
-  },
-]
-
-// Valeur actuelle d'une règle : { value, ticketIds }
-// (count : nombre de tickets concernés ; duration : nombre de tickets au-delà du seuil)
-export function measureRule(rule, tickets, threshold, now = new Date()) {
-  const open = tickets.filter(isOpen)
-  const concerned = rule.measure(open, now)
-  if (rule.kind === 'duration') {
-    const over = concerned.filter(t => rule.age(t, now) > threshold)
-    return { value: over.length, ticketIds: over.map(t => t.id), max: Math.max(0, ...concerned.map(t => rule.age(t, now))) }
-  }
-  return { value: concerned.length, ticketIds: concerned.map(t => t.id) }
-}
-
-// Alertes actives selon les réglages { [key]: { enabled, threshold } }
-export function computeAlerts(tickets, settings, now = new Date()) {
-  const alerts = []
-  for (const rule of ALERT_RULES) {
-    const conf = settings?.[rule.key]
-    if (!conf?.enabled || !(conf.threshold >= 0)) continue
-    const { value, ticketIds } = measureRule(rule, tickets, conf.threshold, now)
-    const breached = rule.kind === 'duration' ? value > 0 : value > conf.threshold
-    if (breached) {
-      alerts.push({ key: rule.key, label: rule.label, message: rule.message(value, conf.threshold), value, threshold: conf.threshold, ticketIds })
-    }
-  }
-  return alerts
+// ── Seuils d'alerte (moteur : lib/alerts.js) ────────────────────────────────
+export const TICKET_ALERTS = {
+  scope: 'tickets',
+  settingsId: 'tickets',
+  path: '/tickets',
+  title: "Alertes de l'atelier vélo",
+  isOpen,
+  rules: [
+    {
+      key: 'maxOpen', kind: 'count', unit: 'vélos', defaultThreshold: 15,
+      label: "Vélos à l'atelier en même temps",
+      help: 'Tickets en cours, tous statuts sauf Clôturé.',
+      measure: open => open,
+      message: (n, s) => `${n} vélos à l'atelier (seuil : ${s})`,
+    },
+    {
+      key: 'maxOpenDays', kind: 'duration', unit: 'jours', defaultThreshold: 21,
+      label: "Durée d'un ticket en cours",
+      help: 'Temps depuis la création, pour les tickets non clôturés.',
+      measure: open => open,
+      age: (t, now) => days(now - toDate(t.createdAt)),
+      message: (n, s) => `${n} ticket${n > 1 ? 's' : ''} ouvert${n > 1 ? 's' : ''} depuis plus de ${s} jours`,
+    },
+    {
+      key: 'maxOverdue', kind: 'count', unit: 'tickets', defaultThreshold: 3,
+      label: 'Tickets en retard',
+      help: 'Date prévue dépassée et vélo pas encore prêt.',
+      measure: (open, now) => open.filter(t => isOverdue(t, now)),
+      message: (n, s) => `${n} tickets en retard sur la date prévue (seuil : ${s})`,
+    },
+    {
+      key: 'maxWaitingPartsDays', kind: 'duration', unit: 'jours', defaultThreshold: 10,
+      label: 'Attente de pièces',
+      help: 'Temps passé dans le statut « En attente pièces ».',
+      measure: open => open.filter(t => t.status === 'WaitingParts'),
+      age: (t, now) => days(now - currentStatusSince(t)),
+      message: (n, s) => `${n} vélo${n > 1 ? 's' : ''} en attente de pièces depuis plus de ${s} jours`,
+    },
+    {
+      key: 'maxReadyDays', kind: 'duration', unit: 'jours', defaultThreshold: 7,
+      label: 'Vélos prêts non récupérés',
+      help: 'Temps passé dans le statut « Prêt à rendre ».',
+      measure: open => open.filter(t => t.status === 'Ready'),
+      age: (t, now) => days(now - currentStatusSince(t)),
+      message: (n, s) => `${n} vélo${n > 1 ? 's' : ''} prêt${n > 1 ? 's' : ''} non récupéré${n > 1 ? 's' : ''} depuis plus de ${s} jours`,
+    },
+    {
+      key: 'maxUrgent', kind: 'count', unit: 'tickets', defaultThreshold: 3,
+      label: 'Tickets urgents en cours',
+      help: 'Tickets en priorité « Urgent » non clôturés.',
+      measure: open => open.filter(t => t.priority === 'Urgent'),
+      message: (n, s) => `${n} tickets urgents en cours (seuil : ${s})`,
+    },
+  ],
 }

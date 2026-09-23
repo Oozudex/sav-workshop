@@ -1,26 +1,29 @@
 import { useEffect, useMemo, useState } from 'react'
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db } from '../lib/firebase'
-import { ALERT_RULES, measureRule } from '../lib/ticketStats'
+import { isBreached, measureRule } from '../lib/alerts'
 import { useAuth } from '../store/useAuth'
 
 const round = n => Math.round(n)
 
-/** Réglage des seuils d'alerte de l'atelier vélo d'un magasin. */
-export default function TicketAlertsModal({ magasinId, magasinNom, tickets, onClose }) {
+/**
+ * Réglage des seuils d'alerte d'un magasin pour un jeu de règles
+ * (TICKET_ALERTS de lib/ticketStats, ORDER_ALERTS de lib/orders).
+ */
+export default function AlertSettingsModal({ ruleSet, magasinId, magasinNom, items, onClose }) {
   const user = useAuth(s => s.user)
   const [rules, setRules] = useState(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
 
-  const ref = doc(db, 'magasins', magasinId, 'alert_settings', 'tickets')
+  const ref = doc(db, 'magasins', magasinId, 'alert_settings', ruleSet.settingsId)
 
   useEffect(() => {
     getDoc(ref)
       .then(snap => {
         const stored = snap.exists() ? snap.data().rules || {} : {}
-        setRules(Object.fromEntries(ALERT_RULES.map(r => [r.key, {
+        setRules(Object.fromEntries(ruleSet.rules.map(r => [r.key, {
           enabled: !!stored[r.key]?.enabled,
           threshold: stored[r.key]?.threshold ?? r.defaultThreshold,
         }])))
@@ -28,7 +31,7 @@ export default function TicketAlertsModal({ magasinId, magasinNom, tickets, onCl
       .catch(e => setError(e.message))
     // Chargé une fois à l'ouverture
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [magasinId])
+  }, [magasinId, ruleSet.settingsId])
 
   useEffect(() => {
     const fn = e => e.key === 'Escape' && onClose()
@@ -64,7 +67,7 @@ export default function TicketAlertsModal({ magasinId, magasinNom, tickets, onCl
       <div className="w-full max-w-2xl rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl">
         <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-gray-100 dark:border-neutral-800">
           <div>
-            <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Alertes de l'atelier vélo</h2>
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-white">{ruleSet.title}</h2>
             <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
               {magasinNom ? `${magasinNom} · ` : ''}Le directeur du magasin est prévenu (cloche en haut de l'écran) dès qu'un seuil actif est dépassé.
             </p>
@@ -79,13 +82,13 @@ export default function TicketAlertsModal({ magasinId, magasinNom, tickets, onCl
           <p className="p-6 text-sm text-gray-400 text-center">{error || 'Chargement…'}</p>
         ) : (
           <ul className="divide-y divide-gray-100 dark:divide-neutral-800">
-            {ALERT_RULES.map(rule => {
+            {ruleSet.rules.map(rule => {
               const conf = rules[rule.key]
               const threshold = Math.max(0, Number(conf.threshold) || 0)
-              const m = measureRule(rule, tickets, threshold, now)
-              const breached = rule.kind === 'duration' ? m.value > 0 : m.value > threshold
+              const m = measureRule(rule, items, threshold, now, ruleSet.isOpen)
+              const breached = isBreached(rule, m, threshold)
               const current = rule.kind === 'duration'
-                ? (m.max > 0 ? `plus ancien : ${round(m.max)} j${m.value ? ` · ${m.value} au-delà` : ''}` : 'aucun ticket concerné')
+                ? (m.max > 0 ? `plus ancien : ${round(m.max)} j${m.value ? ` · ${m.value} au-delà` : ''}` : 'aucun élément concerné')
                 : `actuellement : ${m.value}`
 
               return (
