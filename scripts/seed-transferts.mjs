@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Usage: node scripts/seedTransferts.js
+// Usage: node scripts/seed-transferts.mjs
 // Requiert que l'émulateur Firebase soit lancé (port 8080)
 
 const BASE = 'http://127.0.0.1:8080/v1/projects/sav-workshop/databases/(default)/documents'

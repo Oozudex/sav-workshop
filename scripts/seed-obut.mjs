@@ -4,14 +4,8 @@ import {
   collection, getDocs, writeBatch, doc,
 } from 'firebase/firestore'
 
-const app = initializeApp({
-  apiKey:            'AIzaSyBfBCUIVMMS2xvL5gBV9D33y-3R7QOn3hY',
-  authDomain:        'sav-workshop.firebaseapp.com',
-  projectId:         'sav-workshop',
-  storageBucket:     'sav-workshop.firebasestorage.app',
-  messagingSenderId: '45270989042',
-  appId:             '1:45270989042:web:65cbabb25d56063e41f86b',
-})
+// Script réservé à l'émulateur : aucune clé de production nécessaire
+const app = initializeApp({ projectId: 'sav-workshop', apiKey: 'emulator' })
 const db = getFirestore(app)
 connectFirestoreEmulator(db, 'localhost', 8080)
 
