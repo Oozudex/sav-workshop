@@ -10,6 +10,7 @@ import {
 } from 'firebase/firestore'
 import { GLOBAL_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
 import * as XLSX from 'xlsx'
+import { safeUrl } from '../lib/security'
 
 // ── Parseurs catalogue ────────────────────────────────────────────────────────
 const CAT_COLS = {
@@ -1076,7 +1077,7 @@ export default function Operations() {
                       <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5 leading-relaxed">
                         {op.description}
                         {op.lien && (
-                          <a href={op.lien} target="_blank" rel="noopener noreferrer"
+                          <a href={safeUrl(op.lien)} target="_blank" rel="noopener noreferrer"
                             className="ml-1.5 underline font-semibold hover:text-amber-900 dark:hover:text-amber-200">
                             En cliquant ici →
                           </a>
@@ -1084,7 +1085,7 @@ export default function Operations() {
                       </p>
                     )}
                     {!op.description && op.lien && (
-                      <a href={op.lien} target="_blank" rel="noopener noreferrer"
+                      <a href={safeUrl(op.lien)} target="_blank" rel="noopener noreferrer"
                         className="text-xs font-semibold text-amber-700 dark:text-amber-400 underline hover:text-amber-900 dark:hover:text-amber-200">
                         Voir le détail →
                       </a>

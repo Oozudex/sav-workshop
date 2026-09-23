@@ -7,6 +7,7 @@ import {
   addDoc, updateDoc, deleteDoc, doc, serverTimestamp,
 } from 'firebase/firestore'
 import { GLOBAL_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
+import { safeUrl } from '../lib/security'
 
 function getTodayStr() {
   const d = new Date()
@@ -328,7 +329,7 @@ export default function InfosBanner({ magasinId }) {
           <div className="flex items-center gap-1.5 shrink-0">
             {info.lien && (
               <a
-                href={info.lien}
+                href={safeUrl(info.lien)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="h-7 px-3 rounded-lg text-[11px] font-semibold bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-500/30 transition-colors flex items-center"

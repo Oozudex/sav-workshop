@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Navbar from '../components/Navbar'
 import { useAuth } from '../store/useAuth'
 import { GLOBAL_ROLES } from '../lib/constants'
+import { safeUrl } from '../lib/security'
 import { db } from '../lib/firebase'
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc,
@@ -291,6 +292,7 @@ function ToolCard({ t, featured, canEdit, onEdit, userMagasinId, isGlobal, magas
 
   const hasAccess    = isGlobal || !t.storeIds?.length || (userMagasinId && t.storeIds.includes(userMagasinId))
   const showLock     = isGlobal || (userMagasinId && t.credentialStoreIds?.includes(userMagasinId))
+  const toolUrl      = safeUrl(t.url)
   const accessStores = !hasAccess ? magasins.filter(m => t.storeIds?.includes(m.id)) : []
 
   // Tailles adaptées selon le type de carte pour correspondre à la DA du site
@@ -304,18 +306,18 @@ function ToolCard({ t, featured, canEdit, onEdit, userMagasinId, isGlobal, magas
   return (
     <div className="relative group">
       <button
-        onClick={() => hasAccess && t.url && window.open(t.url, '_blank', 'noopener,noreferrer')}
-        disabled={!hasAccess || !t.url}
+        onClick={() => hasAccess && toolUrl && window.open(toolUrl, '_blank', 'noopener,noreferrer')}
+        disabled={!hasAccess || !toolUrl}
         className={[
           `w-full flex flex-col items-start gap-4 ${pad} rounded-2xl border text-left transition-all`,
           'bg-white dark:bg-neutral-900',
           'border-gray-200 dark:border-neutral-800',
-          hasAccess && t.url ? `hover:shadow-lg hover:ring-4 ${c.ring}` : 'cursor-default',
+          hasAccess && toolUrl ? `hover:shadow-lg hover:ring-4 ${c.ring}` : 'cursor-default',
           !hasAccess ? 'opacity-50' : '',
         ].join(' ')}
       >
         {t.imageUrl ? (
-          <img src={t.imageUrl} alt={t.label} className={`object-contain ${imgH}`} />
+          <img src={safeUrl(t.imageUrl)} alt={t.label} className={`object-contain ${imgH}`} />
         ) : (
           <div className={`${iconPad} rounded-xl ${c.bg}`}>
             <span className={c.icon}><PlaceholderIcon className={iconSz} /></span>

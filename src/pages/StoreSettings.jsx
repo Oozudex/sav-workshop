@@ -10,6 +10,7 @@ import { getApp, getApps, initializeApp, deleteApp } from 'firebase/app'
 import { getAuth, connectAuthEmulator, createUserWithEmailAndPassword, sendPasswordResetEmail, updateProfile } from 'firebase/auth'
 import { STAFF_POSTES, STAFF_POSTE_LABELS, GLOBAL_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
 import { useMagasin } from '../store/useMagasin'
+import { randomPassword } from '../lib/security'
 
 function fmtDate(ts) {
   if (!ts) return '—'
@@ -27,7 +28,7 @@ async function createAuthAccount(email, displayName) {
     if (import.meta.env.DEV && import.meta.env.VITE_USE_EMULATOR === 'true') {
       try { connectAuthEmulator(secAuth, 'http://localhost:9099', { disableWarnings: true }) } catch {}
     }
-    const tempPwd = Math.random().toString(36).slice(2) + 'A9!'
+    const tempPwd = randomPassword()
     const cred = await createUserWithEmailAndPassword(secAuth, email, tempPwd)
     await updateProfile(cred.user, { displayName })
     return cred.user.uid

@@ -8,6 +8,7 @@ import {
   addDoc, updateDoc, deleteDoc, doc, serverTimestamp, increment, setDoc, getDocs,
 } from 'firebase/firestore'
 import { GLOBAL_ROLES } from '../lib/constants'
+import { escapeHtml } from '../lib/security'
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
 const LETTRES = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
@@ -62,7 +63,7 @@ function printCommande(c, magasinNom = 'Intersport') {
     }
     if (cur) lines.push(cur)
     const lineH = fontSize * 1.25
-    const tspans = lines.map((l, i) => `<tspan x="${x}" y="${y + i * lineH}">${l}</tspan>`).join('')
+    const tspans = lines.map((l, i) => `<tspan x="${x}" y="${y + i * lineH}">${escapeHtml(l)}</tspan>`).join('')
     return `<text text-anchor="middle" font-family="Arial" ${attrs}>${tspans}</text>`
   }
 
@@ -70,7 +71,7 @@ function printCommande(c, magasinNom = 'Intersport') {
 <html lang="fr">
 <head>
 <meta charset="UTF-8"/>
-<title>Flocage – ${c.clientNom}</title>
+<title>Flocage – ${escapeHtml(c.clientNom)}</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
   *{box-sizing:border-box;margin:0;padding:0}
@@ -98,18 +99,18 @@ function printCommande(c, magasinNom = 'Intersport') {
 </style>
 </head>
 <body>
-<div class="brand">${magasinNom}</div>
+<div class="brand">${escapeHtml(magasinNom)}</div>
 <h1>Flocages</h1>
 <br/>
 <div class="grid2">
   <div class="left">
-    <div><span class="field-label">Nom du CLIENT :</span><div class="field"><span class="field-value">${c.clientNom}</span></div></div>
-    <div><span class="field-label">Numéro téléphone :</span><div class="field"><span class="field-value">${c.telephone || ''}</span></div></div>
-    <div><span class="field-label">Date de commande :</span><div class="field"><span class="field-value">${c.dateCommande ? c.dateCommande.split('-').reverse().join('/') : ''}</span></div></div>
-    <div><span class="field-label">Date de mise à disposition :</span><div class="field"><span class="field-value">${c.dateDispo ? c.dateDispo.split('-').reverse().join('/') : ''}</span></div></div>
-    <div><span class="field-label">Suivi par (Vendeur) :</span><div class="field"><span class="field-value">${c.vendeur || ''}</span></div></div>
-    <div><span class="field-label">Disposition maillot :</span><div class="field"><span class="field-value">${[haut?.texte, numero?.texte, bas?.texte, devant?.texte ? `♥ ${devant.texte}` : ''].filter(Boolean).join(' / ') || ''}</span></div></div>
-    ${c.commentaire ? `<div class="comment">💬 ${c.commentaire}</div>` : ''}
+    <div><span class="field-label">Nom du CLIENT :</span><div class="field"><span class="field-value">${escapeHtml(c.clientNom)}</span></div></div>
+    <div><span class="field-label">Numéro téléphone :</span><div class="field"><span class="field-value">${escapeHtml(c.telephone)}</span></div></div>
+    <div><span class="field-label">Date de commande :</span><div class="field"><span class="field-value">${escapeHtml(c.dateCommande ? c.dateCommande.split('-').reverse().join('/') : '')}</span></div></div>
+    <div><span class="field-label">Date de mise à disposition :</span><div class="field"><span class="field-value">${escapeHtml(c.dateDispo ? c.dateDispo.split('-').reverse().join('/') : '')}</span></div></div>
+    <div><span class="field-label">Suivi par (Vendeur) :</span><div class="field"><span class="field-value">${escapeHtml(c.vendeur)}</span></div></div>
+    <div><span class="field-label">Disposition maillot :</span><div class="field"><span class="field-value">${escapeHtml([haut?.texte, numero?.texte, bas?.texte, devant?.texte ? `♥ ${devant.texte}` : ''].filter(Boolean).join(' / '))}</span></div></div>
+    ${c.commentaire ? `<div class="comment">💬 ${escapeHtml(c.commentaire)}</div>` : ''}
   </div>
   <div class="right">
     <div class="shirts">
@@ -118,7 +119,7 @@ function printCommande(c, magasinNom = 'Intersport') {
         <path d="M57 17Q80 34 103 17L134 30L154 50L137 61L126 52L126 156L34 156L34 52L23 61L6 50L26 30Z" fill="url(#g1)"/>
         <path d="M57 17Q80 34 103 17Q91 45 69 45Z" fill="#1e3a8a" opacity="0.6"/>
         ${haut?.texte ? svgText(haut.texte.toUpperCase(), 80, 72, 10, 'font-size="10" fill="white" font-weight="800" letter-spacing="1"') : ''}
-        ${numero?.texte ? `<text text-anchor="middle" x="80" y="120" font-size="${numero.taille === 'gros_numero' ? '44' : '30'}" fill="white" font-weight="900" font-family="Arial"><tspan x="80" y="120">${numero.texte}</tspan></text>` : ''}
+        ${numero?.texte ? `<text text-anchor="middle" x="80" y="120" font-size="${numero.taille === 'gros_numero' ? '44' : '30'}" fill="white" font-weight="900" font-family="Arial"><tspan x="80" y="120">${escapeHtml(numero.texte)}</tspan></text>` : ''}
         ${bas?.texte ? svgText(bas.texte.toUpperCase(), 80, 143, 8, 'font-size="8" fill="white" font-weight="700"') : ''}
       </svg>
       <svg viewBox="0 0 160 175" width="90">
