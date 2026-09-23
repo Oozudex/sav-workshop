@@ -43,9 +43,6 @@ export const GLOBAL_ROLES = ['acheteur', 'directeurgen']
 // Peut supprimer dans son périmètre
 export const CAN_DELETE_ROLES = ['acheteur', 'directeurmag', 'directeurgen']
 
-// Peut accéder à l'admin comptes Firebase
-export const USER_ADMIN_ROLES = ['directeurgen']
-
 // ── Postes staff (sans compte Auth — pour les dropdowns) ──────────────────────
 export const STAFF_POSTES = ['vendeur', 'responsable']
 export const STAFF_POSTE_LABELS = {
@@ -53,13 +50,3 @@ export const STAFF_POSTE_LABELS = {
   responsable: 'Responsable',
 }
 
-// ── Accès acheteur par rayon ───────────────────────────────────────────────────
-// Chemins restreints au rayon correspondant pour les acheteurs
-// (les chemins non listés ici sont communs à tous les acheteurs)
-export const ACHETEUR_RAYON_PATHS = {
-  velo:      ['/tickets', '/orders', '/requests', '/transfert'],
-  chaussure: ['/flocage'],
-  textile:   [],
-  randonnee: [],
-  caisse:    [],
-}

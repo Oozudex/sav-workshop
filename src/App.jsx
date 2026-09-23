@@ -10,7 +10,6 @@ import Service from './pages/Service'
 import Tickets from './pages/Tickets'
 import Profile from './pages/Profile'
 import Orders from './pages/Orders'
-import Requests from './pages/Requests'
 import StoreSettings from './pages/StoreSettings'
 import Operations from './pages/Operations'
 import OperationDetail from './pages/OperationDetail'
@@ -67,7 +66,6 @@ export default function App() {
       <Route path="/rh" element={<PrivateRoute><RH /></PrivateRoute>} />
       <Route path="/service" element={<PrivateRoute><Service /></PrivateRoute>} />
       <Route path="/orders" element={<PrivateRoute><Orders /></PrivateRoute>} />
-      <Route path="/requests" element={<PrivateRoute><Requests /></PrivateRoute>} />
       <Route path="/operations" element={<PrivateRoute><Operations /></PrivateRoute>} />
       <Route path="/operations/:id" element={<PrivateRoute><OperationDetail /></PrivateRoute>} />
       <Route
