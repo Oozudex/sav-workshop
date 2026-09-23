@@ -14,7 +14,7 @@ import { DragDropContext } from '@hello-pangea/dnd'
 import TicketModal from '../components/TicketModal'
 import TicketStatsModal from '../components/TicketStatsModal'
 import AlertSettingsModal from '../components/AlertSettingsModal'
-import { TICKET_ALERTS } from '../lib/ticketStats'
+import { TICKET_ALERTS, closedDateOf } from '../lib/ticketStats'
 import { useAlerts } from '../store/useAlerts'
 import { STATUSES, GLOBAL_ROLES } from '../lib/constants'
 import { useStaff } from '../lib/useStaff'
@@ -187,7 +187,8 @@ export default function Tickets() {
   }
 
   const filtered = tickets.filter(t => {
-    if (t.anonymizedAt) return false
+    // Clôturés depuis plus de 14 jours : réservés aux statistiques (comme après anonymisation)
+    if (t.anonymizedAt || (t.status === 'Closed' && Date.now() - (closedDateOf(t)?.getTime() ?? Date.now()) > 14 * 86400000)) return false
     if (alertKey && !alertFilter?.itemIds.includes(t.id)) return false
     if (filterPriority && t.priority !== filterPriority) return false
     if (filterAssigned && t.assignedTo !== filterAssigned) return false

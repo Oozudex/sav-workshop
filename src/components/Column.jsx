@@ -34,6 +34,13 @@ export default function Column({ title, children, isActive = false, count = 0, s
         </span>
       </div>
 
+      {/* Rappel RGPD sous la colonne des tickets clôturés (anonymisation : lib/cleanup.js) */}
+      {status === 'Closed' && (
+        <p className="px-4 pt-2 text-[11px] leading-snug text-gray-400 dark:text-neutral-500">
+          Affichés 14 jours, puis les données du client sont effacées : le ticket ne sert plus qu'aux statistiques.
+        </p>
+      )}
+
       {/* Cards */}
       <div className="flex-1 min-h-0 overflow-y-auto p-2.5 space-y-2">
         {count === 0 ? <EmptyState /> : children}
