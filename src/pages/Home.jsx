@@ -6,7 +6,7 @@ import InfosBanner from '../components/InfosBanner'
 import { useAuth } from '../store/useAuth'
 import { useMagasin } from '../store/useMagasin'
 import { db } from '../lib/firebase'
-import { collection, onSnapshot, query, where } from 'firebase/firestore'
+import { collection, getCountFromServer, onSnapshot, query, where } from 'firebase/firestore'
 import { GLOBAL_ROLES } from '../lib/constants'
 import { runCleanup } from '../lib/cleanup'
 
@@ -267,6 +267,16 @@ const COLOR = {
   },
 }
 
+// Compte les documents côté serveur (1 lecture facturée par tranche de 1000 docs)
+// au lieu de télécharger toute la collection juste pour afficher un nombre.
+function countOnce(q, setCount) {
+  let cancelled = false
+  getCountFromServer(q)
+    .then(snap => { if (!cancelled) setCount(snap.data().count) })
+    .catch(() => { if (!cancelled) setCount(null) })
+  return () => { cancelled = true }
+}
+
 export default function Home() {
   const navigate = useNavigate()
   const { profile } = useAuth(s => ({ profile: s.profile }))
@@ -291,7 +301,7 @@ export default function Home() {
     } else if (isGlobal) {
       q = query(collection(db, 'tickets'), where('status', '!=', 'Closed'))
     } else return
-    return onSnapshot(q, snap => setTicketCount(snap.size))
+    return countOnce(q, setTicketCount)
   }, [profile, effectiveMagasinId, isGlobal])
 
   // Compteur commandes actives (hors livrée + annulée)
@@ -303,7 +313,7 @@ export default function Home() {
     } else if (isGlobal) {
       q = query(collection(db, 'orders'), where('statut', 'not-in', ['livree', 'annulee']))
     } else return
-    return onSnapshot(q, snap => setOrderCount(snap.size))
+    return countOnce(q, setOrderCount)
   }, [profile, effectiveMagasinId, isGlobal])
 
   // Compteur OPs actives (dateDebut <= aujourd'hui <= dateFin), filtrées par rayon et magasin

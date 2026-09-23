@@ -917,6 +917,13 @@ function PrixExcluSection({ canCreate }) {
   )
 }
 
+// Passe à true la première fois que `value` est vrai, puis y reste
+function useLatch(value) {
+  const [latched, setLatched] = useState(value)
+  useEffect(() => { if (value) setLatched(true) }, [value])
+  return latched || value
+}
+
 export default function Operations() {
   const navigate = useNavigate()
   const { user, profile } = useAuth(s => ({ user: s.user, profile: s.profile }))
@@ -935,31 +942,39 @@ export default function Operations() {
     return onSnapshot(q, snap => setOps(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [])
 
+  // Les données de recherche (tous les produits + prix exclu team) ne sont chargées
+  // qu'à la première saisie dans la barre de recherche : ouvrir la page ne coûte
+  // plus des milliers de lectures Firestore.
+  const searchUsed = useLatch(search.trim().length > 0)
+
   // Chargement de tous les produits (collectionGroup) pour la recherche
   useEffect(() => {
+    if (!searchUsed) return
     const q = query(collectionGroup(db, 'produits'), orderBy('reference', 'asc'))
     return onSnapshot(q, snap => setAllProduits(snap.docs.map(d => ({
       id: d.id,
       opId: d.ref.parent.parent.id,
       ...d.data(),
     }))))
-  }, [])
+  }, [searchUsed])
 
   // Chargement des prix exclu team pour la recherche globale
   useEffect(() => {
+    if (!searchUsed) return
     return onSnapshot(collection(db, 'prix_exclu_team'), snap =>
       setPrixExcluItems(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     )
-  }, [])
+  }, [searchUsed])
 
   const searchResults = useMemo(() => {
     const term = search.trim().toLowerCase()
     if (!term) return { opResults: [], prixResults: [] }
 
     // Produits des OPs en cours ou à venir uniquement
+    const opsById = new Map(ops.map(o => [o.id, o]))
     const opResults = allProduits
       .filter(p => {
-        const op = ops.find(o => o.id === p.opId)
+        const op = opsById.get(p.opId)
         if (!op) return false
         return getStatus(op) !== 'terminee'
       })
@@ -968,7 +983,7 @@ export default function Operations() {
         (p.reference || '').toLowerCase().includes(term) ||
         (p.refFournisseur || '').toLowerCase().includes(term)
       )
-      .map(p => ({ ...p, op: ops.find(o => o.id === p.opId) }))
+      .map(p => ({ ...p, op: opsById.get(p.opId) }))
 
     // Prix exclu team
     const prixResults = prixExcluItems.filter(p =>
