@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { getAuth, sendPasswordResetEmail } from 'firebase/auth'
 import { useAuth } from '../store/useAuth'
+import { useShallow } from 'zustand/react/shallow'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -11,7 +12,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const nav = useNavigate()
   const loc = useLocation()
-  const { user, login } = useAuth(s => ({ user: s.user, login: s.login }))
+  const { user, login } = useAuth(useShallow(s => ({ user: s.user, login: s.login })))
 
   async function onSubmit(e) {
     e.preventDefault()

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import StatusBadge from './StatusBadge'
 import { useAuth } from '../store/useAuth'
+import { useShallow } from 'zustand/react/shallow'
 import { db } from '../lib/firebase'
 import {
     collection, addDoc, onSnapshot, query, orderBy,
@@ -12,7 +13,7 @@ import { BIKE_TYPES, PRIORITIES, CONTACT_PREFS, STATUSES, STATUS_LABELS } from '
 export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo, users = [] }) {
     const overlayRef = useRef(null)
     const urgent = ticket.priority === 'Urgent'
-    const { user, profile } = useAuth(s => ({ user: s.user, profile: s.profile }))
+    const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
 
     const myRole = role || profile?.role
     const canAdmin = myRole === 'admin' || myRole === 'buyer'

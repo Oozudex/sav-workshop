@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { db } from '../lib/firebase'
 import { collection, doc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore'
 import { useAuth } from '../store/useAuth'
+import { useShallow } from 'zustand/react/shallow'
 import { RAYON_TYPES, RAYON_TYPE_LABELS, GLOBAL_ROLES } from '../lib/constants'
 
 const DAYS = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
@@ -21,7 +22,7 @@ function quotasFromFirestore(data) {
 }
 
 export default function CalendarSettings({ magasinId, isOpen, onClose }) {
-  const { user, profile } = useAuth(s => ({ user: s.user, profile: s.profile }))
+  const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
   const isRayonRole = RAYON_TYPES.includes(profile?.role)
 
   const managedRayons = (() => {

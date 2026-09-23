@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../store/useAuth'
+import { useShallow } from 'zustand/react/shallow'
 import { db } from '../lib/firebase'
 import {
   collection, onSnapshot, query, where, orderBy,
@@ -327,7 +328,7 @@ function EventModal({ event, defaultDate, onClose, onSave, onDelete, onTransform
 
 /* ── WeeklyCalendar ─────────────────────────────────────────────────────────── */
 export default function WeeklyCalendar({ magasinId }) {
-  const { user, profile } = useAuth(s => ({ user: s.user, profile: s.profile }))
+  const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
   const navigate = useNavigate()
   const isGlobal = GLOBAL_ROLES.includes(profile?.role)
   const isRayonRole = RAYON_TYPES.includes(profile?.role)

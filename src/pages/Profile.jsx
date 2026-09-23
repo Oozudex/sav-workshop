@@ -1,8 +1,9 @@
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../store/useAuth'
+import { useShallow } from 'zustand/react/shallow'
 
 export default function Profile() {
-    const { user, profile } = useAuth(s => ({ user: s.user, profile: s.profile }))
+    const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
     const navigate = useNavigate()
 
     return (

@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import Navbar from '../components/Navbar'
 import { useAuth } from '../store/useAuth'
+import { useShallow } from 'zustand/react/shallow'
 import { useMagasin } from '../store/useMagasin'
 import { db } from '../lib/firebase'
 import {
@@ -899,7 +900,7 @@ function CommandeCard({ commande: c, canEdit, onEdit, onDelete, onToggle, magasi
 
 /* ── Main ───────────────────────────────────────────────────────────────── */
 export default function Flocage() {
-  const { user, profile } = useAuth(s => ({ user: s.user, profile: s.profile }))
+  const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
   const { selectedId } = useMagasin()
   const isGlobal = GLOBAL_ROLES.includes(profile?.role)
   const effectiveMagasinId = isGlobal ? selectedId : profile?.magasinId

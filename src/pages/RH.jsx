@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import Navbar from '../components/Navbar'
 import { useAuth } from '../store/useAuth'
+import { useShallow } from 'zustand/react/shallow'
 import { useMagasin } from '../store/useMagasin'
 import { db } from '../lib/firebase'
 import {
@@ -383,7 +384,7 @@ function TamigoImportSection({ magasinId, userId, userRayonType }) {
 
 /* ── Page RH ──────────────────────────────────────────────────────────────── */
 export default function RH() {
-  const { user, profile } = useAuth(s => ({ user: s.user, profile: s.profile }))
+  const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
   const selectedId = useMagasin(s => s.selectedId)
 
   const isGlobal = GLOBAL_ROLES.includes(profile?.role)

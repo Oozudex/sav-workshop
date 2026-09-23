@@ -1,5 +1,6 @@
 import Navbar from '../components/Navbar'
 import { useAuth } from '../store/useAuth'
+import { useShallow } from 'zustand/react/shallow'
 
 const SERVICE_TOOLS = [
   {
@@ -25,7 +26,7 @@ const COLOR = {
 }
 
 export default function Service() {
-  const { profile } = useAuth(s => ({ profile: s.profile }))
+  const { profile } = useAuth(useShallow(s => ({ profile: s.profile })))
 
   const visibleTools = SERVICE_TOOLS.filter(t =>
     t.roles === null || t.roles.includes(profile?.role)

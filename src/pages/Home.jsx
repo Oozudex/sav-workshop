@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar'
 import WeeklyCalendar from '../components/WeeklyCalendar'
 import InfosBanner from '../components/InfosBanner'
 import { useAuth } from '../store/useAuth'
+import { useShallow } from 'zustand/react/shallow'
 import { useMagasin } from '../store/useMagasin'
 import { db } from '../lib/firebase'
 import { collection, getCountFromServer, onSnapshot, query, where } from 'firebase/firestore'
@@ -279,7 +280,7 @@ function countOnce(q, setCount) {
 
 export default function Home() {
   const navigate = useNavigate()
-  const { profile } = useAuth(s => ({ profile: s.profile }))
+  const { profile } = useAuth(useShallow(s => ({ profile: s.profile })))
   const { selectedId } = useMagasin()
 
   const isGlobal = GLOBAL_ROLES.includes(profile?.role)

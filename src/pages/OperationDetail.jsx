@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import { useAuth } from '../store/useAuth'
+import { useShallow } from 'zustand/react/shallow'
 import { db } from '../lib/firebase'
 import {
   doc, onSnapshot, collection, query, orderBy,
@@ -593,7 +594,7 @@ function ImportModal({ opId, onClose }) {
 export default function OperationDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { profile } = useAuth(s => ({ profile: s.profile }))
+  const { profile } = useAuth(useShallow(s => ({ profile: s.profile })))
   const canCreate = GLOBAL_ROLES.includes(profile?.role)
 
   const [op,         setOp]       = useState(null)

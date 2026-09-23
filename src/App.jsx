@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './store/useAuth'
+import { useShallow } from 'zustand/react/shallow'
 import { useTheme } from './store/useTheme'
 import Login from './pages/Login'
 
@@ -20,7 +21,7 @@ const Transfert       = lazy(() => import('./pages/Transfert'))
 const Obut            = lazy(() => import('./pages/Obut'))
 
 function PrivateRoute({ children }) {
-  const { user, loading } = useAuth(s => ({ user: s.user, loading: s.loading }))
+  const { user, loading } = useAuth(useShallow(s => ({ user: s.user, loading: s.loading })))
   const location = useLocation()
   if (loading) return <div className="p-6">Chargement…</div>
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />
@@ -28,7 +29,7 @@ function PrivateRoute({ children }) {
 }
 
 function RoleRoute({ children, roles, acheteurRayons }) {
-  const { user, loading, profile } = useAuth(s => ({ user: s.user, loading: s.loading, profile: s.profile }))
+  const { user, loading, profile } = useAuth(useShallow(s => ({ user: s.user, loading: s.loading, profile: s.profile })))
   const location = useLocation()
   if (loading) return <div className="p-6">Chargement…</div>
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />

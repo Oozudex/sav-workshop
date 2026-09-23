@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import Navbar from '../components/Navbar'
 import { useAuth } from '../store/useAuth'
+import { useShallow } from 'zustand/react/shallow'
 import { useMagasin } from '../store/useMagasin'
 import { db } from '../lib/firebase'
 import {
@@ -731,7 +732,7 @@ function StatistiquesTab({ completed }) {
 
 /* ── Main ─────────────────────────────────────────────────────────────────── */
 export default function Transfert() {
-  const { user, profile } = useAuth(s => ({ user: s.user, profile: s.profile }))
+  const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
   const { selectedId } = useMagasin()
   const isGlobal = GLOBAL_ROLES.includes(profile?.role)
   const effectiveMagasinId = isGlobal ? selectedId : profile?.magasinId

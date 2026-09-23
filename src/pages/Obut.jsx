@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import Navbar from '../components/Navbar'
 import { useAuth } from '../store/useAuth'
+import { useShallow } from 'zustand/react/shallow'
 import { db } from '../lib/firebase'
 import { GLOBAL_ROLES } from '../lib/constants'
 import { useMagasin } from '../store/useMagasin'
@@ -610,7 +611,7 @@ function StatsSection({ commandes, magasins }) {
 }
 
 export default function Obut() {
-  const { user, profile } = useAuth(s => ({ user: s.user, profile: s.profile }))
+  const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
   const { selectedId } = useMagasin()
 
   const isGlobal = GLOBAL_ROLES.includes(profile?.role)

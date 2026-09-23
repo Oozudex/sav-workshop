@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Navbar from '../components/Navbar'
 import { useAuth } from '../store/useAuth'
+import { useShallow } from 'zustand/react/shallow'
 import { db } from '../lib/firebase'
 import {
   addDoc, collection, doc, onSnapshot,
@@ -61,7 +62,7 @@ const INITIAL_FORM = {
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
 export default function Orders() {
-  const { user, profile } = useAuth(s => ({ user: s.user, profile: s.profile }))
+  const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
   const { selectedId } = useMagasin()
   const isGlobal  = GLOBAL_ROLES.includes(profile?.role)
   const canEdit   = !!user

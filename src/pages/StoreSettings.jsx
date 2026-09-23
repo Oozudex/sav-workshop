@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Navbar from '../components/Navbar'
 import { useAuth } from '../store/useAuth'
+import { useShallow } from 'zustand/react/shallow'
 import { db } from '../lib/firebase'
 import {
   addDoc, collection, deleteDoc, doc, onSnapshot,
@@ -38,7 +39,7 @@ async function createAuthAccount(email, displayName) {
 }
 
 export default function StoreSettings() {
-  const { user, profile, refreshProfile } = useAuth(s => ({ user: s.user, profile: s.profile, refreshProfile: s.refreshProfile }))
+  const { user, profile, refreshProfile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile, refreshProfile: s.refreshProfile })))
   const isGlobal        = GLOBAL_ROLES.includes(profile?.role)
   const isDirecteurGen  = profile?.role === 'directeurgen'
   const isDirecteurMag  = profile?.role === 'directeurmag'

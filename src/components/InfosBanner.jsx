@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../store/useAuth'
+import { useShallow } from 'zustand/react/shallow'
 import { db } from '../lib/firebase'
 import {
   collection, query, where, onSnapshot,
@@ -164,7 +165,7 @@ function InfoModal({ info, profile, userId, onClose }) {
 /* ── InfosBanner ─────────────────────────────────────────────────────────── */
 export default function InfosBanner({ magasinId }) {
   const navigate = useNavigate()
-  const { user, profile } = useAuth(s => ({ user: s.user, profile: s.profile }))
+  const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
 
   const [ops, setOps] = useState([])
   const [customInfos, setCustomInfos] = useState([])

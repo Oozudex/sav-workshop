@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Navbar from '../components/Navbar'
 import { useAuth } from '../store/useAuth'
+import { useShallow } from 'zustand/react/shallow'
 import { GLOBAL_ROLES } from '../lib/constants'
 import { safeUrl } from '../lib/security'
 import { db } from '../lib/firebase'
@@ -557,7 +558,7 @@ function EditModal({ tool, magasins, onClose, onSave, onDelete }) {
 
 // ── B2B ──────────────────────────────────────────────────────────────────────
 export default function B2B() {
-  const { profile } = useAuth(s => ({ profile: s.profile }))
+  const { profile } = useAuth(useShallow(s => ({ profile: s.profile })))
   const [tools, setTools] = useState([])
   const [magasins, setMagasins] = useState([])
   const [editTool, setEditTool] = useState(null)

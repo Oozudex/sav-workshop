@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../store/useAuth'
+import { useShallow } from 'zustand/react/shallow'
 import { useTheme } from '../store/useTheme'
 import { useMagasin } from '../store/useMagasin'
 import { db } from '../lib/firebase'
@@ -22,7 +23,7 @@ const PAGE_TITLES = {
 }
 
 export default function Navbar() {
-  const { user, profile, logout } = useAuth(s => ({ user: s.user, profile: s.profile, logout: s.logout }))
+  const { user, profile, logout } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile, logout: s.logout })))
   const { theme, toggle: toggleTheme } = useTheme()
   const { selectedId, setSelectedId } = useMagasin()
   const [open, setOpen] = useState(false)

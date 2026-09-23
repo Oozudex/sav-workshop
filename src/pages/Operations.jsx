@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import { useAuth } from '../store/useAuth'
+import { useShallow } from 'zustand/react/shallow'
 import { db } from '../lib/firebase'
 import {
   collection, onSnapshot, query, orderBy,
@@ -926,7 +927,7 @@ function useLatch(value) {
 
 export default function Operations() {
   const navigate = useNavigate()
-  const { user, profile } = useAuth(s => ({ user: s.user, profile: s.profile }))
+  const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
   const canCreate = GLOBAL_ROLES.includes(profile?.role)
 
   const [ops, setOps] = useState([])
