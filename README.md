@@ -27,7 +27,14 @@ npm run dev:emulator   # terminal 2 : l'app pointe sur les émulateurs (.env.emu
 ```
 
 Les données locales sont sauvegardées dans `emulator-data/` (ignoré par git).
-Des jeux de données de test sont disponibles dans `scripts/seed-*.mjs`.
+Pour remplir l'émulateur (émulateurs lancés) :
+
+```bash
+node scripts/seed-comptes.mjs   # magasins, rayons, un compte par rôle (mot de passe Test1234!)
+node scripts/seed-stats.mjs     # 2 ans d'historique de tickets pour les statistiques
+```
+
+D'autres jeux de données sont disponibles dans `scripts/seed-*.mjs`.
 
 ## Scripts
 
@@ -37,6 +44,7 @@ Des jeux de données de test sont disponibles dans `scripts/seed-*.mjs`.
 | `npm run dev:emulator` | Serveur de développement branché sur les émulateurs |
 | `npm run build` | Build de production dans `dist/` |
 | `npm run lint` | ESLint |
+| `npm run test:unit` | Tests unitaires (statistiques et alertes tickets) |
 | `npm run emulators` | Lance les émulateurs Firebase avec import/export de `emulator-data/` |
 | `npm run test:rules` | Tests des règles de sécurité Firestore (émulateur) |
 | `npm run deploy:rules` | Déploie `firestore.rules` en production |

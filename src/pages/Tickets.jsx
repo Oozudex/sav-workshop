@@ -8,10 +8,11 @@ import { useShallow } from 'zustand/react/shallow'
 import { db } from '../lib/firebase'
 import { getNextTicketNumber } from '../lib/counters'
 import {
-  collection, addDoc, serverTimestamp, onSnapshot, query, orderBy, where, doc, updateDoc, arrayUnion
+  collection, addDoc, serverTimestamp, onSnapshot, query, orderBy, where, doc, getDoc, updateDoc, arrayUnion
 } from 'firebase/firestore'
 import { DragDropContext } from '@hello-pangea/dnd'
 import TicketModal from '../components/TicketModal'
+import TicketStatsModal from '../components/TicketStatsModal'
 import { STATUSES, GLOBAL_ROLES } from '../lib/constants'
 import { useStaff } from '../lib/useStaff'
 import { useMagasin } from '../store/useMagasin'
@@ -85,6 +86,18 @@ export default function Tickets() {
 
   const [searchParams] = useSearchParams()
   const location = useLocation()
+
+  // Statistiques : réservées aux directeurs
+  const canManage = ['directeurmag', 'directeurgen'].includes(profile?.role)
+  const [showStats, setShowStats]   = useState(false)
+  const [magasinNom, setMagasinNom] = useState('')
+
+  useEffect(() => {
+    if (!canManage || !effectiveMagasinId) { setMagasinNom(''); return }
+    getDoc(doc(db, 'magasins', effectiveMagasinId))
+      .then(snap => setMagasinNom(snap.exists() ? snap.data().nom : ''))
+      .catch(() => setMagasinNom(''))
+  }, [canManage, effectiveMagasinId])
 
   const [showForm, setShowForm]             = useState(!!location.state?.openForm)
   const [formInitialValues] = useState(location.state?.initialValues || {})
@@ -262,6 +275,18 @@ export default function Tickets() {
 
             <div className="flex-1" />
 
+            {/* Directeurs : statistiques */}
+            {canManage && (
+              <button
+                onClick={() => setShowStats(true)}
+                className="h-8 px-3 rounded-lg border text-xs font-semibold transition-colors
+                           text-gray-700 border-gray-200 hover:bg-gray-50
+                           dark:text-neutral-200 dark:border-neutral-700 dark:hover:bg-neutral-800"
+              >
+                Statistiques
+              </button>
+            )}
+
             {/* New */}
             <button
               onClick={() => setShowForm(true)}
@@ -290,6 +315,10 @@ export default function Tickets() {
 
       {showForm && (
         <TicketForm onSubmit={createTicket} onClose={() => setShowForm(false)} users={staff} initialValues={formInitialValues} />
+      )}
+
+      {showStats && (
+        <TicketStatsModal tickets={tickets} magasinNom={magasinNom} onClose={() => setShowStats(false)} />
       )}
 
       {activeTicket && (
