@@ -1,13 +1,11 @@
-import { initializeApp } from 'firebase/app'
-import {
-  getFirestore, connectFirestoreEmulator,
-  collection, getDocs, writeBatch, doc,
-} from 'firebase/firestore'
+// Émulateur uniquement : SDK admin (contourne les règles de sécurité), jamais la production
+process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080'
 
-// Script réservé à l'émulateur : aucune clé de production nécessaire
-const app = initializeApp({ projectId: 'sav-workshop', apiKey: 'emulator' })
-const db = getFirestore(app)
-connectFirestoreEmulator(db, 'localhost', 8080)
+import { initializeApp } from 'firebase-admin/app'
+import { getFirestore } from 'firebase-admin/firestore'
+
+initializeApp({ projectId: 'sav-workshop' })
+const db = getFirestore()
 
 const MODELES = ['CX COU', "TON'R", 'SOLEIL', 'ATX', 'RCC', 'MATCH', 'MATCH IT', 'MATCH +', 'SUPERINOX', 'RCX']
 const PRIX = {
@@ -38,7 +36,7 @@ const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min
 const pad     = (n) => String(n).padStart(2, '0')
 
 async function seed() {
-  const snap = await getDocs(collection(db, 'magasins'))
+  const snap = await db.collection('magasins').get()
   const magasins = snap.docs.map(d => ({ id: d.id, nom: d.data().nom }))
   if (!magasins.length) { console.error('Aucun magasin trouvé dans l\'émulateur.'); process.exit(1) }
   console.log(`Magasins : ${magasins.map(m => m.nom).join(', ')}`)
@@ -90,8 +88,8 @@ async function seed() {
   }
 
   for (let i = 0; i < records.length; i += 400) {
-    const batch = writeBatch(db)
-    records.slice(i, i + 400).forEach(r => batch.set(doc(collection(db, 'obut_commandes')), r))
+    const batch = db.batch()
+    records.slice(i, i + 400).forEach(r => batch.set(db.collection('obut_commandes').doc(), r))
     await batch.commit()
     console.log(`  Batch écrit : ${Math.min(i + 400, records.length)} / ${records.length}`)
   }
