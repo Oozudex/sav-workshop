@@ -275,7 +275,7 @@ export default function Home() {
   const isGlobal = GLOBAL_ROLES.includes(profile?.role)
   const effectiveMagasinId = isGlobal ? selectedId : profile?.magasinId
 
-  useEffect(() => { runCleanup().catch(() => { }) }, [])
+  useEffect(() => { runCleanup(profile?.role).catch(() => { }) }, [profile?.role])
 
   const [ticketCount, setTicketCount] = useState(null)
   const [orderCount, setOrderCount] = useState(null)
