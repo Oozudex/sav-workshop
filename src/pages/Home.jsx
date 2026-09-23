@@ -8,7 +8,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useMagasin } from '../store/useMagasin'
 import { db } from '../lib/firebase'
 import { collection, getCountFromServer, onSnapshot, query, where } from 'firebase/firestore'
-import { GLOBAL_ROLES } from '../lib/constants'
+import { GLOBAL_ROLES, ORDER_CLOSED_STATUTS } from '../lib/constants'
 import { runCleanup } from '../lib/cleanup'
 
 const SECTIONS = [
@@ -28,7 +28,7 @@ const SECTIONS = [
   },
   {
     label: 'Commandes',
-    description: 'Suivre et gérer les commandes fournisseurs et clients',
+    description: 'Suivre les commandes clients : vélos, pièces et accessoires',
     path: '/orders',
     roles: ['velo', 'acheteur', 'directeurmag', 'directeurgen'],
     acheteurRayons: ['velo'],
@@ -310,9 +310,9 @@ export default function Home() {
     if (!profile) return
     let q
     if (effectiveMagasinId) {
-      q = query(collection(db, 'orders'), where('magasinId', '==', effectiveMagasinId), where('statut', 'not-in', ['livree', 'annulee']))
+      q = query(collection(db, 'orders'), where('magasinId', '==', effectiveMagasinId), where('statut', 'not-in', ORDER_CLOSED_STATUTS))
     } else if (isGlobal) {
-      q = query(collection(db, 'orders'), where('statut', 'not-in', ['livree', 'annulee']))
+      q = query(collection(db, 'orders'), where('statut', 'not-in', ORDER_CLOSED_STATUTS))
     } else return
     return countOnce(q, setOrderCount)
   }, [profile, effectiveMagasinId, isGlobal])

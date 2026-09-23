@@ -29,6 +29,6 @@ export async function getNextTicketNumber() {
 }
 
 export async function getNextOrderNumber() {
-  const { next } = await nextCounter('orders')
-  return String(next).padStart(4, '0')
+  const { next, year } = await nextCounter('orders')
+  return `CMD-${year}-${String(next).padStart(4, '0')}`
 }

@@ -8,7 +8,7 @@ const ANONYMIZE_AFTER_DAYS = 14
 
 // Données personnelles effacées ; le reste (vélo, dates, statuts, description) sert aux statistiques
 const TICKET_PERSONAL_FIELDS = ['customerName', 'customerPhone', 'customerEmail', 'serialNumber', 'trackingNumber']
-const ORDER_PERSONAL_FIELDS = ['client', 'tel']
+const ORDER_PERSONAL_FIELDS = ['client', 'tel', 'notes', 'commentaire']
 
 // Entrées d'historique conservées : les autres (commentaires, modifications, suivi)
 // peuvent contenir des données personnelles dans leur texte
@@ -51,7 +51,7 @@ function blankFields(fields) {
 
 /**
  * - anonymise les tickets SAV clôturés depuis plus de 14 jours (et supprime leurs commentaires)
- * - anonymise les commandes clients livrées ou annulées depuis plus de 14 jours
+ * - anonymise les commandes clients retirées ou annulées depuis plus de 14 jours (nom, téléphone, notes)
  * - supprime les RDV Client du calendrier datant de plus de 1 mois
  * - supprime les infos importantes créées depuis plus de 48h
  *
@@ -93,7 +93,7 @@ export async function runCleanup(role) {
     })
   }
 
-  // ── 2. Commandes livrées / annulées depuis > 14 jours : anonymisation ───
+  // ── 2. Commandes retirées / annulées depuis > 14 jours : anonymisation ──
   const ordersSnap = await getDocs(
     query(collection(db, 'orders'), where('statut', 'in', ORDER_CLOSED_STATUTS))
   )

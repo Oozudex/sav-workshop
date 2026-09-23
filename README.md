@@ -32,6 +32,7 @@ Pour remplir l'émulateur (émulateurs lancés) :
 ```bash
 node scripts/seed-comptes.mjs   # magasins, rayons, un compte par rôle (mot de passe Test1234!)
 node scripts/seed-stats.mjs     # 2 ans d'historique de tickets pour les statistiques
+node scripts/seed-orders.mjs    # commandes clients à toutes les étapes
 ```
 
 D'autres jeux de données sont disponibles dans `scripts/seed-*.mjs`.

@@ -72,7 +72,14 @@ export default function App() {
           <Route path="/b2b" element={<PrivateRoute><B2B /></PrivateRoute>} />
           <Route path="/rh" element={<PrivateRoute><RH /></PrivateRoute>} />
           <Route path="/service" element={<PrivateRoute><Service /></PrivateRoute>} />
-          <Route path="/orders" element={<PrivateRoute><Orders /></PrivateRoute>} />
+          <Route
+            path="/orders"
+            element={
+              <RoleRoute roles={['velo', 'directeurmag', 'acheteur', 'directeurgen']} acheteurRayons={['velo']}>
+                <Orders />
+              </RoleRoute>
+            }
+          />
           <Route path="/operations" element={<PrivateRoute><Operations /></PrivateRoute>} />
           <Route path="/operations/:id" element={<PrivateRoute><OperationDetail /></PrivateRoute>} />
           <Route

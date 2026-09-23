@@ -3,6 +3,8 @@ import { collection, doc, onSnapshot, query, where } from 'firebase/firestore'
 import { useShallow } from 'zustand/react/shallow'
 import { db } from '../lib/firebase'
 import { computeAlerts } from '../lib/alerts'
+import { ORDER_CLOSED_STATUTS } from '../lib/constants'
+import { ORDER_ALERTS } from '../lib/orders'
 import { TICKET_ALERTS } from '../lib/ticketStats'
 import { useAuth } from '../store/useAuth'
 import { useAlerts } from '../store/useAlerts'
@@ -36,7 +38,7 @@ function useOpenDocs(active, magasinId, collectionName, statusField, closedValue
 }
 
 /**
- * Surveille en continu les tickets en cours du magasin du directeur
+ * Surveille en continu les tickets et commandes en cours du magasin du directeur
  * et les compare à ses seuils d'alerte. Monté une seule fois dans App (pas de rendu visible).
  */
 export default function AlertsWatcher() {
@@ -45,7 +47,9 @@ export default function AlertsWatcher() {
   const active = role === 'directeurmag' && !!magasinId
 
   const ticketSettings = useAlertSettings(active, magasinId, TICKET_ALERTS.settingsId)
+  const orderSettings = useAlertSettings(active, magasinId, ORDER_ALERTS.settingsId)
   const openTickets = useOpenDocs(active, magasinId, 'tickets', 'status', ['Closed'])
+  const openOrders = useOpenDocs(active, magasinId, 'orders', 'statut', ORDER_CLOSED_STATUTS)
 
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
@@ -58,8 +62,9 @@ export default function AlertsWatcher() {
     if (!active) { setAlerts([]); return }
     setAlerts([
       ...(ticketSettings ? computeAlerts(openTickets, ticketSettings, TICKET_ALERTS, now) : []),
+      ...(orderSettings ? computeAlerts(openOrders, orderSettings, ORDER_ALERTS, now) : []),
     ])
-  }, [active, ticketSettings, openTickets, now, setAlerts])
+  }, [active, ticketSettings, orderSettings, openTickets, openOrders, now, setAlerts])
 
   return null
 }
