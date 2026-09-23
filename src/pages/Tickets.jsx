@@ -8,10 +8,12 @@ import { useShallow } from 'zustand/react/shallow'
 import { db } from '../lib/firebase'
 import { getNextTicketNumber } from '../lib/counters'
 import {
-  collection, addDoc, serverTimestamp, onSnapshot, query, orderBy, where, doc, getDoc, updateDoc, arrayUnion
+  collection, addDoc, serverTimestamp, onSnapshot, query, orderBy, where, doc, getDoc, runTransaction
 } from 'firebase/firestore'
 import { DragDropContext } from '@hello-pangea/dnd'
 import TicketModal from '../components/TicketModal'
+import CloseTicketDialog from '../components/CloseTicketDialog'
+import { withStatusChange } from '../lib/ticketHistory'
 import TicketStatsModal from '../components/TicketStatsModal'
 import AlertSettingsModal from '../components/AlertSettingsModal'
 import { TICKET_ALERTS, closedDateOf } from '../lib/ticketStats'
@@ -164,17 +166,28 @@ export default function Tickets() {
 
   async function moveTo(ticket, nextStatus) {
     if (!ticket || !STATUSES.includes(nextStatus)) return
-    await updateDoc(doc(db, 'tickets', ticket.id), {
-      status: nextStatus,
-      // Date de clôture : point de départ du délai d'anonymisation RGPD (lib/cleanup.js)
-      closedAt: nextStatus === 'Closed' ? serverTimestamp() : null,
-      updatedAt: serverTimestamp(),
-      // arrayUnion : n'écrase pas les entrées ajoutées entre-temps (commentaires, suivi…)
-      history: arrayUnion({
-        at: new Date().toISOString(), by: user.uid, action: 'status', note: `Statut → ${nextStatus}`
+    const ref = doc(db, 'tickets', ticket.id)
+    // Transaction : l'historique est relu au dernier moment (commentaires ajoutés entre-temps)
+    // et un changement corrigé en moins d'une minute ne laisse que le statut final (lib/ticketHistory.js)
+    await runTransaction(db, async tx => {
+      const snap = await tx.get(ref)
+      if (!snap.exists()) return
+      const current = snap.data()
+      if (current.status === nextStatus) return
+      tx.update(ref, {
+        status: nextStatus,
+        // Date de clôture : point de départ du délai d'anonymisation RGPD (lib/cleanup.js)
+        closedAt: nextStatus === 'Closed' ? serverTimestamp() : null,
+        updatedAt: serverTimestamp(),
+        history: withStatusChange(current.history, current.status, nextStatus, {
+          at: new Date().toISOString(), by: user.uid, action: 'status', note: `Statut → ${nextStatus}`,
+        }),
       })
     })
   }
+
+  // Clôture : passe obligatoirement par la fenêtre de récapitulatif (fiche atelier)
+  const [closingTicket, setClosingTicket] = useState(null)
 
 
   async function handleDragEnd(result) {
@@ -182,6 +195,7 @@ export default function Tickets() {
     if (!destination || source.droppableId === destination.droppableId) return
     const ticket = tickets.find(t => t.id === draggableId)
     if (!ticket) return
+    if (destination.droppableId === 'Closed') { setClosingTicket(ticket); return }
     try { await moveTo(ticket, destination.droppableId) }
     catch (e) { console.error('Drag error', e) }
   }
@@ -193,7 +207,7 @@ export default function Tickets() {
     if (filterPriority && t.priority !== filterPriority) return false
     if (filterAssigned && t.assignedTo !== filterAssigned) return false
     if (!needle) return true
-    const hay = [t.ticketNumber, t.trackingNumber, t.customerName, t.customerPhone, t.customerEmail, t.bikeType, t.bikeBrand, t.bikeModel, t.issueDescription]
+    const hay = [t.ticketNumber, t.trackingNumber, t.customerName, t.customerPhone, t.bikeType, t.bikeBrand, t.bikeModel, t.issueDescription]
       .filter(Boolean).join(' ').toLowerCase()
     // Les n° de suivi sont souvent recopiés avec ou sans espaces : on compare aussi sans
     return hay.includes(needle) || (compactNeedle.length > 0 && hay.replace(/\s+/g, '').includes(compactNeedle))
@@ -371,13 +385,23 @@ export default function Tickets() {
         <AlertSettingsModal ruleSet={TICKET_ALERTS} magasinId={effectiveMagasinId} magasinNom={magasinNom} items={tickets} onClose={() => setShowAlerts(false)} />
       )}
 
+      {closingTicket && (
+        <CloseTicketDialog
+          ticket={closingTicket}
+          onCancel={() => setClosingTicket(null)}
+          onConfirm={async () => {
+            try { await moveTo(closingTicket, 'Closed'); setClosingTicket(null) }
+            catch (e) { setError(e.message || 'Clôture impossible') }
+          }}
+        />
+      )}
+
       {activeTicket && (
         <TicketModal
           ticket={tickets.find(t => t.id === activeTicket.id) || activeTicket}
           role={profile?.role}
           onClose={() => setActiveTicket(null)}
           onDelete={() => setActiveTicket(null)}
-          onMoveTo={(status) => moveTo(activeTicket, status)}
         />
       )}
     </div>

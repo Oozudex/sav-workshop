@@ -23,7 +23,8 @@ function dueDateInfo(ymd) {
 
 export default function TicketCard({ ticket, onOpen, index }) {
   const urgent = ticket.priority === 'Urgent'
-  const due = dueDateInfo(ticket.dueDate)
+  // Ticket clôturé : la date prévue n'a plus d'intérêt (plus d'alerte « En retard »)
+  const due = ticket.status === 'Closed' ? null : dueDateInfo(ticket.dueDate)
   const dot = urgent ? 'bg-red-500' : (STATUS_DOT[ticket.status] || 'bg-gray-300')
 
   return (
