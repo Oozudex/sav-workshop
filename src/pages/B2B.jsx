@@ -5,7 +5,7 @@ import { GLOBAL_ROLES } from '../lib/constants'
 import { db } from '../lib/firebase'
 import {
   collection, onSnapshot, addDoc, updateDoc, deleteDoc,
-  doc, orderBy, query, serverTimestamp,
+  doc, getDoc, getDocs, orderBy, query, serverTimestamp, writeBatch,
 } from 'firebase/firestore'
 
 const COLOR = {
@@ -123,28 +123,49 @@ function CredentialsModal({ tool, magasins, userMagasinId, isGlobal, onClose }) 
     ? magasins.filter(m => tool.storeIds.includes(m.id))
     : magasins
 
-  const [creds, setCreds] = useState(() => {
-    const base = tool.credentials ?? {}
-    if (!isGlobal) return base
-    const obj = {}
-    filteredMagasins.forEach(m => {
-      obj[m.id] = { email: base[m.id]?.email ?? '', password: base[m.id]?.password ?? '' }
-    })
-    return obj
-  })
+  // Identifiants stockés dans b2b_tools/{id}/credentials/{magasinId} :
+  // les règles Firestore ne laissent un magasin lire que son propre document.
+  const [creds, setCreds] = useState({})
+  const [loadingCreds, setLoadingCreds] = useState(true)
   const [showPwd, setShowPwd] = useState({})
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    const credsCol = collection(db, 'b2b_tools', tool.id, 'credentials')
+    const load = isGlobal
+      ? getDocs(credsCol).then(snap => {
+          const base = Object.fromEntries(snap.docs.map(d => [d.id, d.data()]))
+          const obj = {}
+          filteredMagasins.forEach(m => {
+            obj[m.id] = { email: base[m.id]?.email ?? '', password: base[m.id]?.password ?? '' }
+          })
+          return obj
+        })
+      : getDoc(doc(credsCol, userMagasinId)).then(snap => (snap.exists() ? { [userMagasinId]: snap.data() } : {}))
+    load.then(setCreds).catch(() => setCreds({})).finally(() => setLoadingCreds(false))
+    // Chargé une seule fois à l'ouverture pour ne pas écraser une saisie en cours
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tool.id, isGlobal, userMagasinId])
 
   function togglePwd(id) { setShowPwd(p => ({ ...p, [id]: !p[id] })) }
 
   async function handleSave() {
     setSaving(true)
     try {
-      const cleaned = {}
-      Object.entries(creds).forEach(([k, v]) => {
-        if (v.email || v.password) cleaned[k] = v
+      const batch = writeBatch(db)
+      const withCreds = []
+      Object.entries(creds).forEach(([magId, v]) => {
+        const ref = doc(db, 'b2b_tools', tool.id, 'credentials', magId)
+        if (v.email || v.password) {
+          batch.set(ref, { email: v.email || '', password: v.password || '', updatedAt: serverTimestamp() })
+          withCreds.push(magId)
+        } else {
+          batch.delete(ref)
+        }
       })
-      await updateDoc(doc(db, 'b2b_tools', tool.id), { credentials: cleaned, updatedAt: serverTimestamp() })
+      // Liste non sensible des magasins configurés (pour afficher le cadenas)
+      batch.update(doc(db, 'b2b_tools', tool.id), { credentialStoreIds: withCreds, updatedAt: serverTimestamp() })
+      await batch.commit()
       onClose()
     } finally { setSaving(false) }
   }
@@ -165,7 +186,8 @@ function CredentialsModal({ tool, magasins, userMagasinId, isGlobal, onClose }) 
             {filteredMagasins.length === 0 && (
               <p className="text-sm text-gray-400 text-center py-4">Aucun magasin sélectionné pour ce B2B</p>
             )}
-            {filteredMagasins.map(m => (
+            {loadingCreds && <p className="text-sm text-gray-400 text-center py-4">Chargement…</p>}
+            {!loadingCreds && filteredMagasins.map(m => (
               <div key={m.id} className="space-y-2">
                 <p className="text-xs font-semibold text-gray-700 dark:text-neutral-300 uppercase tracking-wide">{m.nom}</p>
                 <div className="grid grid-cols-2 gap-2">
@@ -199,7 +221,7 @@ function CredentialsModal({ tool, magasins, userMagasinId, isGlobal, onClose }) 
             <button onClick={onClose} className="h-8 px-3 rounded-lg text-xs font-medium border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors">
               Annuler
             </button>
-            <button onClick={handleSave} disabled={saving}
+            <button onClick={handleSave} disabled={saving || loadingCreds}
               className="h-8 px-4 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100 disabled:opacity-50 transition-colors">
               {saving ? 'Enregistrement…' : 'Enregistrer'}
             </button>
@@ -210,7 +232,7 @@ function CredentialsModal({ tool, magasins, userMagasinId, isGlobal, onClose }) 
   }
 
   // Store view — read-only
-  const sc = tool.credentials?.[userMagasinId]
+  const sc = creds[userMagasinId]
   return (
     <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-sm rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl">
@@ -222,7 +244,9 @@ function CredentialsModal({ tool, magasins, userMagasinId, isGlobal, onClose }) 
           <CloseBtn onClick={onClose} />
         </div>
         <div className="p-5 space-y-4">
-          {!sc ? (
+          {loadingCreds ? (
+            <p className="text-sm text-gray-400 dark:text-neutral-500 text-center py-2">Chargement…</p>
+          ) : !sc ? (
             <p className="text-sm text-gray-400 dark:text-neutral-500 text-center py-2">
               Aucun identifiant configuré pour votre magasin.
             </p>
@@ -266,7 +290,7 @@ function ToolCard({ t, featured, canEdit, onEdit, userMagasinId, isGlobal, magas
   const [showCreds, setShowCreds] = useState(false)
 
   const hasAccess    = isGlobal || !t.storeIds?.length || (userMagasinId && t.storeIds.includes(userMagasinId))
-  const showLock     = isGlobal || (!isGlobal && userMagasinId && t.credentials?.[userMagasinId])
+  const showLock     = isGlobal || (userMagasinId && t.credentialStoreIds?.includes(userMagasinId))
   const accessStores = !hasAccess ? magasins.filter(m => t.storeIds?.includes(m.id)) : []
 
   // Tailles adaptées selon le type de carte pour correspondre à la DA du site
