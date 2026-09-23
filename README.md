@@ -79,6 +79,15 @@ tests/          tests des règles Firestore
 
 ## CI
 
-GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) exécute à chaque push et PR :
-lint, build, audit des dépendances et tests des règles Firestore.
-Dependabot propose chaque semaine les mises à jour de dépendances.
+GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) exécute à chaque push sur `main`
+(ou manuellement depuis l'onglet Actions) : lint, build, audit des dépendances et tests des règles Firestore.
+
+## Mises à jour des dépendances
+
+```bash
+npm outdated          # ce qui peut être mis à jour
+npm update            # versions mineures et correctifs
+npm audit             # vulnérabilités connues
+```
+
+Les versions majeures de React (19), Tailwind (4) et ESLint (10) demandent une migration dédiée.
