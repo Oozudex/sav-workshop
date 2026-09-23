@@ -82,7 +82,7 @@ export default function Tickets() {
 
   // Magasin effectif : vendeur/directeurmag → leur magasin ; acheteur/directeurgen → sélecteur
   const effectiveMagasinId = isGlobal ? selectedId : profile?.magasinId
-  const staff = useStaff(effectiveMagasinId)
+  const staff = useStaff(effectiveMagasinId, 'velo')
 
   const [searchParams] = useSearchParams()
   const location = useLocation()
@@ -306,7 +306,6 @@ export default function Tickets() {
           onClose={() => setActiveTicket(null)}
           onDelete={removeTicket}
           onMoveTo={(status) => moveTo(activeTicket, status)}
-          users={staff}
         />
       )}
     </div>

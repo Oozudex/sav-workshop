@@ -69,7 +69,7 @@ export default function Orders() {
   const canDelete = CAN_DELETE_ROLES.includes(profile?.role)
 
   const effectiveMagasinId = isGlobal ? selectedId : profile?.magasinId
-  const staff = useStaff(effectiveMagasinId)
+  const staff = useStaff(effectiveMagasinId, 'velo')
 
   const [orders, setOrders]               = useState([])
   const [q, setQ]                         = useState('')

@@ -9,8 +9,9 @@ import {
     deleteDoc, getDocs, writeBatch
 } from 'firebase/firestore'
 import { BIKE_TYPES, PRIORITIES, CONTACT_PREFS, STATUSES, STATUS_LABELS } from '../lib/constants'
+import { useStaff } from '../lib/useStaff'
 
-export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo, users = [] }) {
+export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo }) {
     const overlayRef = useRef(null)
     const urgent = ticket.priority === 'Urgent'
     const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
@@ -18,6 +19,9 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo,
     const myRole = role || profile?.role
     const canAdmin = myRole === 'admin' || myRole === 'buyer'
     const canEdit = ['admin', 'buyer', 'staff', 'mechanic'].includes(myRole)
+
+    // Seuls les employés du rayon vélo du magasin du ticket utilisent l'outil SAV
+    const users = useStaff(ticket.magasinId, 'velo')
 
     // --- Edition
     const [editing, setEditing] = useState(false)
