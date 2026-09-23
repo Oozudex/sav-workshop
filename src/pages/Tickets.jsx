@@ -8,11 +8,11 @@ import { useShallow } from 'zustand/react/shallow'
 import { db } from '../lib/firebase'
 import { getNextTicketNumber } from '../lib/counters'
 import {
-  collection, addDoc, serverTimestamp, onSnapshot, query, orderBy, where, doc, updateDoc, deleteDoc
+  collection, addDoc, serverTimestamp, onSnapshot, query, orderBy, where, doc, updateDoc, arrayUnion
 } from 'firebase/firestore'
 import { DragDropContext } from '@hello-pangea/dnd'
 import TicketModal from '../components/TicketModal'
-import { STATUSES, GLOBAL_ROLES, CAN_DELETE_ROLES } from '../lib/constants'
+import { STATUSES, GLOBAL_ROLES } from '../lib/constants'
 import { useStaff } from '../lib/useStaff'
 import { useMagasin } from '../store/useMagasin'
 
@@ -78,7 +78,6 @@ export default function Tickets() {
   const { selectedId } = useMagasin()
 
   const isGlobal  = GLOBAL_ROLES.includes(profile?.role)
-  const canDelete = CAN_DELETE_ROLES.includes(profile?.role)
 
   // Magasin effectif : vendeur/directeurmag → leur magasin ; acheteur/directeurgen → sélecteur
   const effectiveMagasinId = isGlobal ? selectedId : profile?.magasinId
@@ -140,24 +139,13 @@ export default function Tickets() {
     await updateDoc(doc(db, 'tickets', ticket.id), {
       status: nextStatus,
       updatedAt: serverTimestamp(),
-      history: [...(ticket.history || []), {
+      // arrayUnion : n'écrase pas les entrées ajoutées entre-temps (commentaires, suivi…)
+      history: arrayUnion({
         at: new Date().toISOString(), by: user.uid, action: 'status', note: `Statut → ${nextStatus}`
-      }]
+      })
     })
   }
 
-  async function removeTicket() {
-    if (!activeTicket || !canDelete) return
-    const ok = window.confirm(`Supprimer définitivement le ticket #${activeTicket.ticketNumber || activeTicket.id} ?`)
-    if (!ok) return
-    try {
-      await deleteDoc(doc(db, 'tickets', activeTicket.id))
-      setActiveTicket(null)
-    } catch (e) {
-      console.error('DELETE ERROR', e)
-      setError(e.message || 'Suppression impossible')
-    }
-  }
 
   async function handleDragEnd(result) {
     const { source, destination, draggableId } = result
@@ -301,10 +289,10 @@ export default function Tickets() {
 
       {activeTicket && (
         <TicketModal
-          ticket={activeTicket}
+          ticket={tickets.find(t => t.id === activeTicket.id) || activeTicket}
           role={profile?.role}
           onClose={() => setActiveTicket(null)}
-          onDelete={removeTicket}
+          onDelete={() => setActiveTicket(null)}
           onMoveTo={(status) => moveTo(activeTicket, status)}
         />
       )}

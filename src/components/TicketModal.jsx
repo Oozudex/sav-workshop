@@ -8,7 +8,7 @@ import {
     serverTimestamp, doc, updateDoc, arrayUnion,
     deleteDoc, getDocs, writeBatch
 } from 'firebase/firestore'
-import { BIKE_TYPES, PRIORITIES, CONTACT_PREFS, STATUSES, STATUS_LABELS } from '../lib/constants'
+import { BIKE_TYPES, PRIORITIES, CONTACT_PREFS, STATUSES, STATUS_LABELS, CAN_DELETE_ROLES } from '../lib/constants'
 import { useStaff } from '../lib/useStaff'
 
 export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo }) {
@@ -17,8 +17,9 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo 
     const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
 
     const myRole = role || profile?.role
-    const canAdmin = myRole === 'admin' || myRole === 'buyer'
-    const canEdit = ['admin', 'buyer', 'staff', 'mechanic'].includes(myRole)
+    // Les règles Firestore limitent déjà l'édition aux comptes du magasin du ticket
+    const canEdit = !!myRole
+    const canAdmin = CAN_DELETE_ROLES.includes(myRole)
 
     // Seuls les employés du rayon vélo du magasin du ticket utilisent l'outil SAV
     const users = useStaff(ticket.magasinId, 'velo')
@@ -137,7 +138,7 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo 
         if (!canEdit) return
         setSaving(true)
         try {
-            const after = diff(makeDraft(ticket), sanitizeDraft(draft))
+            const after = diff(sanitizeDraft(makeDraft(ticket)), sanitizeDraft(draft))
             if (Object.keys(after).length === 0) { setEditing(false); setSaving(false); return }
             const FIELD_LABELS = {
                 customerName: 'client', customerPhone: 'téléphone', customerEmail: 'email',
@@ -567,7 +568,7 @@ function sanitizeDraft(d) {
 function diff(base, compare) {
     const changed = {}
     for (const k of Object.keys(base)) {
-        if (JSON.stringify(base[k]) !== JSON.stringify(compare[k])) changed[k] = base[k]
+        if (JSON.stringify(base[k]) !== JSON.stringify(compare[k])) changed[k] = compare[k]
     }
     return changed
 }
