@@ -37,10 +37,11 @@ async function createAuthAccount(email, displayName) {
 }
 
 export default function StoreSettings() {
-  const { user, profile } = useAuth(s => ({ user: s.user, profile: s.profile }))
-  const isGlobal       = GLOBAL_ROLES.includes(profile?.role)
-  const isDirecteurGen = profile?.role === 'directeurgen'
-  const canManageRayons = isGlobal || profile?.role === 'directeurmag'
+  const { user, profile, refreshProfile } = useAuth(s => ({ user: s.user, profile: s.profile, refreshProfile: s.refreshProfile }))
+  const isGlobal        = GLOBAL_ROLES.includes(profile?.role)
+  const isDirecteurGen  = profile?.role === 'directeurgen'
+  const isDirecteurMag  = profile?.role === 'directeurmag'
+  const canManageRayons = isGlobal || isDirecteurMag
   const { selectedId: globalSelectedId, setSelectedId: setGlobalSelectedId } = useMagasin()
 
   const magasinId = isGlobal ? globalSelectedId : profile?.magasinId
@@ -211,7 +212,12 @@ export default function StoreSettings() {
         createdAt: serverTimestamp(),
         createdBy: user.uid,
       })
-      setGlobalSelectedId(ref.id)
+      if (isDirecteurMag) {
+        await updateDoc(doc(db, 'users', user.uid), { magasinId: ref.id })
+        await refreshProfile(user.uid)
+      } else {
+        setGlobalSelectedId(ref.id)
+      }
       setNewMagasinNom('')
       setShowNewMagasin(false)
     } catch (err) {
@@ -739,10 +745,28 @@ export default function StoreSettings() {
           )}
 
           {(!isDirecteurGen || adminTab === 'magasins') && (!magasinId ? (
-            <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-4 py-8 text-center">
-              <p className="text-xs text-gray-400 dark:text-neutral-500">
-                {isGlobal ? 'Crée ou sélectionne un magasin.' : 'Aucun magasin associé à votre compte.'}
-              </p>
+            <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-6 py-8">
+              {isDirecteurMag ? (
+                <div className="space-y-4">
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">Créer votre magasin</p>
+                    <p className="text-xs text-gray-400 dark:text-neutral-500 mt-1">Aucun magasin n'est encore lié à votre compte. Créez-en un pour commencer.</p>
+                  </div>
+                  {newMagasinErr && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2 dark:text-red-300 dark:bg-red-900/20 dark:border-red-500/30">{newMagasinErr}</p>}
+                  <form onSubmit={createMagasin} className="flex gap-2 max-w-sm mx-auto">
+                    <input className="Input h-9 text-xs flex-1" placeholder="Nom du magasin"
+                      value={newMagasinNom} onChange={e => setNewMagasinNom(e.target.value)} autoFocus />
+                    <button type="submit" disabled={newMagasinLoading || !newMagasinNom.trim()}
+                      className="h-9 px-4 rounded-lg text-xs font-semibold disabled:opacity-50 bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100 shrink-0">
+                      {newMagasinLoading ? 'Création…' : 'Créer'}
+                    </button>
+                  </form>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 dark:text-neutral-500 text-center">
+                  {isGlobal ? 'Crée ou sélectionne un magasin.' : 'Aucun magasin associé à votre compte.'}
+                </p>
+              )}
             </div>
           ) : (
             <>

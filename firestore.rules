@@ -47,7 +47,12 @@ service cloud.firestore {
     /* ── Utilisateurs ────────────────────────────────────────────────────── */
     match /users/{uid} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isSignedIn() && isGlobal();
+      allow create, delete: if isSignedIn() && isGlobal();
+      allow update: if isSignedIn() && (
+        isGlobal() ||
+        (uid == request.auth.uid && isDirMag() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['magasinId']))
+      );
     }
 
     /* ── Compteurs ───────────────────────────────────────────────────────── */
@@ -59,7 +64,8 @@ service cloud.firestore {
     /* ── Magasins ─────────────────────────────────────────────────────────── */
     match /magasins/{magId} {
       allow read: if isSignedIn();
-      allow create, delete: if isSignedIn() && isGlobal();
+      allow create: if isSignedIn() && (isGlobal() || (isDirMag() && magasinId() == null));
+      allow delete: if isSignedIn() && isGlobal();
       allow update: if isSignedIn() && (isGlobal() || (isDirMag() && magasinId() == magId));
 
       /* Rayons */

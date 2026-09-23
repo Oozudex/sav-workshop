@@ -18,6 +18,10 @@ export const useAuth = create((set) => ({
       }
     })
   },
+  async refreshProfile(uid) {
+    const snap = await getDoc(doc(db, 'users', uid))
+    if (snap.exists()) set({ profile: snap.data() })
+  },
   async login(email, password) {
     await signInWithEmailAndPassword(auth, email, password)
   },
