@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar'
 import KanbanBoard from '../components/KanbanBoard'
 import TicketForm from '../components/TicketForm'
 import { useAuth } from '../store/useAuth'
+import { useShallow } from 'zustand/react/shallow'
 import { db } from '../lib/firebase'
 import { getNextTicketNumber } from '../lib/counters'
 import {
@@ -73,7 +74,7 @@ function EasterEgg({ onClose }) {
 }
 
 export default function Tickets() {
-  const { user, profile } = useAuth((s) => ({ user: s.user, profile: s.profile }))
+  const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
   const { selectedId } = useMagasin()
 
   const isGlobal  = GLOBAL_ROLES.includes(profile?.role)
