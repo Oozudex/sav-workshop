@@ -6,7 +6,7 @@ import {
   addDoc, collection, doc, onSnapshot,
   orderBy, query, where, serverTimestamp, updateDoc, deleteDoc,
 } from 'firebase/firestore'
-import { getNextOrderNumber } from '../lib/getNextOrderNumber'
+import { getNextOrderNumber } from '../lib/counters'
 import { GLOBAL_ROLES, CAN_DELETE_ROLES } from '../lib/constants'
 import { useMagasin } from '../store/useMagasin'
 import { useStaff } from '../lib/useStaff'

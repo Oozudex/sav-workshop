@@ -426,16 +426,19 @@ function ImportModal({ opId, onClose }) {
     if (!rows?.built?.length) return
     setImporting(true)
     try {
-      const batch = writeBatch(db)
-      rows.built.forEach((r, i) => {
-        const { _exclu, _hasAnomaly, _noStock, ...data } = r
-        if (_exclu?.type === 'override') data.prixFort = _exclu.prixFortExclu
-        if (_exclu?.type === 'cheaper')  data.excluTeamCheaper = true
-        data.passExcluTeam = !!excluChoices[i]
-        const ref = doc(collection(db, 'op_commerciales', opId, 'produits'))
-        batch.set(ref, { ...data, createdAt: serverTimestamp() })
-      })
-      await batch.commit()
+      // Un batch Firestore est limité à 500 écritures
+      for (let start = 0; start < rows.built.length; start += 450) {
+        const batch = writeBatch(db)
+        rows.built.slice(start, start + 450).forEach((r, offset) => {
+          const { _exclu, _hasAnomaly, _noStock, ...data } = r
+          if (_exclu?.type === 'override') data.prixFort = _exclu.prixFortExclu
+          if (_exclu?.type === 'cheaper')  data.excluTeamCheaper = true
+          data.passExcluTeam = !!excluChoices[start + offset]
+          const ref = doc(collection(db, 'op_commerciales', opId, 'produits'))
+          batch.set(ref, { ...data, createdAt: serverTimestamp() })
+        })
+        await batch.commit()
+      }
       onClose()
     } finally { setImporting(false) }
   }

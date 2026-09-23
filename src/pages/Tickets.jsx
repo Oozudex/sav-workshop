@@ -5,7 +5,7 @@ import KanbanBoard from '../components/KanbanBoard'
 import TicketForm from '../components/TicketForm'
 import { useAuth } from '../store/useAuth'
 import { db } from '../lib/firebase'
-import { getNextTicketNumber } from '../lib/getNextTicketNumber'
+import { getNextTicketNumber } from '../lib/counters'
 import {
   collection, addDoc, serverTimestamp, onSnapshot, query, orderBy, where, doc, updateDoc, deleteDoc
 } from 'firebase/firestore'

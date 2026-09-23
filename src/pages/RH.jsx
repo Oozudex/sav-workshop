@@ -205,9 +205,9 @@ function TamigoImportSection({ magasinId, userId, userRayonType }) {
         )
         const snap = await getDocs(q)
         const toDelete = snap.docs.filter(d => preview.dates.includes(d.data().date))
-        if (toDelete.length > 0) {
+        for (let i = 0; i < toDelete.length; i += 499) {
           const delBatch = writeBatch(db)
-          toDelete.forEach(d => delBatch.delete(d.ref))
+          toDelete.slice(i, i + 499).forEach(d => delBatch.delete(d.ref))
           await delBatch.commit()
         }
       }
