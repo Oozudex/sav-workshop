@@ -87,7 +87,7 @@ export default function Tickets() {
   const location = useLocation()
 
   const [showForm, setShowForm]             = useState(!!location.state?.openForm)
-  const [formInitialValues, setFormInitialValues] = useState(location.state?.initialValues || {})
+  const [formInitialValues] = useState(location.state?.initialValues || {})
   const [tickets, setTickets]               = useState([])
   const [activeTicket, setActiveTicket]     = useState(null)
   const [error, setError]                   = useState('')

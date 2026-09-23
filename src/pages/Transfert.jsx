@@ -349,7 +349,6 @@ function CompletedTransfertRow({ t }) {
 
 /* ── RealisesTab ──────────────────────────────────────────────────────────── */
 function RealisesTab({ completed }) {
-  const now = new Date()
   const [search, setSearch] = useState('')
   const [filterMonth, setFilterMonth] = useState('') // '' = tous, 'YYYY-MM'
 

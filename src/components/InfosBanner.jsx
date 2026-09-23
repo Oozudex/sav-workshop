@@ -7,7 +7,7 @@ import {
   collection, query, where, onSnapshot,
   addDoc, updateDoc, deleteDoc, doc, serverTimestamp,
 } from 'firebase/firestore'
-import { GLOBAL_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
+import { RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
 import { safeUrl } from '../lib/security'
 
 function getTodayStr() {

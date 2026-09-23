@@ -372,7 +372,6 @@ export default function Home() {
     return true
   })
 
-  const firstName = profile?.displayName?.split(' ')[0] || ''
   const [calendarExpanded, setCalendarExpanded] = useState(false)
 
   return (

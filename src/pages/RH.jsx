@@ -8,7 +8,7 @@ import {
   collection, query, where, getDocs, writeBatch, doc, serverTimestamp,
 } from 'firebase/firestore'
 import { GLOBAL_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
-import { parseTamigoExcel, ABSENCE_LABELS } from '../lib/parseTamigo'
+import { parseTamigoExcel } from '../lib/parseTamigo'
 
 const IMPORT_ROLES = ['directeurmag', ...GLOBAL_ROLES, ...RAYON_TYPES]
 

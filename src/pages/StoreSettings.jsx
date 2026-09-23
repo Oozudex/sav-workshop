@@ -372,8 +372,6 @@ export default function StoreSettings() {
 
   const selectedRayon = rayons.find(r => r.id === selectedRayonId)
 
-  const selectedMagasinNom = magasins.find(m => m.id === globalSelectedId)?.nom
-
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
       <Navbar />

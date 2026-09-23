@@ -5,7 +5,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useMagasin } from '../store/useMagasin'
 import { db } from '../lib/firebase'
 import {
-  collection, onSnapshot, query, where, orderBy, collectionGroup,
+  collection, onSnapshot, query, where, orderBy,
   addDoc, updateDoc, deleteDoc, doc, serverTimestamp, increment, setDoc, getDocs,
 } from 'firebase/firestore'
 import { GLOBAL_ROLES } from '../lib/constants'
