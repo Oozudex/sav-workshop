@@ -37,6 +37,11 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo 
     const [authorError, setAuthorError] = useState(false)
     const [sendingComment, setSendingComment] = useState(false)
 
+    // --- N° de suivi SAV (fournisseur)
+    const [tracking, setTracking] = useState(ticket.trackingNumber || '')
+    const [savingTracking, setSavingTracking] = useState(false)
+    useEffect(() => { setTracking(ticket.trackingNumber || '') }, [ticket?.id, ticket?.trackingNumber])
+
     // --- Suppression
     const [deleting, setDeleting] = useState(false)
 
@@ -64,6 +69,11 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo 
     }, [ticket?.id])
 
     // --- Actions
+    function copyTracking() {
+        navigator.clipboard.writeText(ticket.trackingNumber)
+        setToast('Numéro de suivi copié ✓')
+    }
+
     function copyBikeInfo() {
         const lines = []
         const bike = [ticket.bikeType, ticket.bikeBrand, ticket.bikeModel].filter(Boolean).join(' ')
@@ -133,6 +143,31 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo 
     }
 
     function onChange(k, v) { setDraft(d => ({ ...d, [k]: v })) }
+
+    async function saveTracking(e) {
+        e?.preventDefault?.()
+        const value = tracking.trim()
+        if (value === (ticket.trackingNumber || '')) return
+        setSavingTracking(true)
+        try {
+            await updateDoc(doc(db, 'tickets', ticket.id), {
+                trackingNumber: value || null,
+                updatedAt: serverTimestamp(),
+                history: arrayUnion({
+                    at: new Date().toISOString(),
+                    by: profile?.displayName || user?.email || '—',
+                    action: 'suivi',
+                    note: value ? `N° de suivi SAV : ${value}` : 'N° de suivi SAV retiré',
+                }),
+            })
+            setToast(value ? 'Numéro de suivi enregistré ✓' : 'Numéro de suivi retiré ✓')
+        } catch (err) {
+            console.error('TRACKING ERROR', err)
+            alert("Impossible d'enregistrer le numéro de suivi : " + (err.message || 'inconnu'))
+        } finally {
+            setSavingTracking(false)
+        }
+    }
 
     async function saveEdits() {
         if (!canEdit) return
@@ -318,6 +353,28 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onMoveTo 
 
                     {/* ── Colonne droite ── */}
                     <div className="md:col-span-5 space-y-4">
+
+                        <Card title="N° de suivi SAV" action={ticket.trackingNumber && <CopyBtn onClick={copyTracking} label="Copier" />}>
+                            <form onSubmit={saveTracking} className="flex gap-2">
+                                <input
+                                    className="Input h-9 flex-1 font-mono"
+                                    value={tracking}
+                                    onChange={e => setTracking(e.target.value)}
+                                    placeholder="Numéro donné par le fournisseur"
+                                    disabled={!canEdit}
+                                />
+                                <Btn
+                                    onClick={saveTracking}
+                                    primary
+                                    disabled={!canEdit || savingTracking || tracking.trim() === (ticket.trackingNumber || '')}
+                                >
+                                    {savingTracking ? '…' : 'Enregistrer'}
+                                </Btn>
+                            </form>
+                            <p className="text-[11px] text-gray-400 dark:text-neutral-500 mt-1.5">
+                                Permet de retrouver le ticket depuis la recherche à la réception d'un colis.
+                            </p>
+                        </Card>
 
                         <Card title="Suivi">
                             {/* Statut */}

@@ -96,6 +96,7 @@ export default function Tickets() {
   const [filterAssigned, setFilterAssigned] = useState('')
 
   const needle = q.trim().toLowerCase()
+  const compactNeedle = needle.replace(/\s+/g, '')
 
   useEffect(() => {
     // Attendre que le profil soit chargé
@@ -160,9 +161,10 @@ export default function Tickets() {
     if (filterPriority && t.priority !== filterPriority) return false
     if (filterAssigned && t.assignedTo !== filterAssigned) return false
     if (!needle) return true
-    const hay = [t.ticketNumber, t.customerName, t.customerPhone, t.customerEmail, t.bikeType, t.bikeBrand, t.bikeModel, t.issueDescription]
+    const hay = [t.ticketNumber, t.trackingNumber, t.customerName, t.customerPhone, t.customerEmail, t.bikeType, t.bikeBrand, t.bikeModel, t.issueDescription]
       .filter(Boolean).join(' ').toLowerCase()
-    return hay.includes(needle)
+    // Les n° de suivi sont souvent recopiés avec ou sans espaces : on compare aussi sans
+    return hay.includes(needle) || (compactNeedle.length > 0 && hay.replace(/\s+/g, '').includes(compactNeedle))
   })
 
   const assignedOptions = [...new Set(tickets.map(t => t.assignedTo).filter(Boolean))]
@@ -201,8 +203,8 @@ export default function Tickets() {
               <input
                 value={q}
                 onChange={e => setQ(e.target.value)}
-                placeholder="Rechercher…"
-                className="h-8 pl-8 pr-3 w-52 rounded-lg border text-sm
+                placeholder="Rechercher, n° de suivi…"
+                className="h-8 pl-8 pr-3 w-60 rounded-lg border text-sm
                            bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400
                            focus:outline-none focus:ring-2 focus:ring-black/20 focus:border-gray-400
                            dark:bg-neutral-800 dark:border-neutral-700 dark:text-neutral-100 dark:placeholder-neutral-500

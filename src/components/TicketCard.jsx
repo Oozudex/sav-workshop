@@ -69,6 +69,13 @@ export default function TicketCard({ ticket, onOpen, index }) {
               </p>
             )}
 
+            {/* N° de suivi SAV fournisseur */}
+            {ticket.trackingNumber && (
+              <p className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 mt-1 truncate" title="N° de suivi SAV">
+                📦 {ticket.trackingNumber}
+              </p>
+            )}
+
             {/* Issue description */}
             {ticket.issueDescription && (
               <p className="text-xs text-gray-400 dark:text-neutral-500 line-clamp-2 mt-2 leading-relaxed">
