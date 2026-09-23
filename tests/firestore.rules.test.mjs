@@ -167,6 +167,19 @@ describe('calendar_events', () => {
   })
 })
 
+describe("seuils d'alerte", () => {
+  const settings = { rules: { maxOpen: { enabled: true, threshold: 10 } } }
+  it('le directeur règle les seuils de son magasin uniquement', async () => {
+    await assertSucceeds(setDoc(doc(as('dirmagA'), 'magasins', 'A', 'alert_settings', 'tickets'), settings))
+    await assertFails(setDoc(doc(as('dirmagA'), 'magasins', 'B', 'alert_settings', 'tickets'), settings))
+  })
+  it('un compte rayon peut lire mais pas modifier', async () => {
+    await assertSucceeds(getDoc(doc(as('veloA'), 'magasins', 'A', 'alert_settings', 'tickets')))
+    await assertFails(setDoc(doc(as('veloA'), 'magasins', 'A', 'alert_settings', 'tickets'), settings))
+    await assertFails(getDoc(doc(as('veloB'), 'magasins', 'A', 'alert_settings', 'tickets')))
+  })
+})
+
 describe('flocage / transferts', () => {
   it("le stock flocage d'un autre magasin est protégé", async () => {
     await assertFails(getDoc(doc(as('chaussureA'), 'flocage_stock', 'B')))

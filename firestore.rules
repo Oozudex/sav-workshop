@@ -130,6 +130,16 @@ service cloud.firestore {
         }
       }
 
+      /* Seuils d'alerte du directeur (ex. tickets SAV) */
+      match /alert_settings/{settingId} {
+        allow read: if isSignedIn() && (
+          isGlobal() || (isLocalUser() && magasinId() == magId)
+        );
+        allow write: if isSignedIn() && (
+          isGlobal() || (isDirMag() && magasinId() == magId)
+        );
+      }
+
       /* Paramètres calendrier par rayon */
       match /rayon_settings/{rayonType} {
         allow read: if isSignedIn() && (

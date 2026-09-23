@@ -7,6 +7,7 @@ import { useMagasin } from '../store/useMagasin'
 import { db } from '../lib/firebase'
 import { collection, doc, onSnapshot, orderBy, query } from 'firebase/firestore'
 import { GLOBAL_ROLES } from '../lib/constants'
+import AlertsBell from './AlertsBell'
 
 const PAGE_TITLES = {
   '/tickets': 'Réparation / SAV',
@@ -146,6 +147,9 @@ export default function Navbar() {
               {magasinNom || profile?.magasinId}
             </span>
           )}
+
+          {/* Alertes atelier (seuils du directeur de magasin) */}
+          {profile?.role === 'directeurmag' && <AlertsBell />}
 
           {/* Theme toggle */}
           <button

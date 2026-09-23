@@ -13,6 +13,8 @@ import {
 import { DragDropContext } from '@hello-pangea/dnd'
 import TicketModal from '../components/TicketModal'
 import TicketStatsModal from '../components/TicketStatsModal'
+import TicketAlertsModal from '../components/TicketAlertsModal'
+import { useTicketAlerts } from '../store/useTicketAlerts'
 import { STATUSES, GLOBAL_ROLES } from '../lib/constants'
 import { useStaff } from '../lib/useStaff'
 import { useMagasin } from '../store/useMagasin'
@@ -84,12 +86,13 @@ export default function Tickets() {
   const effectiveMagasinId = isGlobal ? selectedId : profile?.magasinId
   const staff = useStaff(effectiveMagasinId, 'velo')
 
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const location = useLocation()
 
-  // Statistiques : réservées aux directeurs
+  // Statistiques et seuils d'alerte : réservés aux directeurs
   const canManage = ['directeurmag', 'directeurgen'].includes(profile?.role)
   const [showStats, setShowStats]   = useState(false)
+  const [showAlerts, setShowAlerts] = useState(false)
   const [magasinNom, setMagasinNom] = useState('')
 
   useEffect(() => {
@@ -98,6 +101,16 @@ export default function Tickets() {
       .then(snap => setMagasinNom(snap.exists() ? snap.data().nom : ''))
       .catch(() => setMagasinNom(''))
   }, [canManage, effectiveMagasinId])
+
+  // Filtre ouvert depuis la cloche : ?alerte=<clé> n'affiche que les tickets concernés
+  const alerts = useTicketAlerts(s => s.alerts)
+  const alertKey = searchParams.get('alerte')
+  const alertFilter = alertKey ? alerts.find(a => a.key === alertKey) : null
+  function clearAlertFilter() {
+    const next = new URLSearchParams(searchParams)
+    next.delete('alerte')
+    setSearchParams(next, { replace: true })
+  }
 
   const [showForm, setShowForm]             = useState(!!location.state?.openForm)
   const [formInitialValues] = useState(location.state?.initialValues || {})
@@ -174,6 +187,7 @@ export default function Tickets() {
 
   const filtered = tickets.filter(t => {
     if (t.anonymizedAt) return false
+    if (alertKey && !alertFilter?.ticketIds.includes(t.id)) return false
     if (filterPriority && t.priority !== filterPriority) return false
     if (filterAssigned && t.assignedTo !== filterAssigned) return false
     if (!needle) return true
@@ -273,18 +287,48 @@ export default function Tickets() {
               </button>
             )}
 
+            {/* Filtre d'alerte (depuis la cloche) */}
+            {alertKey && (
+              <button
+                onClick={clearAlertFilter}
+                title="Retirer le filtre"
+                className="h-8 px-2.5 rounded-lg text-xs font-medium border transition-colors
+                           text-red-700 border-red-200 bg-red-50 hover:bg-red-100
+                           dark:text-red-300 dark:border-red-500/30 dark:bg-red-500/10 dark:hover:bg-red-500/20"
+              >
+                ⚠ {alertFilter ? alertFilter.label : 'Alerte résolue'} ✕
+              </button>
+            )}
+
             <div className="flex-1" />
 
-            {/* Directeurs : statistiques */}
+            {/* Directeurs : statistiques et seuils d'alerte */}
             {canManage && (
-              <button
-                onClick={() => setShowStats(true)}
-                className="h-8 px-3 rounded-lg border text-xs font-semibold transition-colors
-                           text-gray-700 border-gray-200 hover:bg-gray-50
-                           dark:text-neutral-200 dark:border-neutral-700 dark:hover:bg-neutral-800"
-              >
-                Statistiques
-              </button>
+              <>
+                <button
+                  onClick={() => setShowStats(true)}
+                  className="h-8 px-3 rounded-lg border text-xs font-semibold transition-colors
+                             text-gray-700 border-gray-200 hover:bg-gray-50
+                             dark:text-neutral-200 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                >
+                  Statistiques
+                </button>
+                <button
+                  onClick={() => setShowAlerts(true)}
+                  disabled={!effectiveMagasinId}
+                  title={effectiveMagasinId ? "Seuils d'alerte de l'atelier" : 'Sélectionne un magasin pour régler ses alertes'}
+                  className="relative h-8 px-3 rounded-lg border text-xs font-semibold transition-colors disabled:opacity-50
+                             text-gray-700 border-gray-200 hover:bg-gray-50
+                             dark:text-neutral-200 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                >
+                  Alertes
+                  {profile?.role === 'directeurmag' && alerts.length > 0 && (
+                    <span className="ml-1.5 inline-grid place-items-center min-w-4 h-4 px-1 rounded-full bg-red-600 text-white text-[10px] font-bold">
+                      {alerts.length}
+                    </span>
+                  )}
+                </button>
+              </>
             )}
 
             {/* New */}
@@ -319,6 +363,10 @@ export default function Tickets() {
 
       {showStats && (
         <TicketStatsModal tickets={tickets} magasinNom={magasinNom} onClose={() => setShowStats(false)} />
+      )}
+
+      {showAlerts && effectiveMagasinId && (
+        <TicketAlertsModal magasinId={effectiveMagasinId} magasinNom={magasinNom} tickets={tickets} onClose={() => setShowAlerts(false)} />
       )}
 
       {activeTicket && (

@@ -4,6 +4,7 @@ import { useAuth } from './store/useAuth'
 import { useShallow } from 'zustand/react/shallow'
 import { useTheme } from './store/useTheme'
 import Login from './pages/Login'
+import TicketAlertsWatcher from './components/TicketAlertsWatcher'
 
 // Pages chargées à la demande : chaque route devient un fichier JS séparé
 const Home            = lazy(() => import('./pages/Home'))
@@ -51,52 +52,55 @@ export default function App() {
   }, [initAuth, initTheme])
 
   return (
-    <Suspense fallback={<div className="p-6">Chargement…</div>}>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/" element={<PrivateRoute><Home /></PrivateRoute>} />
-        <Route path="/tickets" element={<PrivateRoute><Tickets /></PrivateRoute>} />
-        <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-        <Route
-          path="/settings"
-          element={
-            <RoleRoute roles={['directeurmag', 'acheteur', 'directeurgen']}>
-              <StoreSettings />
-            </RoleRoute>
-          }
-        />
-        <Route path="/b2b" element={<PrivateRoute><B2B /></PrivateRoute>} />
-        <Route path="/rh" element={<PrivateRoute><RH /></PrivateRoute>} />
-        <Route path="/service" element={<PrivateRoute><Service /></PrivateRoute>} />
-        <Route path="/orders" element={<PrivateRoute><Orders /></PrivateRoute>} />
-        <Route path="/operations" element={<PrivateRoute><Operations /></PrivateRoute>} />
-        <Route path="/operations/:id" element={<PrivateRoute><OperationDetail /></PrivateRoute>} />
-        <Route
-          path="/flocage"
-          element={
-            <RoleRoute roles={['chaussure', 'directeurmag', 'acheteur', 'directeurgen']} acheteurRayons={['chaussure']}>
-              <Flocage />
-            </RoleRoute>
-          }
-        />
-        <Route
-          path="/transfert"
-          element={
-            <RoleRoute roles={['velo', 'directeurmag', 'acheteur', 'directeurgen']} acheteurRayons={['velo']}>
-              <Transfert />
-            </RoleRoute>
-          }
-        />
-        <Route
-          path="/obut"
-          element={
-            <RoleRoute roles={['velo', 'directeurmag', 'acheteur', 'directeurgen']} acheteurRayons={['velo']}>
-              <Obut />
-            </RoleRoute>
-          }
-        />
-      </Routes>
-    </Suspense>
+    <>
+      <TicketAlertsWatcher />
+      <Suspense fallback={<div className="p-6">Chargement…</div>}>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/" element={<PrivateRoute><Home /></PrivateRoute>} />
+          <Route path="/tickets" element={<PrivateRoute><Tickets /></PrivateRoute>} />
+          <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route
+            path="/settings"
+            element={
+              <RoleRoute roles={['directeurmag', 'acheteur', 'directeurgen']}>
+                <StoreSettings />
+              </RoleRoute>
+            }
+          />
+          <Route path="/b2b" element={<PrivateRoute><B2B /></PrivateRoute>} />
+          <Route path="/rh" element={<PrivateRoute><RH /></PrivateRoute>} />
+          <Route path="/service" element={<PrivateRoute><Service /></PrivateRoute>} />
+          <Route path="/orders" element={<PrivateRoute><Orders /></PrivateRoute>} />
+          <Route path="/operations" element={<PrivateRoute><Operations /></PrivateRoute>} />
+          <Route path="/operations/:id" element={<PrivateRoute><OperationDetail /></PrivateRoute>} />
+          <Route
+            path="/flocage"
+            element={
+              <RoleRoute roles={['chaussure', 'directeurmag', 'acheteur', 'directeurgen']} acheteurRayons={['chaussure']}>
+                <Flocage />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="/transfert"
+            element={
+              <RoleRoute roles={['velo', 'directeurmag', 'acheteur', 'directeurgen']} acheteurRayons={['velo']}>
+                <Transfert />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="/obut"
+            element={
+              <RoleRoute roles={['velo', 'directeurmag', 'acheteur', 'directeurgen']} acheteurRayons={['velo']}>
+                <Obut />
+              </RoleRoute>
+            }
+          />
+        </Routes>
+      </Suspense>
+    </>
   )
 }

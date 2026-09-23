@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  closedDateOf, computePeriodStats, computeSnapshot, isOverdue,
+  closedDateOf, computeAlerts, computePeriodStats, computeSnapshot, isOverdue,
   monthlyCreated, periodRange, previousYear, timeInStatus,
 } from '../../src/lib/ticketStats.js'
 
@@ -62,5 +62,33 @@ describe('statistiques', () => {
     const snap = computeSnapshot(TICKETS, NOW)
     assert.equal(snap.open, 3)
     assert.equal(snap.overdue, 1)
+  })
+})
+
+describe('alertes', () => {
+  it('ne déclenche rien sans réglage actif', () => {
+    assert.deepEqual(computeAlerts(TICKETS, {}, NOW), [])
+    assert.deepEqual(computeAlerts(TICKETS, { maxOpen: { enabled: false, threshold: 0 } }, NOW), [])
+  })
+  it('seuil de volume : strictement au-dessus', () => {
+    assert.equal(computeAlerts(TICKETS, { maxOpen: { enabled: true, threshold: 3 } }, NOW).length, 0)
+    const [a] = computeAlerts(TICKETS, { maxOpen: { enabled: true, threshold: 2 } }, NOW)
+    assert.equal(a.value, 3)
+    assert.match(a.message, /3 vélos à l'atelier/)
+  })
+  it('seuil de durée : liste les tickets concernés', () => {
+    const [a] = computeAlerts(TICKETS, { maxOpenDays: { enabled: true, threshold: 10 } }, NOW)
+    assert.deepEqual(a.ticketIds.sort(), ['o1', 'o2'])
+    const [w] = computeAlerts(TICKETS, { maxWaitingPartsDays: { enabled: true, threshold: 10 } }, NOW)
+    assert.deepEqual(w.ticketIds, ['o2'])
+    const [r] = computeAlerts(TICKETS, { maxReadyDays: { enabled: true, threshold: 7 } }, NOW)
+    assert.deepEqual(r.ticketIds, ['o3'])
+  })
+  it('urgents et retards', () => {
+    const alerts = computeAlerts(TICKETS, {
+      maxUrgent: { enabled: true, threshold: 0 },
+      maxOverdue: { enabled: true, threshold: 0 },
+    }, NOW)
+    assert.deepEqual(alerts.map(a => a.key), ['maxOverdue', 'maxUrgent'])
   })
 })
