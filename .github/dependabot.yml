@@ -8,6 +8,25 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    # Versions majeures qui demandent une vraie migration : à planifier à part
+    ignore:
+      # React 19 : react et react-dom doivent monter ensemble, avec les types
+      - dependency-name: react
+        update-types: [version-update:semver-major]
+      - dependency-name: react-dom
+        update-types: [version-update:semver-major]
+      - dependency-name: '@types/react'
+        update-types: [version-update:semver-major]
+      - dependency-name: '@types/react-dom'
+        update-types: [version-update:semver-major]
+      # Tailwind 4 : nouvelle configuration (CSS-first, plugin PostCSS dédié)
+      - dependency-name: tailwindcss
+        update-types: [version-update:semver-major]
+      # ESLint 10 : pas encore supporté par eslint-plugin-react
+      - dependency-name: eslint
+        update-types: [version-update:semver-major]
+      - dependency-name: '@eslint/js'
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /
