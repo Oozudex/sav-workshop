@@ -116,3 +116,38 @@ describe('prix engagés dans la recherche', () => {
     assert.deepEqual(g.engages.map(e => [e.prix, e.remise, e.items[0].id]), [[1499.99, 29, 'c1']])
   })
 })
+
+describe('fiche d’une OP', () => {
+  it('temps restant', async () => {
+    const { opTiming } = await import('../../src/lib/opSearch.js')
+    const op = { dateDebut: '2026-10-01', dateFin: '2026-10-15' }
+    assert.equal(opTiming(op, '2026-09-25'), 'Commence dans 6 jours')
+    assert.equal(opTiming(op, '2026-09-30'), 'Commence demain')
+    assert.equal(opTiming(op, '2026-10-13'), 'Se termine dans 2 jours')
+    assert.equal(opTiming(op, '2026-10-15'), 'Dernier jour')
+    assert.equal(opTiming(op, '2026-10-18'), 'Terminée depuis 3 jours')
+  })
+  it('résumé : remise max, bons plans à venir et déjà plus avantageux', async () => {
+    const { opSummary } = await import('../../src/lib/opSearch.js')
+    const s = opSummary([
+      { nom: 'A', prixFort: 200, prixOp: 150, passeBonPlan: true },
+      { nom: 'A', prixFort: 200, prixOp: 170 },
+      { nom: 'B', prixFort: 100, prixOp: 90, prixBonPlan: 80 },
+      { nom: 'C', prixFort: 100, prixOp: 90, passeBonPlan: true, bonPlanTransfere: true },
+    ])
+    assert.deepEqual(s, { produits: 4, modeles: 3, remiseMax: 25, bonPlanFin: 1, bonPlanFaits: 1, bonPlanMieux: 1 })
+  })
+})
+
+describe('bon plan actuel', () => {
+  it('une OP au même prix que le bon plan actuel est signalée, même si le bon plan est arrivé après l’import', () => {
+    const index = buildPromoIndex({
+      ops: [{ id: 'op', nom: 'OP', dateDebut: '2026-09-20', dateFin: '2026-09-30' }],
+      produits: [{ id: 'p', opId: 'op', nom: 'ALLROAD LTD', chrono: '0-252871', prixFort: 1299.99, prixOp: 999.99 }],
+      bonPlanList: [{ id: '0-252871', nom: 'ALLROAD LTD', chrono: '0-252871', prixFort: 1299.99, prixBonPlan: 999.99 }],
+      today: '2026-09-25',
+    })
+    const [g] = searchPromos(index, 'allroad')
+    assert.equal(g.ops[0].bonPlanBetter, true)
+  })
+})

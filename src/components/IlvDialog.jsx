@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { BON_PLAN_COLLECTION, bonPlanDocId } from '../lib/bonPlan'
@@ -63,8 +63,10 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
   const [duree, setDuree] = useState(1)
   const [oney, setOney] = useState(null)
   const [packChoisi, setPackChoisi] = useState('')
-  const [pdf, setPdf] = useState(null) // { url, name }
+  const [pdf, setPdf] = useState(null) // { url, name, bytes }
   const [rendering, setRendering] = useState(false)
+  const [previewError, setPreviewError] = useState(false)
+  const canvasRef = useRef(null)
 
   useEffect(() => {
     enrich(sources).then(setItems).catch(() => setLoadError('Impossible de charger les données du produit.'))
@@ -96,13 +98,25 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
       .then(bytes => {
         if (cancelled) return
         url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
-        setPdf({ url, name: fileName(ilv, product) })
+        setPdf({ url, name: fileName(ilv, product), bytes })
       })
       .catch(() => !cancelled && setPdf({ error: 'La génération de l’ILV a échoué.' }))
       .finally(() => !cancelled && setRendering(false))
     return () => { cancelled = true; if (url) URL.revokeObjectURL(url) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ilv])
+
+  // Aperçu en image (pdf.js) : identique sur ordinateur et téléphone
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!pdf?.bytes || !canvas) return
+    let cancelled = false
+    setPreviewError(false)
+    import('../lib/pdfPreview')
+      .then(({ renderPdfPreview }) => !cancelled && renderPdfPreview(pdf.bytes, canvas, canvas.parentElement.clientWidth))
+      .catch(() => !cancelled && setPreviewError(true))
+    return () => { cancelled = true }
+  }, [pdf])
 
   function download() {
     if (!pdf?.url) return
@@ -191,10 +205,14 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
               </div>
 
               <div className="rounded-xl border border-gray-200 dark:border-neutral-700 bg-gray-100 dark:bg-neutral-800 overflow-hidden aspect-[297/210] relative">
-                {pdf?.url && !error
-                  ? <iframe key={pdf.url} title="Aperçu de l’ILV" src={`${pdf.url}#toolbar=0&navpanes=0&view=Fit`} className="w-full h-full" />
-                  : <div className="absolute inset-0 grid place-items-center text-xs text-gray-400">{rendering ? 'Génération…' : 'Aperçu indisponible'}</div>}
-                {rendering && pdf?.url && (
+                <canvas ref={canvasRef} aria-label="Aperçu de l’ILV" role="img"
+                  className={`w-full h-full bg-white ${pdf?.bytes && !error && !previewError ? '' : 'invisible'}`} />
+                {(!pdf?.bytes || error || previewError) && (
+                  <div className="absolute inset-0 grid place-items-center text-xs text-gray-400">
+                    {rendering ? 'Génération…' : previewError ? 'Aperçu indisponible : le PDF reste téléchargeable.' : 'Aperçu indisponible'}
+                  </div>
+                )}
+                {rendering && pdf?.bytes && (
                   <div className="absolute top-2 right-2 px-2 py-1 rounded-md bg-black/70 text-white text-[11px]">Génération…</div>
                 )}
               </div>

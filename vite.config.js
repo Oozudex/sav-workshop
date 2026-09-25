@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   // Chargées à la demande (import Excel, ILV) : pré-optimisées pour éviter un rechargement en développement
-  optimizeDeps: { include: ['xlsx', 'pdf-lib', '@pdf-lib/fontkit'] },
+  optimizeDeps: { include: ['xlsx', 'pdf-lib', '@pdf-lib/fontkit', 'pdfjs-dist'] },
   build: {
     rolldownOptions: {
       output: {

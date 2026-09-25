@@ -1,7 +1,7 @@
 // Opérations commerciales : visibilité selon le profil et recherche « ce vélo est-il en remise ? »
 // pour les vendeurs. Fonctions pures (tests/unit/opSearch.test.mjs).
 import { RAYON_TYPES } from './constants.js'
-import { cleanRef, isBonPlanBetter, latestBonPlans, normName, parsePrice, prixReference, remisePct } from './opImport.js'
+import { bonPlanKey, bonPlanPrices, cleanRef, isBonPlanBetter, latestBonPlans, normName, parsePrice, prixReference, remisePct } from './opImport.js'
 
 // Date du jour au format des OP (AAAA-MM-JJ, heure locale)
 export function todayStr(now = new Date()) {
@@ -66,6 +66,7 @@ function groupKey(p) {
  */
 export function buildPromoIndex({ ops, produits, bonPlanList = [], engageList = [], today = todayStr() }) {
   const opsById = new Map(ops.map(o => [o.id, o]))
+  const bonPlanActuel = bonPlanPrices(bonPlanList)
   const groups = new Map()
   const byChrono = new Map()
 
@@ -84,9 +85,12 @@ export function buildPromoIndex({ ops, produits, bonPlanList = [], engageList = 
     return g
   }
 
-  for (const p of produits) {
-    const op = opsById.get(p.opId)
-    if (!op || p.prixOp == null) continue
+  for (const raw of produits) {
+    const op = opsById.get(raw.opId)
+    if (!op || raw.prixOp == null) continue
+    // Comparaison avec le prix bon plan actuel (il a pu changer depuis l'import de l'OP)
+    const actuel = bonPlanActuel.get(bonPlanKey(raw))
+    const p = actuel != null ? { ...raw, prixBonPlan: actuel } : raw
     const status = opStatus(op, today)
     if (status === 'terminee') continue
     const g = groupFor(p)
@@ -154,4 +158,40 @@ export function searchPromos(index, term) {
   return index
     .filter(g => words.every(w => g.text.includes(w)))
     .sort((a, b) => a.rank - b.rank || a.nom.localeCompare(b.nom, 'fr'))
+}
+
+// ── Fiche d'une OP ──────────────────────────────────────────────────────────────
+
+const DAY = 86400000
+const daysBetween = (a, b) => Math.round((new Date(`${b}T12:00:00`) - new Date(`${a}T12:00:00`)) / DAY)
+const plural = (n, word) => `${n} ${word}${n > 1 ? 's' : ''}`
+
+// « Commence dans 6 jours », « Se termine dans 2 jours », « Dernier jour », « Terminée depuis 3 jours »
+export function opTiming(op, today = todayStr()) {
+  if (op.dateDebut > today) {
+    const n = daysBetween(today, op.dateDebut)
+    return n === 1 ? 'Commence demain' : `Commence dans ${plural(n, 'jour')}`
+  }
+  if (op.dateFin < today) {
+    const n = daysBetween(op.dateFin, today)
+    return n === 1 ? 'Terminée hier' : `Terminée depuis ${plural(n, 'jour')}`
+  }
+  const n = daysBetween(today, op.dateFin)
+  return n === 0 ? 'Dernier jour' : n === 1 ? 'Se termine demain' : `Se termine dans ${plural(n, 'jour')}`
+}
+
+/**
+ * Résumé d'une OP : produits (déclinaisons) et modèles, remise maximale, produits qui passeront en bon plan
+ * à la fin de l'OP (ou déjà passés) et produits dont le bon plan est déjà plus avantageux.
+ */
+export function opSummary(produits) {
+  const remises = produits.map(p => (isBonPlanBetter(p) ? null : remisePct(p))).filter(r => r != null && r > 0)
+  return {
+    produits: produits.length,
+    modeles: new Set(produits.map(p => normName(p.nom))).size,
+    remiseMax: remises.length ? Math.max(...remises) : null,
+    bonPlanFin: produits.filter(p => p.passeBonPlan && !p.bonPlanTransfere).length,
+    bonPlanFaits: produits.filter(p => p.bonPlanTransfere).length,
+    bonPlanMieux: produits.filter(isBonPlanBetter).length,
+  }
 }

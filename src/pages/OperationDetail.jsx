@@ -5,28 +5,23 @@ import { useAuth } from '../store/useAuth'
 import { useShallow } from 'zustand/react/shallow'
 import { db } from '../lib/firebase'
 import {
-  doc, onSnapshot, collection, query, orderBy, getDocs,
+  doc, onSnapshot, collection, query, orderBy, getDocs, where, documentId,
   addDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch,
 } from 'firebase/firestore'
 import { GLOBAL_ROLES, RAYON_TYPE_LABELS } from '../lib/constants'
 import { OpModal } from './Operations'
 import IlvDialog from '../components/IlvDialog'
+import ActionsMenu from '../components/ActionsMenu'
 import { deleteOperation, opFormData } from '../lib/opActions'
-import { opRayons } from '../lib/opSearch'
+import { opRayons, opSummary, opTiming } from '../lib/opSearch'
+import { formatEuro } from '../lib/orders'
 import { readSheetWithFills } from '../lib/excel'
-import { BON_PLAN_COLLECTION, bonPlanTransfer } from '../lib/bonPlan'
+import { BON_PLAN_COLLECTION, bonPlanDocId, bonPlanTransfer } from '../lib/bonPlan'
 import {
   SEGMENT_LABELS, bonPlanPrices, cleanRef, isBonPlanBetter, normName, parseOpSheet, planImport, prixReference, remisePct, resolveLines,
 } from '../lib/opImport'
 
 const SEGMENTS = ['velo', 'trottinette', 'roller', 'accessoires', 'textile']
-const SEGMENT_COLORS = {
-  velo:        'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300',
-  trottinette: 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300',
-  roller:      'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300',
-  accessoires: 'bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-400',
-  textile:     'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300',
-}
 
 function fmtDate(str) {
   if (!str) return '—'
@@ -35,8 +30,7 @@ function fmtDate(str) {
 }
 
 function fmtPrice(val) {
-  if (val == null || val === '') return '—'
-  return `${Number(val).toFixed(2)} €`
+  return val == null || val === '' ? '—' : formatEuro(Number(val))
 }
 
 function getStatus(op) {
@@ -77,7 +71,7 @@ function ProduitModal({ produit, onClose, onSave }) {
 
   return (
     <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl overflow-hidden">
+      <div className="w-full max-w-lg rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
           <span className="text-sm font-semibold text-gray-900 dark:text-white">
             {produit?.id ? 'Modifier le produit' : 'Ajouter un produit'}
@@ -474,6 +468,135 @@ function ImportModal({ opId, produits, onClose }) {
   )
 }
 
+// ── Fiche d'une OP : éléments d'affichage ──────────────────────────────────────
+
+function Stat({ label, value, sub, tone }) {
+  const color = { blue: 'text-blue-700 dark:text-blue-300', orange: 'text-orange-600 dark:text-orange-400' }[tone] || 'text-gray-900 dark:text-white'
+  return (
+    <div>
+      <dt className="text-[11px] text-gray-400 dark:text-neutral-500">{label}</dt>
+      <dd className={`text-base font-bold ${color}`}>{value}</dd>
+      {sub && <dd className="text-[11px] text-gray-400 dark:text-neutral-500">{sub}</dd>}
+    </div>
+  )
+}
+
+// Prix barré (prix fort, ou bon plan s'il sert de référence), prix OP et remise
+function PriceCell({ p, compact }) {
+  const ref = prixReference(p)
+  const better = isBonPlanBetter(p)
+  const rem = remisePct(p)
+  return (
+    <div className="space-y-0.5">
+      <div className="flex items-baseline gap-2 flex-wrap">
+        {ref != null && !better && <span className="text-gray-400 dark:text-neutral-500 line-through">{formatEuro(ref)}</span>}
+        <span className={`font-bold whitespace-nowrap ${compact ? 'text-xs' : 'text-sm'} ${better ? 'text-gray-400 dark:text-neutral-500' : 'text-gray-900 dark:text-white'}`}>{formatEuro(p.prixOp)}</span>
+        {rem > 0 && !better && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">-{rem} %</span>}
+      </div>
+      {better && (
+        <p className="text-[11px] font-semibold text-orange-600 dark:text-orange-400">Bon plan déjà moins cher ({formatEuro(p.prixBonPlan)})</p>
+      )}
+      {!better && p.prixBonPlan != null && !compact && (
+        <p className="text-[10px] text-blue-600 dark:text-blue-400">Prix barré = prix bon plan · prix fort {formatEuro(p.prixFort)}</p>
+      )}
+    </div>
+  )
+}
+
+const samePrices = group => group.every(v => v.prixOp === group[0].prixOp && v.prixFort === group[0].prixFort
+  && (v.prixBonPlan ?? null) === (group[0].prixBonPlan ?? null))
+
+// Une déclinaison : couleur, référence, chrono, et ses actions (ILV, modifier)
+function VariantLine({ p, showPrice, canCreate, onIlv, onEdit }) {
+  return (
+    <div className="flex items-center gap-2 py-1">
+      <div className="flex items-center gap-1.5 flex-wrap min-w-0 flex-1">
+        {p.couleur
+          ? <span className="text-[10px] font-semibold bg-gray-100 dark:bg-neutral-800 text-gray-600 dark:text-neutral-300 px-1.5 py-0.5 rounded">{p.couleur}</span>
+          : <span className="text-[10px] text-gray-400 dark:text-neutral-500 italic">Sans couleur</span>}
+        {(p.reference || p.refFournisseur) && <span className="text-[11px] font-mono text-gray-700 dark:text-neutral-300 whitespace-nowrap">{p.reference || p.refFournisseur}</span>}
+        {p.chrono && <span className="text-[10px] font-mono text-gray-400 dark:text-neutral-500 whitespace-nowrap">{p.chrono}</span>}
+        {showPrice && <span className="basis-full"><PriceCell p={p} compact /></span>}
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        {p.prixOp != null && (
+          <button onClick={() => onIlv(p)} title="Télécharger l’ILV de cette déclinaison"
+            className="h-7 px-2 inline-flex items-center gap-1 rounded-lg text-[11px] font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 dark:text-neutral-300 dark:border-neutral-700 dark:hover:bg-neutral-800">
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+            ILV
+          </button>
+        )}
+        {canCreate && (
+          <button onClick={() => onEdit(p)} title="Modifier ou retirer cette déclinaison" aria-label={`Modifier ${p.nom} ${p.couleur || ''}`}
+            className="h-7 w-7 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800">
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Passage en bon plan à la fin de l'OP : case pour l'acheteur, simple mention pour les vendeurs
+function BonPlanStatus({ group, canCreate, onToggle }) {
+  const all = group.every(p => !!p.passeBonPlan)
+  const some = group.some(p => !!p.passeBonPlan)
+  const done = group.every(p => !!p.bonPlanTransfere)
+  if (done) return <span className="text-[11px] font-semibold text-green-600 dark:text-green-400">✓ Passé en bon plan</span>
+  if (!canCreate) return all ? <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-300">Passera en bon plan</span> : <span className="text-gray-300 dark:text-neutral-600">—</span>
+  return (
+    <label className="inline-flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" className="sr-only" checked={all} onChange={onToggle} />
+      <span className={['h-4 w-4 rounded border-2 flex items-center justify-center transition-colors shrink-0',
+        all ? 'bg-blue-600 border-blue-600' : some ? 'bg-blue-200 border-blue-300 dark:bg-blue-500/30 dark:border-blue-500/50' : 'border-gray-300 dark:border-neutral-600'].join(' ')}>
+        {all && <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+        {some && !all && <span className="block h-0.5 w-2 bg-blue-600 dark:bg-blue-400 rounded" />}
+      </span>
+      <span className={`text-[11px] ${all ? 'font-semibold text-blue-700 dark:text-blue-300' : 'text-gray-500 dark:text-neutral-400'}`}>{all ? 'Oui' : 'Non'}</span>
+    </label>
+  )
+}
+
+function ProductRow({ group, canCreate, onIlv, onEdit, onToggleBonPlan }) {
+  const first = group[0]
+  const same = samePrices(group)
+  return (
+    <tr className="border-t border-gray-100 dark:border-neutral-800 align-top">
+      <td className="px-4 py-3 w-[22%]">
+        <p className="font-semibold text-gray-900 dark:text-white">{first.nom}</p>
+        <p className="text-[11px] text-gray-400 dark:text-neutral-500">{[first.marque, SEGMENT_LABELS[first.segment] || first.segment].filter(Boolean).join(' · ')}</p>
+      </td>
+      <td className="px-4 py-2">
+        {group.map(p => <VariantLine key={p.id} p={p} showPrice={!same} canCreate={canCreate} onIlv={onIlv} onEdit={onEdit} />)}
+      </td>
+      <td className="px-4 py-3 w-[22%]">{same ? <PriceCell p={first} /> : <span className="text-[11px] text-gray-400">Prix par déclinaison</span>}</td>
+      <td className="px-4 py-3 whitespace-nowrap"><BonPlanStatus group={group} canCreate={canCreate} onToggle={onToggleBonPlan} /></td>
+      {canCreate && <td className="w-2" />}
+    </tr>
+  )
+}
+
+function ProductCard({ group, canCreate, onIlv, onEdit, onToggleBonPlan }) {
+  const first = group[0]
+  const same = samePrices(group)
+  return (
+    <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 p-4 space-y-2">
+      <div>
+        <p className="text-sm font-semibold text-gray-900 dark:text-white">{first.nom}</p>
+        <p className="text-[11px] text-gray-400 dark:text-neutral-500">{[first.marque, SEGMENT_LABELS[first.segment] || first.segment].filter(Boolean).join(' · ')}</p>
+      </div>
+      {same && <PriceCell p={first} />}
+      <div className="divide-y divide-gray-100 dark:divide-neutral-800">
+        {group.map(p => <VariantLine key={p.id} p={p} showPrice={!same} canCreate={canCreate} onIlv={onIlv} onEdit={onEdit} />)}
+      </div>
+      <div className="flex items-center justify-between pt-1 border-t border-gray-100 dark:border-neutral-800">
+        <span className="text-[11px] text-gray-500 dark:text-neutral-400">Bon plan à la fin de l’OP</span>
+        <BonPlanStatus group={group} canCreate={canCreate} onToggle={onToggleBonPlan} />
+      </div>
+    </div>
+  )
+}
+
 export default function OperationDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -513,6 +636,24 @@ export default function OperationDetail() {
     const q = query(collection(db, 'op_commerciales', id, 'produits'), orderBy('nom', 'asc'))
     return onSnapshot(q, snap => setProduits(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [id])
+
+  // Prix bon plan actuels des produits de l'OP (ils ont pu changer depuis l'import)
+  const [bonPlansActuels, setBonPlansActuels] = useState(new Map())
+  const bonPlanIds = [...new Set(produits.map(p => bonPlanDocId(p)).filter(Boolean))].sort().join(',')
+  useEffect(() => {
+    if (!bonPlanIds) return
+    const ids = bonPlanIds.split(',')
+    let cancelled = false
+    Promise.all(Array.from({ length: Math.ceil(ids.length / 30) }, (_, i) =>
+      getDocs(query(collection(db, BON_PLAN_COLLECTION), where(documentId(), 'in', ids.slice(i * 30, i * 30 + 30))))))
+      .then(snaps => !cancelled && setBonPlansActuels(new Map(snaps.flatMap(s => s.docs.map(d => [d.id, d.get('prixBonPlan')])))))
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [bonPlanIds])
+  const produitsAffiches = useMemo(() => produits.map(p => {
+    const actuel = bonPlansActuels.get(bonPlanDocId(p))
+    return actuel != null ? { ...p, prixBonPlan: actuel } : p
+  }), [produits, bonPlansActuels])
 
   async function handleSaveProduit(form) {
     const data = {
@@ -601,7 +742,7 @@ export default function OperationDetail() {
 
   const status = getStatus(op)
   const filtered = (() => {
-    let list = produits
+    let list = produitsAffiches
     if (filterSeg) list = list.filter(p => p.segment === filterSeg)
     const words = normName(searchProd).split(' ').filter(Boolean)
     if (words.length) list = list.filter(p => {
@@ -622,87 +763,83 @@ export default function OperationDetail() {
     return Array.from(map.values())
   })()
 
+  const summary = opSummary(produitsAffiches)
+  const rayons = opRayons(op)
+  const infos = [
+    `Du ${fmtDate(op.dateDebut)} au ${fmtDate(op.dateFin)}`,
+    rayons.length ? `Rayon${rayons.length > 1 ? 's' : ''} ${rayons.map(r => RAYON_TYPE_LABELS[r] || r).join(', ')}` : 'Tous les rayons',
+    op.magasinIds?.length ? `${op.magasinIds.length} magasin${op.magasinIds.length > 1 ? 's' : ''}` : 'Tous les magasins',
+  ]
+  const segmentsPresents = SEGMENTS.filter(s => produits.some(p => p.segment === s))
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
       <Navbar />
 
       <main className="flex-1 p-4 sm:p-6">
-        <div className="max-w-6xl mx-auto space-y-6">
+        <div className="max-w-6xl mx-auto space-y-5">
 
-          {/* Header */}
+          {/* En-tête : statut, temps restant, ciblage, actions et résumé */}
           <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 p-5">
-            <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2">
+            <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+              <div className="space-y-1.5 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${status.pill}`}>{status.label}</span>
+                  {op.globale && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-500 text-white">OP Animation</span>}
+                  <span className="text-xs text-gray-500 dark:text-neutral-400">{opTiming(op)}</span>
                 </div>
-                <h1 className="text-xl font-bold text-gray-900 dark:text-white">{op.nom}</h1>
-                <p className="text-sm text-gray-400 dark:text-neutral-500">
-                  {fmtDate(op.dateDebut)} → {fmtDate(op.dateFin)}
-                </p>
-                {op.description && <p className="text-sm text-gray-600 dark:text-neutral-400 mt-2">{op.description}</p>}
-                <div className="flex items-center gap-2 mt-2 flex-wrap">
-                  {op.globale && (
-                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-500 text-white">OP Animation</span>
-                  )}
-                  {opRayons(op).length > 0 && (
-                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-400">
-                      Rayon{opRayons(op).length > 1 ? 's' : ''} : {opRayons(op).map(r => RAYON_TYPE_LABELS[r] || r).join(', ')}
-                    </span>
-                  )}
-                  {op.magasinIds?.length > 0 && (
-                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-400">
-                      {op.magasinIds.length} magasin{op.magasinIds.length > 1 ? 's' : ''}
-                    </span>
-                  )}
-                </div>
+                <h1 className="text-xl font-bold text-gray-900 dark:text-white break-words">{op.nom}</h1>
+                <p className="text-sm text-gray-500 dark:text-neutral-400">{infos.join(' · ')}</p>
+                {op.description && <p className="text-sm text-gray-600 dark:text-neutral-400 pt-1">{op.description}</p>}
               </div>
               {canCreate && (
-                <div className="flex flex-wrap items-center gap-2 shrink-0">
-                  <button onClick={() => navigate('/operations')}
-                    className="h-8 px-3 rounded-lg text-xs border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800">
-                    ← Retour
-                  </button>
-                  <button onClick={() => setModal({ editOp: true })}
-                    className="h-8 px-3 rounded-lg text-xs font-medium border border-gray-200 dark:border-neutral-700 text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800">
-                    Modifier l'OP
-                  </button>
-                  <button onClick={handleDeleteOp}
-                    className="h-8 px-3 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10 transition-colors">
-                    Supprimer l'OP
-                  </button>
-                  <button onClick={() => setShowImport(true)}
-                    className="h-8 px-3 rounded-lg text-xs font-medium border border-gray-200 dark:border-neutral-700 text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800 flex items-center gap-1.5">
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
-                    Importer Excel
-                  </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  {produits.length > 0 && (
+                    <button onClick={() => setShowImport(true)}
+                      className="h-9 px-3 rounded-lg text-xs font-medium border border-gray-200 dark:border-neutral-700 text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800">
+                      Réimporter
+                    </button>
+                  )}
                   <button onClick={() => setModal({})}
-                    className="h-8 px-4 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
+                    className="h-9 px-3 rounded-lg text-xs font-medium border border-gray-200 dark:border-neutral-700 text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800">
                     + Produit
                   </button>
+                  <ActionsMenu items={[
+                    { label: 'Modifier l’OP', onClick: () => setModal({ editOp: true }) },
+                    { label: 'Supprimer l’OP', onClick: handleDeleteOp, danger: true },
+                  ]} />
                 </div>
               )}
             </div>
+
+            {produits.length > 0 && (
+              <dl className="mt-4 pt-4 border-t border-gray-100 dark:border-neutral-800 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <Stat label="Produits" value={`${summary.modeles} modèle${summary.modeles > 1 ? 's' : ''}`}
+                  sub={`${summary.produits} déclinaison${summary.produits > 1 ? 's' : ''}`} />
+                <Stat label="Remise max" value={summary.remiseMax != null ? `-${summary.remiseMax} %` : '—'} />
+                <Stat label={status.key === 'terminee' ? 'Passés en bon plan' : 'Passeront en bon plan'}
+                  value={status.key === 'terminee' ? summary.bonPlanFaits : summary.bonPlanFin + summary.bonPlanFaits} tone="blue"
+                  sub={status.key !== 'terminee' && summary.bonPlanFaits ? `dont ${summary.bonPlanFaits} déjà passé${summary.bonPlanFaits > 1 ? 's' : ''}` : undefined} />
+                <Stat label="Bon plan déjà moins cher" value={summary.bonPlanMieux} tone={summary.bonPlanMieux ? 'orange' : undefined} />
+              </dl>
+            )}
           </div>
 
-          {/* Bannière transfert en bon plan (OP terminée) */}
+          {/* Fin d'OP : passage en bon plan */}
           {status.key === 'terminee' && (() => {
             const toTransfer = produits.filter(p => p.passeBonPlan && !p.bonPlanTransfere)
             if (!toTransfer.length) return null
             return (
-              <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-xl border border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10">
-                <div className="flex items-center gap-2.5">
-                  <svg className="h-4 w-4 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" /></svg>
-                  <div>
-                    <p className="text-xs text-blue-700 dark:text-blue-300">
-                      <strong>{toTransfer.length} produit{toTransfer.length > 1 ? 's' : ''}</strong> marqué{toTransfer.length > 1 ? 's' : ''} pour passer en prix bon plan : {toTransfer.length > 1 ? 'leur prix OP deviendra leur' : 'son prix OP deviendra son'} prix bon plan.
-                    </p>
-                    {transfer.error && <p className="text-xs text-red-600 dark:text-red-400 mt-1">{transfer.error}</p>}
-                  </div>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 rounded-xl border border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10">
+                <div>
+                  <p className="text-xs text-blue-700 dark:text-blue-300">
+                    <strong>{toTransfer.length} produit{toTransfer.length > 1 ? 's' : ''}</strong> marqué{toTransfer.length > 1 ? 's' : ''} pour passer en prix bon plan : {toTransfer.length > 1 ? 'leur prix OP deviendra leur' : 'son prix OP deviendra son'} prix bon plan.
+                  </p>
+                  {transfer.error && <p className="text-xs text-red-600 dark:text-red-400 mt-1">{transfer.error}</p>}
                 </div>
                 {canCreate && (
                   <button onClick={handleTransferBonPlan} disabled={transfer.busy}
-                    className="shrink-0 h-7 px-3 rounded-lg disabled:opacity-60 text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400 transition-colors">
+                    className="shrink-0 h-8 px-3 rounded-lg disabled:opacity-60 text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400 transition-colors">
                     {transfer.busy ? 'Transfert…' : 'Passer en bon plan'}
                   </button>
                 )}
@@ -710,198 +847,87 @@ export default function OperationDetail() {
             )
           })()}
 
-          {/* Recherche produits */}
-          <div className="relative">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 104.5 4.5a7.5 7.5 0 0012.15 12.15z" /></svg>
-            <input value={searchProd} onChange={e => setSearchProd(e.target.value)}
-              placeholder="Rechercher par nom, référence, chrono, couleur…"
-              className="w-full h-9 pl-9 pr-8 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-white/10" />
-            {searchProd && (
-              <button onClick={() => setSearchProd('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 h-5 w-5 grid place-items-center rounded text-gray-400 hover:text-gray-600">
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            )}
-          </div>
-
-          {/* Filtres segment */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <button onClick={() => setFilterSeg('')}
-              className={['h-7 px-3 rounded-lg text-[11px] font-semibold transition-colors whitespace-nowrap',
-                !filterSeg ? 'bg-gray-900 text-white dark:bg-white dark:text-black' : 'text-gray-500 dark:text-neutral-400 border border-gray-200 dark:border-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-800',
-              ].join(' ')}>
-              Tous ({produits.length})
-            </button>
-            {SEGMENTS.map(s => {
-              const count = produits.filter(p => p.segment === s).length
-              if (!count) return null
-              return (
-                <button key={s} onClick={() => setFilterSeg(s === filterSeg ? '' : s)}
-                  className={['h-7 px-3 rounded-lg text-[11px] font-semibold transition-colors whitespace-nowrap',
-                    filterSeg === s ? SEGMENT_COLORS[s] : 'text-gray-500 dark:text-neutral-400 border border-gray-200 dark:border-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-800',
-                  ].join(' ')}>
-                  {SEGMENT_LABELS[s]} ({count})
-                </button>
-              )
-            })}
-          </div>
-
-          {/* Table produits — groupée par nom */}
-          {grouped.length === 0 ? (
-            <div className="text-center py-12 text-sm text-gray-400 dark:text-neutral-500">
-              Aucun produit.{canCreate && ' Cliquez sur "+ Produit" pour en ajouter.'}
+          {produits.length === 0 ? (
+            <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-dashed border-gray-300 dark:border-neutral-700 py-12 px-4 text-center space-y-3">
+              <p className="text-sm font-semibold text-gray-700 dark:text-neutral-300">Aucun produit dans cette opération</p>
+              {canCreate ? (
+                <>
+                  <p className="text-xs text-gray-400 dark:text-neutral-500">Importe le fichier Excel de l’OP : les vélos sont retrouvés dans la base de données.</p>
+                  <div className="flex items-center justify-center gap-2">
+                    <button onClick={() => setShowImport(true)}
+                      className="h-9 px-4 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
+                      Importer le fichier de l’OP
+                    </button>
+                    <button onClick={() => setModal({})} className="h-9 px-3 rounded-lg text-xs text-gray-600 dark:text-neutral-300 hover:underline">
+                      ou ajouter un produit à la main
+                    </button>
+                  </div>
+                </>
+              ) : <p className="text-xs text-gray-400 dark:text-neutral-500">L’acheteur n’a pas encore ajouté les produits.</p>}
             </div>
           ) : (
-            <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-gray-100 dark:border-neutral-800 bg-gray-50/50 dark:bg-neutral-800/30">
-                    {['Produit', 'Déclinaisons', 'Marque', 'Segment', 'Prix fort', 'Prix OP', 'Remise'].map(h => (
-                      <th key={h} className="px-4 py-3 text-left font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide text-[10px]">{h}</th>
+            <>
+              {/* Recherche et filtres */}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <div className="relative flex-1">
+                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 104.5 4.5a7.5 7.5 0 0012.15 12.15z" /></svg>
+                  <input value={searchProd} onChange={e => setSearchProd(e.target.value)}
+                    placeholder="Rechercher dans l’OP : nom, référence, chrono, couleur…"
+                    className="w-full h-9 pl-9 pr-8 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-white/10" />
+                  {searchProd && (
+                    <button onClick={() => setSearchProd('')} aria-label="Effacer la recherche" className="absolute right-2.5 top-1/2 -translate-y-1/2 h-5 w-5 grid place-items-center rounded text-gray-400 hover:text-gray-600">
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  )}
+                </div>
+                {segmentsPresents.length > 1 && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {[['', `Tous (${produits.length})`], ...segmentsPresents.map(s => [s, `${SEGMENT_LABELS[s]} (${produits.filter(p => p.segment === s).length})`])].map(([s, label]) => (
+                      <button key={s || 'tous'} onClick={() => setFilterSeg(s)}
+                        className={['h-8 px-3 rounded-lg text-[11px] font-semibold transition-colors whitespace-nowrap',
+                          filterSeg === s ? 'bg-gray-900 text-white dark:bg-white dark:text-black' : 'text-gray-500 dark:text-neutral-400 border border-gray-200 dark:border-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-800'].join(' ')}>
+                        {label}
+                      </button>
                     ))}
-                    {canCreate && <th className="px-4 py-3 text-center text-[10px] font-semibold text-blue-500 uppercase tracking-wide">Bon plan fin d'OP</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {grouped.map((group) => {
-                    const first       = group[0]
-                    const rem         = remisePct(first)
-                    const isCheap     = isBonPlanBetter(first)
-                    const ref         = prixReference(first)
-                    const allBonPlan    = group.every(p => !!p.passeBonPlan)
-                    const someBonPlan   = group.some(p => !!p.passeBonPlan)
-                    const allDone     = group.every(p => !!p.bonPlanTransfere)
-                    return (
-                      <tr key={group.map(p => p.id).join('-')}
-                        style={{position: 'relative'}}
-                        className={['border-b last:border-0 border-gray-100 dark:border-neutral-800 hover:bg-gray-50 dark:hover:bg-neutral-800/50 transition-colors',
-                          allBonPlan ? 'bg-blue-50/40 dark:bg-blue-500/5' : '',
-                        ].join(' ')}>
+                  </div>
+                )}
+              </div>
 
-                        {/* Nom */}
-                        <td className="px-4 py-3 align-top">
-                          <span className="font-semibold text-gray-900 dark:text-white">{first.nom}</span>
-                        </td>
+              {grouped.length === 0 ? (
+                <p className="text-center py-10 text-sm text-gray-400 dark:text-neutral-500">Aucun produit ne correspond à la recherche.</p>
+              ) : (
+                <>
+                  {/* Ordinateur : tableau (en-têtes fixes au défilement) */}
+                  <div className="hidden md:block bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800">
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-12 z-10">
+                        <tr className="bg-gray-50 dark:bg-neutral-800 text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">
+                          <th className="px-4 py-3 text-left rounded-tl-2xl">Produit</th>
+                          <th className="px-4 py-3 text-left">Déclinaisons</th>
+                          <th className="px-4 py-3 text-left">Prix</th>
+                          <th className={`px-4 py-3 text-left ${canCreate ? '' : 'rounded-tr-2xl'}`}>Bon plan fin d’OP</th>
+                          {canCreate && <th className="px-4 py-3 rounded-tr-2xl" />}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {grouped.map(group => (
+                          <ProductRow key={group[0].id} group={group} canCreate={canCreate}
+                            onIlv={p => openIlv(group, p)} onEdit={p => setModal(p)} onToggleBonPlan={() => toggleGroupBonPlan(group)} />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
 
-                        {/* Déclinaisons : couleur + ref + chrono */}
-                        <td className="px-4 py-3 align-top">
-                          <div className="flex flex-col gap-1.5">
-                            {group.map(p => (
-                              <div key={p.id} className="flex items-center gap-1.5 flex-wrap">
-                                {canCreate && (
-                                  <button onClick={() => setModal(p)} title="Modifier ou supprimer cette déclinaison"
-                                    aria-label={`Modifier ${p.nom} ${p.couleur || ''} ${p.chrono || ''}`}
-                                    className="h-6 w-6 -ml-1 grid place-items-center rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors shrink-0">
-                                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                                  </button>
-                                )}
-                                {p.couleur
-                                  ? <span className="text-[10px] font-semibold bg-gray-100 dark:bg-neutral-700 text-gray-600 dark:text-neutral-300 px-1.5 py-0.5 rounded shrink-0">{p.couleur}</span>
-                                  : <span className="text-[10px] text-gray-300 dark:text-neutral-600 italic shrink-0">N.B</span>}
-                                <span className="text-[11px] font-mono text-gray-700 dark:text-neutral-300">{p.reference || '—'}</span>
-                                <span className="text-[10px] font-mono text-gray-400 dark:text-neutral-500">{p.chrono || '—'}</span>
-                                {p.prixOp != null && (
-                                  <button onClick={() => openIlv(group, p)} title="Télécharger l’ILV de cette déclinaison"
-                                    className="relative z-10 h-5 px-1.5 rounded-md text-[10px] font-semibold text-gray-600 border border-gray-200 hover:bg-gray-100 dark:text-neutral-300 dark:border-neutral-700 dark:hover:bg-neutral-800">
-                                    ILV
-                                  </button>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </td>
-
-                        {/* Marque */}
-                        <td className="px-4 py-3 text-gray-600 dark:text-neutral-400 align-top">{first.marque || '—'}</td>
-
-                        {/* Segment */}
-                        <td className="px-4 py-3 align-top">
-                          {first.segment && (
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${SEGMENT_COLORS[first.segment]}`}>
-                              {SEGMENT_LABELS[first.segment] || first.segment}
-                            </span>
-                          )}
-                        </td>
-
-                        {/* Prix fort */}
-                        <td className={['px-4 py-3 align-top whitespace-nowrap', isCheap ? 'text-gray-400 dark:text-neutral-600' : 'text-gray-600 dark:text-neutral-400'].join(' ')}>
-                          {first.prixBonPlan != null && !isCheap ? (
-                            <>
-                              <span className="line-through text-gray-400 dark:text-neutral-500">{fmtPrice(first.prixFort)}</span>
-                              <span className="block text-[10px] font-semibold text-blue-600 dark:text-blue-400" title="Le produit a déjà un prix bon plan : c'est lui qui sert de prix de référence">
-                                Bon plan {fmtPrice(ref)}
-                              </span>
-                            </>
-                          ) : fmtPrice(first.prixFort)}
-                        </td>
-
-                        {/* Prix OP */}
-                        <td className="px-4 py-3 align-top">
-                          {allBonPlan ? (
-                            <div className="flex items-center gap-1.5">
-                              <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 font-bold text-xs border border-blue-200 dark:border-blue-500/30 shadow-sm shadow-blue-100 dark:shadow-none">
-                                {fmtPrice(first.prixOp)}
-                              </span>
-                              <span className="relative group">
-                                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 text-white text-[9px] font-bold cursor-default select-none">i</span>
-                                <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 w-44 rounded-lg bg-gray-900 dark:bg-neutral-700 text-white text-[10px] leading-tight px-2.5 py-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-lg text-center">
-                                  Ce prix passera en prix bon plan à la fin de l'OP
-                                  <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-neutral-700" />
-                                </span>
-                              </span>
-                              {allDone && <span className="text-[10px] font-normal text-green-500">✓</span>}
-                            </div>
-                          ) : (
-                            <span className="font-semibold text-gray-900 dark:text-white">{fmtPrice(first.prixOp)}</span>
-                          )}
-                          {allDone && !allBonPlan && <span className="block text-[10px] font-normal text-green-500 mt-0.5">✓ transféré</span>}
-                        </td>
-
-                        {/* Remise */}
-                        <td className="px-4 py-3 align-top">
-                          {rem != null && <span className="text-emerald-600 dark:text-emerald-400 font-semibold">-{rem}%</span>}
-                        </td>
-
-                        {/* Bon plan — acheteur/directeur uniquement */}
-                        {canCreate && (
-                          <td className="px-4 py-3 text-center align-top">
-                            <label className="inline-flex items-center justify-center cursor-pointer">
-                              <input type="checkbox" className="sr-only"
-                                checked={allBonPlan}
-                                onChange={() => toggleGroupBonPlan(group)}
-                                disabled={allDone} />
-                              <span className={['h-4 w-4 rounded border-2 flex items-center justify-center transition-colors',
-                                allDone ? 'bg-green-500 border-green-500' :
-                                allBonPlan ? 'bg-blue-500 border-blue-500' :
-                                someBonPlan ? 'bg-blue-200 border-blue-300 dark:bg-blue-500/30 dark:border-blue-500/50' :
-                                'border-gray-300 dark:border-neutral-600 hover:border-blue-400',
-                              ].join(' ')}>
-                                {(allBonPlan || allDone) && <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
-                                {someBonPlan && !allBonPlan && !allDone && <span className="block h-0.5 w-2 bg-blue-600 dark:bg-blue-400 rounded" />}
-                              </span>
-                            </label>
-                          </td>
-                        )}
-
-                        {/* Overlay "bon plan moins cher" — grise la ligne + message centré */}
-                        {isCheap && (
-                          <td style={{position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, padding: 0, border: 'none', zIndex: 5, pointerEvents: 'none'}}>
-                            <div className="absolute inset-0 bg-white/75 dark:bg-neutral-900/80" />
-                            <div className="relative h-full flex items-center justify-center z-10 pointer-events-none">
-                              <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-orange-50 dark:bg-orange-500/20 border border-orange-300 dark:border-orange-500/40 shadow-md shadow-orange-100/60 dark:shadow-none">
-                                <svg className="h-3.5 w-3.5 text-orange-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
-                                <span className="text-xs font-semibold text-orange-600 dark:text-orange-400 whitespace-nowrap">
-                                  Bon plan moins cher — déjà disponible à meilleur prix
-                                </span>
-                              </div>
-                            </div>
-                          </td>
-                        )}
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+                  {/* Téléphone : une carte par produit */}
+                  <div className="md:hidden space-y-3">
+                    {grouped.map(group => (
+                      <ProductCard key={group[0].id} group={group} canCreate={canCreate}
+                        onIlv={p => openIlv(group, p)} onEdit={p => setModal(p)} onToggleBonPlan={() => toggleGroupBonPlan(group)} />
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
           )}
         </div>
       </main>
