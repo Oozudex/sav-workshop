@@ -7,9 +7,11 @@ import { db } from '../lib/firebase'
 import {
   collection, onSnapshot, query, orderBy,
   addDoc, updateDoc, deleteDoc, doc, serverTimestamp,
-  collectionGroup, writeBatch, getDocs,
+  writeBatch, getDocs,
 } from 'firebase/firestore'
 import { GLOBAL_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
+import { formatEuro } from '../lib/orders'
+import { buildPromoIndex, isOpVisibleFor, opRayons, opStatus, searchPromos } from '../lib/opSearch'
 import { safeUrl } from '../lib/security'
 import { readSheetRows } from '../lib/excel'
 
@@ -70,12 +72,7 @@ function parsePrixExcluRows(rows) {
   }).filter(r => r.chrono && (r.prixFort != null || r.prixExcluTeam != null))
 }
 
-function getStatus(op) {
-  const today = new Date().toLocaleDateString('fr-CA') // YYYY-MM-DD local
-  if (op.dateFin < today) return 'terminee'
-  if (op.dateDebut > today) return 'a_venir'
-  return 'en_cours'
-}
+const getStatus = op => opStatus(op)
 
 const STATUS_CONFIG = {
   en_cours: { label: 'En cours', pill: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300', border: 'border-amber-200 dark:border-amber-500/30', card: 'bg-amber-50/40 dark:bg-amber-500/5' },
@@ -925,14 +922,163 @@ function useLatch(value) {
   return latched || value
 }
 
+// Produits des OP données (une écoute par OP : seules les OP en cours ou à venir sont chargées)
+function useOpProduits(opIds, enabled) {
+  const [byOp, setByOp] = useState({})
+  const [error, setError] = useState(false)
+  const key = opIds.join(',')
+  useEffect(() => {
+    if (!enabled || !key) return
+    const unsubs = key.split(',').map(id => onSnapshot(
+      collection(db, 'op_commerciales', id, 'produits'),
+      snap => setByOp(m => ({ ...m, [id]: snap.docs.map(d => ({ id: d.id, opId: id, ...d.data() })) })),
+      () => setError(true),
+    ))
+    return () => unsubs.forEach(u => u())
+  }, [key, enabled])
+  const ids = key ? key.split(',') : []
+  const produits = useMemo(() => (key ? key.split(',') : []).flatMap(id => byOp[id] || []), [byOp, key])
+  return { produits, loading: enabled && ids.some(id => !byOp[id]), error }
+}
+
+function fmtShort(str) {
+  const [, m, d] = (str || '').split('-')
+  return d ? `${d}/${m}` : '—'
+}
+
+function Chip({ className, children }) {
+  return <span className={`shrink-0 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${className}`}>{children}</span>
+}
+
+function Prices({ barre, prix, remise, strong }) {
+  return (
+    <div className="flex items-baseline gap-2 whitespace-nowrap">
+      {barre != null && <span className="text-xs text-gray-400 dark:text-neutral-500 line-through">{formatEuro(barre)}</span>}
+      <span className={`text-base font-bold ${strong}`}>{formatEuro(prix)}</span>
+      {remise != null && remise > 0 && (
+        <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">-{remise}%</span>
+      )}
+    </div>
+  )
+}
+
+// Une ligne « ce produit est en OP » : en cours ou à venir, avec ses prix et ce qu'il faut savoir
+function OpPromoLine({ s, allCouleurs, onOpenOp }) {
+  const enCours = s.status === 'en_cours'
+  const notes = []
+  if (s.couleurs.length && s.couleurs.length < allCouleurs.length) notes.push(`Couleurs : ${s.couleurs.join(', ')}`)
+  if (s.refIsBonPlan) notes.push(`Prix barré = prix bon plan (prix fort ${formatEuro(s.prixFort)})`)
+  if (s.bonPlanBetter) notes.push('Le prix bon plan (carte fidélité) est déjà plus avantageux')
+  if (s.futurBonPlan) notes.push(`Après l'OP : passe en bon plan à ${formatEuro(s.prixOp)}`)
+  return (
+    <div className={['rounded-xl border px-3 py-2.5', enCours
+      ? 'border-amber-200 bg-amber-50/60 dark:border-amber-500/30 dark:bg-amber-500/10'
+      : 'border-green-200 bg-green-50/60 dark:border-green-500/30 dark:bg-green-500/10',
+      s.bonPlanBetter ? 'opacity-60' : ''].join(' ')}>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+          <Chip className={enCours
+            ? 'bg-amber-500 text-white dark:bg-amber-400 dark:text-amber-950'
+            : 'bg-green-600 text-white dark:bg-green-500 dark:text-green-950'}>
+            {enCours ? 'En OP' : 'OP à venir'}
+          </Chip>
+          <button onClick={() => onOpenOp(s.op.id)} className="text-xs font-semibold text-gray-900 dark:text-white hover:underline truncate">
+            {s.op.nom}
+          </button>
+          <span className="text-[11px] text-gray-500 dark:text-neutral-400">
+            {enCours ? `jusqu'au ${fmtShort(s.op.dateFin)}` : `du ${fmtShort(s.op.dateDebut)} au ${fmtShort(s.op.dateFin)}`}
+          </span>
+        </div>
+        <Prices barre={s.prixRef} prix={s.prixOp} remise={s.remise}
+          strong={enCours ? 'text-amber-700 dark:text-amber-300' : 'text-green-700 dark:text-green-300'} />
+      </div>
+      {notes.length > 0 && (
+        <ul className="mt-1 space-y-0.5">
+          {notes.map(n => <li key={n} className="text-[11px] text-gray-600 dark:text-neutral-400">{n}</li>)}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Réponse à « ce vélo est-il en remise, ou va-t-il l'être ? » : une carte par produit avec
+ * ses OP en cours et à venir et son prix bon plan (carte fidélité).
+ */
+function PromoResults({ results, term, loading, error, onOpenOp }) {
+  const MAX = 30
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 py-6 text-center text-sm text-red-600 dark:text-red-400">
+        La recherche est indisponible pour le moment. Vérifie la connexion et recharge la page.
+      </div>
+    )
+  }
+  if (!results.length) {
+    return (
+      <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 py-10 px-4 text-center space-y-1">
+        {loading
+          ? <p className="text-sm text-gray-400 dark:text-neutral-500">Recherche…</p>
+          : <>
+              <p className="text-sm font-semibold text-gray-700 dark:text-neutral-300">Aucune remise en cours ou à venir pour « {term} »</p>
+              <p className="text-xs text-gray-400 dark:text-neutral-500">Ni en OP, ni en bon plan. Essaie avec la réf. fournisseur ou une partie du nom.</p>
+            </>}
+      </div>
+    )
+  }
+  return (
+    <div className="space-y-3">
+      <p className="text-[11px] text-gray-400 dark:text-neutral-500">
+        {results.length} produit{results.length > 1 ? 's' : ''}{results.length > MAX && ` : les ${MAX} premiers sont affichés, précise la recherche`}
+      </p>
+      {results.slice(0, MAX).map(g => (
+        <div key={g.key} className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 p-4 space-y-3">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">{g.nom}</p>
+              <p className="text-[11px] text-gray-400 dark:text-neutral-500">
+                {g.marque}
+                {g.refs.length > 0 && <span className="font-mono"> · {g.refs.join(', ')}</span>}
+              </p>
+            </div>
+            {g.couleurs.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {g.couleurs.map(c => (
+                  <span key={c} className="text-[10px] font-semibold bg-gray-100 dark:bg-neutral-800 text-gray-600 dark:text-neutral-300 px-1.5 py-0.5 rounded">{c}</span>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="space-y-2">
+            {g.ops.map(s => <OpPromoLine key={s.id} s={s} allCouleurs={g.couleurs} onOpenOp={onOpenOp} />)}
+            {g.bonPlans.map(b => (
+              <div key={`${b.prix}|${b.prixFort}`}
+                className="rounded-xl border border-blue-200 bg-blue-50/60 dark:border-blue-500/30 dark:bg-blue-500/10 px-3 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Chip className="bg-blue-600 text-white dark:bg-blue-500">Bon plan</Chip>
+                  <span className="text-[11px] text-gray-600 dark:text-neutral-400">
+                    Carte fidélité
+                    {g.bonPlans.length > 1 && (b.couleurs.length ? ` · ${b.couleurs.join(', ')}` : b.chronos.length > 0 && <span className="font-mono"> · {b.chronos.join(', ')}</span>)}
+                  </span>
+                </div>
+                <Prices barre={b.prixFort} prix={b.prix} remise={b.remise} strong="text-blue-700 dark:text-blue-300" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function Operations() {
   const navigate = useNavigate()
   const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
   const canCreate = GLOBAL_ROLES.includes(profile?.role)
 
   const [ops, setOps] = useState([])
-  const [allProduits, setAllProduits] = useState([])
-  const [prixExcluItems, setPrixExcluItems] = useState([])
+  const [bonPlanList, setBonPlanList] = useState([])
+  const [bonPlanError, setBonPlanError] = useState(false)
   const [modal, setModal] = useState(null) // null | {} | {id,...}
   const [section, setSection] = useState('en_cours')
   const [search, setSearch] = useState('')
@@ -943,59 +1089,27 @@ export default function Operations() {
     return onSnapshot(q, snap => setOps(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [])
 
-  // Les données de recherche (tous les produits + prix exclu team) ne sont chargées
-  // qu'à la première saisie dans la barre de recherche : ouvrir la page ne coûte
-  // plus des milliers de lectures Firestore.
+  // OP ciblées sur le rayon et le magasin de l'utilisateur
+  const visibleOps = useMemo(() => ops.filter(op => isOpVisibleFor(op, profile)), [ops, profile])
+
+  // Les données de recherche (produits des OP en cours et à venir + prix bon plan) ne sont chargées
+  // qu'à la première saisie dans la barre de recherche : ouvrir la page ne coûte pas de lectures.
   const searchUsed = useLatch(search.trim().length > 0)
+  const searchOpIds = useMemo(() => visibleOps.filter(op => opStatus(op) !== 'terminee').map(op => op.id).sort(), [visibleOps])
+  const opProduits = useOpProduits(searchOpIds, searchUsed)
 
-  // Chargement de tous les produits (collectionGroup) pour la recherche
   useEffect(() => {
     if (!searchUsed) return
-    const q = query(collectionGroup(db, 'produits'), orderBy('reference', 'asc'))
-    return onSnapshot(q, snap => setAllProduits(snap.docs.map(d => ({
-      id: d.id,
-      opId: d.ref.parent.parent.id,
-      ...d.data(),
-    }))))
+    return onSnapshot(collection(db, 'prix_exclu_team'),
+      snap => setBonPlanList(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      () => setBonPlanError(true))
   }, [searchUsed])
 
-  // Chargement des prix exclu team pour la recherche globale
-  useEffect(() => {
-    if (!searchUsed) return
-    return onSnapshot(collection(db, 'prix_exclu_team'), snap =>
-      setPrixExcluItems(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-    )
-  }, [searchUsed])
-
-  const searchResults = useMemo(() => {
-    const term = search.trim().toLowerCase()
-    if (!term) return { opResults: [], prixResults: [] }
-
-    // Produits des OPs en cours ou à venir uniquement
-    const opsById = new Map(ops.map(o => [o.id, o]))
-    const opResults = allProduits
-      .filter(p => {
-        const op = opsById.get(p.opId)
-        if (!op) return false
-        return getStatus(op) !== 'terminee'
-      })
-      .filter(p =>
-        (p.nom || '').toLowerCase().includes(term) ||
-        (p.reference || '').toLowerCase().includes(term) ||
-        (p.refFournisseur || '').toLowerCase().includes(term)
-      )
-      .map(p => ({ ...p, op: opsById.get(p.opId) }))
-
-    // Prix exclu team
-    const prixResults = prixExcluItems.filter(p =>
-      (p.nom || '').toLowerCase().includes(term) ||
-      (p.marque || '').toLowerCase().includes(term) ||
-      (p.chrono || '').toLowerCase().includes(term) ||
-      (p.segment || '').toLowerCase().includes(term)
-    )
-
-    return { opResults, prixResults }
-  }, [search, allProduits, ops, prixExcluItems])
+  const promoIndex = useMemo(
+    () => buildPromoIndex({ ops: visibleOps, produits: opProduits.produits, bonPlanList }),
+    [visibleOps, opProduits.produits, bonPlanList],
+  )
+  const searchResults = useMemo(() => searchPromos(promoIndex, search), [promoIndex, search])
 
   async function handleSave(form) {
     const data = {
@@ -1020,18 +1134,6 @@ export default function Operations() {
     if (!confirm(`Supprimer l'opération "${op.nom}" ?`)) return
     await deleteDoc(doc(db, 'op_commerciales', op.id))
   }
-
-  const isRayonRole = RAYON_TYPES.includes(profile?.role)
-
-  // Filtrer les OPs selon le rayon et le magasin de l'utilisateur
-  const visibleOps = useMemo(() => ops.filter(op => {
-    // Filtre rayon (nouveau champ rayonTypes tableau + rétro-compat rayonType string)
-    const rayons = op.rayonTypes?.length ? op.rayonTypes : (op.rayonType ? [op.rayonType] : [])
-    if (rayons.length > 0 && isRayonRole && !rayons.includes(profile?.role)) return false
-    // Filtre magasin
-    if (op.magasinIds && profile?.magasinId && !op.magasinIds.includes(profile.magasinId)) return false
-    return true
-  }), [ops, isRayonRole, profile])
 
   // OPs globales en cours uniquement (séparées du reste)
   const today = new Date().toLocaleDateString('fr-CA')
@@ -1127,7 +1229,7 @@ export default function Operations() {
               ref={searchRef}
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Rechercher par nom, référence produit ou fournisseur…"
+              placeholder="Un vélo est-il en remise ? Nom, réf. fournisseur, chrono, couleur…"
               className="w-full h-9 pl-9 pr-4 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-neutral-500 outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-white/10"
             />
             {search && (
@@ -1139,99 +1241,11 @@ export default function Operations() {
           </div>
 
           {/* Résultats de recherche */}
-          {search.trim() && (() => {
-            const { opResults, prixResults } = searchResults
-            const total = opResults.length + prixResults.length
-            const hl = s => s?.toLowerCase().includes(search.trim().toLowerCase())
-            const Mark = ({ v }) => v
-              ? <span className={hl(v) ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 px-0.5 rounded' : ''}>{v}</span>
-              : <span className="text-gray-300 dark:text-neutral-600">—</span>
-
-            return (
-              <div className="space-y-3">
-                {total === 0 && (
-                  <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 py-10 text-center text-sm text-gray-400 dark:text-neutral-500">
-                    Aucun résultat pour « {search.trim()} »
-                  </div>
-                )}
-
-                {/* Résultats OPs (en cours + à venir) */}
-                {opResults.length > 0 && (
-                  <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 overflow-hidden">
-                    <div className="px-4 py-2.5 border-b border-gray-100 dark:border-neutral-800 bg-gray-50/50 dark:bg-neutral-800/30 flex items-center gap-2">
-                      <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Opérations commerciales</span>
-                      <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-gray-100 text-gray-500 dark:bg-neutral-800 dark:text-neutral-400">{opResults.length}</span>
-                    </div>
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="border-b border-gray-100 dark:border-neutral-800">
-                          {['Opération', 'Statut', 'Produit', 'Marque', 'Réf. produit', 'Réf. fourn.', 'Prix fort', 'Prix OP'].map(h => (
-                            <th key={h} className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {opResults.map(p => {
-                          const st = p.op ? STATUS_CONFIG[getStatus(p.op)] : null
-                          return (
-                            <tr key={`${p.opId}_${p.id}`}
-                              className="border-b last:border-0 border-gray-100 dark:border-neutral-800 hover:bg-gray-50 dark:hover:bg-neutral-800/50 transition-colors cursor-pointer"
-                              onClick={() => navigate(`/operations/${p.opId}`)}>
-                              <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{p.op?.nom || p.opId}</td>
-                              <td className="px-4 py-3">
-                                {st && <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${st.pill}`}>{st.label}</span>}
-                              </td>
-                              <td className="px-4 py-3 text-gray-700 dark:text-neutral-300"><Mark v={p.nom} /></td>
-                              <td className="px-4 py-3 text-gray-500 dark:text-neutral-400">{p.marque || '—'}</td>
-                              <td className="px-4 py-3 font-mono text-gray-500 dark:text-neutral-400"><Mark v={p.reference} /></td>
-                              <td className="px-4 py-3 font-mono text-gray-500 dark:text-neutral-400"><Mark v={p.refFournisseur} /></td>
-                              <td className="px-4 py-3 text-gray-500 dark:text-neutral-400">{p.prixFort != null ? `${p.prixFort} €` : '—'}</td>
-                              <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">{p.prixOp != null ? `${p.prixOp} €` : '—'}</td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {/* Résultats prix exclu team */}
-                {prixResults.length > 0 && (
-                  <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 overflow-hidden">
-                    <div className="px-4 py-2.5 border-b border-gray-100 dark:border-neutral-800 bg-gray-50/50 dark:bg-neutral-800/30 flex items-center gap-2">
-                      <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Prix exclu team</span>
-                      <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-gray-100 text-gray-500 dark:bg-neutral-800 dark:text-neutral-400">{prixResults.length}</span>
-                    </div>
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="border-b border-gray-100 dark:border-neutral-800">
-                          {['Nom', 'Marque', 'Chrono', 'Segment', 'Prix fort', 'Prix exclu team', 'Remise'].map(h => (
-                            <th key={h} className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {prixResults.map(p => {
-                          const rem = p.prixFort && p.prixExcluTeam ? Math.round((1 - p.prixExcluTeam / p.prixFort) * 100) : null
-                          return (
-                            <tr key={p.id} className="border-b last:border-0 border-gray-100 dark:border-neutral-800 hover:bg-gray-50 dark:hover:bg-neutral-800/50">
-                              <td className="px-4 py-2.5 font-medium text-gray-900 dark:text-white"><Mark v={p.nom} /></td>
-                              <td className="px-4 py-2.5 text-gray-500 dark:text-neutral-400"><Mark v={p.marque} /></td>
-                              <td className="px-4 py-2.5 font-mono text-gray-700 dark:text-neutral-300"><Mark v={p.chrono} /></td>
-                              <td className="px-4 py-2.5 text-gray-500 dark:text-neutral-400"><Mark v={p.segment} /></td>
-                              <td className="px-4 py-2.5 text-gray-500 dark:text-neutral-400">{p.prixFort != null ? `${Number(p.prixFort).toFixed(2)} €` : '—'}</td>
-                              <td className="px-4 py-2.5 font-semibold text-blue-600 dark:text-blue-400">{p.prixExcluTeam != null ? `${Number(p.prixExcluTeam).toFixed(2)} €` : '—'}</td>
-                              <td className="px-4 py-2.5 font-semibold text-emerald-600 dark:text-emerald-400">{rem != null ? `-${rem}%` : '—'}</td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )
-          })()}
+          {search.trim() && (
+            <PromoResults results={searchResults} term={search.trim()}
+              loading={opProduits.loading} error={opProduits.error || bonPlanError}
+              onOpenOp={id => navigate(`/operations/${id}`)} />
+          )}
 
           {/* Tabs + Contenu (masqués pendant la recherche) */}
           {!search.trim() && (<>
@@ -1294,7 +1308,7 @@ export default function Operations() {
                           {fmtDate(op.dateDebut)} → {fmtDate(op.dateFin)}
                         </div>
                         {(() => {
-                          const rayons = op.rayonTypes?.length ? op.rayonTypes : (op.rayonType ? [op.rayonType] : [])
+                          const rayons = opRayons(op)
                           return rayons.length > 0 && (
                             <div className="flex flex-wrap gap-1">
                               {rayons.map(r => (

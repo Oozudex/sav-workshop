@@ -171,17 +171,27 @@ function millis(t) {
   return (t.seconds ?? 0) * 1000
 }
 
-// Prix bon plan en vigueur par chrono (le plus récent si un chrono en a plusieurs)
-export function bonPlanByChrono(list) {
-  const map = new Map()
+// Prix bon plan en vigueur : le plus récent quand un chrono en a plusieurs (les autres sont gardés)
+export function latestBonPlans(list) {
+  const byChrono = new Map(), others = []
   for (const p of list) {
     const key = cleanRef(p.chrono)
-    const prix = parsePrice(p.prixExcluTeam)
-    if (!key || prix == null) continue
-    const cur = map.get(key)
-    if (!cur || millis(p.importedAt) >= cur.at) map.set(key, { prix, at: millis(p.importedAt) })
+    if (!key) { others.push(p); continue }
+    const cur = byChrono.get(key)
+    if (!cur || millis(p.importedAt) >= millis(cur.importedAt)) byChrono.set(key, p)
   }
-  return new Map([...map].map(([k, v]) => [k, v.prix]))
+  return [...byChrono.values(), ...others]
+}
+
+// Prix bon plan en vigueur par chrono
+export function bonPlanByChrono(list) {
+  const map = new Map()
+  for (const p of latestBonPlans(list)) {
+    const key = cleanRef(p.chrono)
+    const prix = parsePrice(p.prixExcluTeam)
+    if (key && prix != null) map.set(key, prix)
+  }
+  return map
 }
 
 // Le bon plan est déjà aussi avantageux que l'OP : le produit reste affiché mais grisé
