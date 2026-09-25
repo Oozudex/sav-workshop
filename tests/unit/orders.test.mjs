@@ -1,7 +1,8 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  ORDER_ALERTS, formatOrderNumber, isOrderOpen, orderMatches, orderStatus, parseEuro, remainingToPay,
+  ORDER_ALERTS, formatOrderNumber, isOrderOpen, orderFormErrors, orderMatches, orderStatus, orderTotal, parseEuro,
+  remainingToPay,
 } from '../../src/lib/orders.js'
 import { computeAlerts } from '../../src/lib/alerts.js'
 
@@ -20,6 +21,33 @@ describe('formats', () => {
     assert.equal(remainingToPay({ prix: 1200, acompte: '300' }), 900)
     assert.equal(remainingToPay({ prix: 100 }), 100)
     assert.equal(remainingToPay({ prix: null, acompte: 50 }), null)
+  })
+  it('total avec frais de port, reste à payer sur le total', () => {
+    assert.equal(orderTotal({ prix: '1 199,99', fraisPort: '15' }), 1214.99)
+    assert.equal(orderTotal({ prix: 89.9 }), 89.9)
+    assert.equal(orderTotal({ fraisPort: 15 }), null)
+    assert.equal(remainingToPay({ prix: 1200, fraisPort: 20, acompte: 300 }), 920)
+  })
+})
+
+describe('formulaire de commande', () => {
+  const ok = { client: 'Marie Dubois', produit: 'Selle Selle Italia', prix: '89,90', fraisPort: '', acompte: '', createur: 'Paul' }
+  it('complet : aucune erreur', () => {
+    assert.deepEqual(orderFormErrors(ok, { requireCreateur: true }), {})
+  })
+  it('prix de vente TTC obligatoire et valide', () => {
+    assert.equal(orderFormErrors({ ...ok, prix: '' }).prix, 'Le prix de vente TTC est obligatoire.')
+    assert.equal(orderFormErrors({ ...ok, prix: 'abc' }).prix, 'Prix invalide.')
+    assert.equal(orderFormErrors({ ...ok, prix: '0' }).prix, 'Prix invalide.')
+  })
+  it('frais de port et acompte', () => {
+    assert.equal(orderFormErrors({ ...ok, fraisPort: '-5' }).fraisPort, 'Montant invalide.')
+    assert.equal(orderFormErrors({ ...ok, acompte: '100' }).acompte, 'L’acompte dépasse le total.')
+    assert.deepEqual(orderFormErrors({ ...ok, fraisPort: '15', acompte: '104,90' }), {})
+  })
+  it('client, désignation et vendeur', () => {
+    const e = orderFormErrors({ ...ok, client: ' ', produit: '', createur: '' }, { requireCreateur: true })
+    assert.deepEqual(Object.keys(e).sort(), ['client', 'createur', 'produit'])
   })
   it('numéros anciens et nouveaux', () => {
     assert.equal(formatOrderNumber('0012'), '#0012')

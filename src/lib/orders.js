@@ -85,11 +85,40 @@ export function formatEuro(n) {
   return n == null || n === '' ? '—' : new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n)
 }
 
-// Reste à payer (null si pas de prix)
-export function remainingToPay(order) {
+const round2 = n => Math.round(n * 100) / 100
+
+// Total TTC payé par le client : prix de vente + frais de port (null si pas de prix)
+export function orderTotal(order) {
   const prix = parseEuro(order.prix)
   if (prix == null) return null
-  return Math.max(0, Math.round((prix - (parseEuro(order.acompte) || 0)) * 100) / 100)
+  return round2(prix + (parseEuro(order.fraisPort) || 0))
+}
+
+// Reste à payer sur le total (null si pas de prix)
+export function remainingToPay(order) {
+  const total = orderTotal(order)
+  if (total == null) return null
+  return Math.max(0, round2(total - (parseEuro(order.acompte) || 0)))
+}
+
+// Erreurs du formulaire de commande, par champ ({} si tout est bon)
+export function orderFormErrors(fields, { requireCreateur = false } = {}) {
+  const errors = {}
+  const filled = v => v != null && String(v).trim() !== ''
+  if (!filled(fields.client)) errors.client = 'Le nom du client est obligatoire.'
+  if (!filled(fields.produit)) errors.produit = 'La désignation est obligatoire.'
+  if (requireCreateur && !filled(fields.createur)) errors.createur = 'Choisis le vendeur.'
+
+  const prix = parseEuro(fields.prix)
+  if (!filled(fields.prix)) errors.prix = 'Le prix de vente TTC est obligatoire.'
+  else if (prix == null || prix <= 0) errors.prix = 'Prix invalide.'
+  const port = parseEuro(fields.fraisPort)
+  if (filled(fields.fraisPort) && (port == null || port < 0)) errors.fraisPort = 'Montant invalide.'
+  const acompte = parseEuro(fields.acompte)
+  const total = orderTotal(fields)
+  if (filled(fields.acompte) && (acompte == null || acompte < 0)) errors.acompte = 'Montant invalide.'
+  else if (acompte != null && total != null && acompte > total) errors.acompte = 'L’acompte dépasse le total.'
+  return errors
 }
 
 // Les anciens numéros sont de simples compteurs ("0012"), les nouveaux incluent l'année

@@ -3,7 +3,7 @@
 import { toDate } from './ticketStats.js'
 import {
   ORDER_OPEN_STATUSES, ORDER_TYPES, isLateDelivery, isOrderOpen, orderClosedDate, orderStatus, orderStepDate,
-  parseEuro, remainingToPay,
+  orderTotal, parseEuro, remainingToPay,
 } from './orders.js'
 
 const DAY = 24 * 60 * 60 * 1000
@@ -35,7 +35,8 @@ export function computeOrderPeriodStats(orders, range) {
   const retirees = ended.filter(o => orderStatus(o) === 'retiree')
   const annulees = ended.filter(o => orderStatus(o) === 'annulee')
 
-  const prices = retirees.map(o => parseEuro(o.prix)).filter(p => p != null)
+  // Chiffre d'affaires : total payé par le client, frais de port compris
+  const prices = retirees.map(orderTotal).filter(p => p != null)
   const received = orders.filter(o => inRange(orderStepDate(o, 'recue'), range))
 
   return {

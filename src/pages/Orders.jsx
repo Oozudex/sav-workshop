@@ -16,7 +16,7 @@ import { GLOBAL_ROLES, CAN_DELETE_ROLES, ORDER_CLOSED_STATUTS } from '../lib/con
 import {
   ORDER_ALERTS, ORDER_OPEN_STATUSES, ORDER_STATUSES, ORDER_STATUS_META, ORDER_TYPES, ORDER_VISIBLE_DAYS,
   formatEuro, formatOrderNumber, isLateDelivery, isOrderListed, isOrderOpen, orderMatches, orderStatus,
-  orderStatusSince, parseEuro, remainingToPay,
+  orderFormErrors, orderStatusSince, orderTotal, parseEuro, remainingToPay,
 } from '../lib/orders'
 import { toDate } from '../lib/ticketStats'
 import { useMagasin } from '../store/useMagasin'
@@ -51,16 +51,23 @@ const NEXT_STEP = {
 const EMPTY_FIELDS = {
   client: '', tel: '', type: 'piece', ref_produit: '', produit: '',
   fournisseur: '', refFournisseur: '', dateReceptionPrevue: '',
-  prix: '', acompte: '', createur: '',
+  prix: '', fraisPort: '', acompte: '', createur: '',
 }
 const FIELD_LABELS = {
   client: 'client', tel: 'téléphone', type: 'type', ref_produit: 'référence', produit: 'désignation',
   fournisseur: 'fournisseur', refFournisseur: 'n° commande fournisseur', dateReceptionPrevue: 'réception prévue',
-  prix: 'prix', acompte: 'acompte', createur: 'créé par',
+  prix: 'prix de vente', fraisPort: 'frais de port', acompte: 'acompte', createur: 'créé par',
 }
 
+// Montants affichés à la française dans le formulaire : 249.9 → « 249,90 »
+const MONEY_FIELDS = ['prix', 'fraisPort', 'acompte']
+const moneyInput = v => (typeof v === 'number' ? v.toFixed(2).replace('.', ',') : v)
+
 function fieldsOf(order) {
-  return Object.fromEntries(Object.keys(EMPTY_FIELDS).map(k => [k, order?.[k] ?? EMPTY_FIELDS[k]]))
+  return Object.fromEntries(Object.keys(EMPTY_FIELDS).map(k => {
+    const v = order?.[k] ?? EMPTY_FIELDS[k]
+    return [k, MONEY_FIELDS.includes(k) ? moneyInput(v) : v]
+  }))
 }
 
 // Valeurs prêtes à enregistrer (texte nettoyé, prix numériques, vide → null)
@@ -71,7 +78,7 @@ function cleanFields(f) {
     ref_produit: text(f.ref_produit), produit: text(f.produit),
     fournisseur: text(f.fournisseur), refFournisseur: text(f.refFournisseur),
     dateReceptionPrevue: f.dateReceptionPrevue || null,
-    prix: parseEuro(f.prix), acompte: parseEuro(f.acompte), createur: text(f.createur),
+    prix: parseEuro(f.prix), fraisPort: parseEuro(f.fraisPort), acompte: parseEuro(f.acompte), createur: text(f.createur),
   }
 }
 
@@ -243,16 +250,16 @@ export default function Orders() {
     <div className="min-h-screen flex flex-col">
       <Navbar />
 
-      <main className="flex-1 p-5">
+      <main className="flex-1 p-4 sm:p-5">
         <div className="max-w-7xl mx-auto space-y-4">
 
           {/* Header */}
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h1 className="text-sm font-semibold text-gray-900 dark:text-white">Commandes clients</h1>
               <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">Vélos, pièces et accessoires commandés pour un client</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {canManage && (
                 <button
                   onClick={() => setShowStats(true)}
@@ -284,7 +291,7 @@ export default function Orders() {
                 onClick={() => setShowForm(true)}
                 disabled={!effectiveMagasinId}
                 title={effectiveMagasinId ? '' : 'Sélectionne un magasin pour créer une commande'}
-                className="h-8 px-4 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50
+                className="h-8 px-4 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 max-sm:flex-1
                            bg-gray-900 text-white hover:bg-gray-700
                            dark:bg-white dark:text-black dark:hover:bg-gray-100"
               >
@@ -314,7 +321,7 @@ export default function Orders() {
           )}
 
           {/* Compteurs cliquables = filtres */}
-          <div className={`grid gap-3 ${tab === 'open' ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2'}`}>
+          <div className={`grid gap-2 sm:gap-3 ${tab === 'open' ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2'}`}>
             {statusCards.map(s => (
               <StatCard key={s} status={s} value={counts[s]} active={filterStatut === s}
                 onClick={() => setFilterStatut(v => v === s ? '' : s)} />
@@ -324,13 +331,13 @@ export default function Orders() {
           {/* Filtres */}
           <div className="flex flex-wrap items-center gap-2">
             <input
-              className="Input h-8 !w-72 text-xs"
-              placeholder="Client, téléphone, n° de commande, référence, fournisseur…"
+              className="Input h-8 sm:!w-72 text-xs"
+              placeholder="Rechercher : client, téléphone, n°, référence, fournisseur…"
               value={q}
               onChange={e => setQ(e.target.value)}
             />
             {creators.length > 0 && (
-              <select className="Input h-8 text-xs !w-44" value={filterCreator} onChange={e => setFilterCreator(e.target.value)}>
+              <select className="Input h-8 text-xs flex-1 sm:flex-none sm:!w-44" value={filterCreator} onChange={e => setFilterCreator(e.target.value)}>
                 <option value="">Tous les vendeurs</option>
                 {creators.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -357,8 +364,21 @@ export default function Orders() {
             </span>
           </div>
 
-          {/* Tableau */}
-          <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 overflow-hidden bg-white dark:bg-neutral-900">
+          {/* Téléphone : une carte par commande */}
+          <div className="md:hidden space-y-2">
+            {filtered.map(o => (
+              <OrderCard key={o.id} order={o} magasin={isGlobal && !effectiveMagasinId ? magasins[o.magasinId] : null}
+                onOpen={() => setActiveId(o.id)} onChangeStatut={s => changeStatut(o, s)} />
+            ))}
+            {filtered.length === 0 && (
+              <p className="py-8 text-center text-xs text-gray-400 dark:text-neutral-500">
+                Aucune commande{hasFilters || alertKey ? ' pour ces filtres' : tab === 'open' ? ' en cours' : ' terminée'}.
+              </p>
+            )}
+          </div>
+
+          {/* Ordinateur : tableau */}
+          <div className="hidden md:block rounded-2xl border border-gray-200 dark:border-neutral-800 overflow-hidden bg-white dark:bg-neutral-900">
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
@@ -367,7 +387,7 @@ export default function Orders() {
                     <Th>Client</Th>
                     <Th>Produit</Th>
                     <Th>Fournisseur</Th>
-                    <Th right>Prix / reste</Th>
+                    <Th right>Total TTC / reste</Th>
                     <Th>Statut</Th>
                     <Th>Vendeur</Th>
                     {isGlobal && !effectiveMagasinId && <Th>Magasin</Th>}
@@ -401,7 +421,10 @@ export default function Orders() {
                           {o.refFournisseur && <p className="font-mono text-[11px] text-gray-500 dark:text-neutral-400">{o.refFournisseur}</p>}
                         </td>
                         <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
-                          <p className="text-gray-700 dark:text-neutral-300">{formatEuro(parseEuro(o.prix))}</p>
+                          <p className="text-gray-700 dark:text-neutral-300">{formatEuro(orderTotal(o))}</p>
+                          {parseEuro(o.fraisPort) > 0 && (
+                            <p className="text-[11px] text-gray-500 dark:text-neutral-400">dont port {formatEuro(parseEuro(o.fraisPort))}</p>
+                          )}
                           {parseEuro(o.acompte) > 0 && (
                             <p className="text-[11px] text-gray-500 dark:text-neutral-400">acompte {formatEuro(parseEuro(o.acompte))} · reste {formatEuro(reste)}</p>
                           )}
@@ -481,6 +504,7 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
   const [editing, setEditing] = useState(false)
   const [fields, setFields]   = useState(() => fieldsOf(order))
   const [saving, setSaving]   = useState(false)
+  const [tried, setTried]     = useState(false)
   const [noteAuthor, setNoteAuthor] = useState('')
   const [noteText, setNoteText]     = useState('')
   const [noteError, setNoteError]   = useState(false)
@@ -488,8 +512,11 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
   const status = orderStatus(order)
   const meta = ORDER_STATUS_META[status]
   const next = NEXT_STEP[status]
+  const total = orderTotal(order)
+  const port = parseEuro(order.fraisPort)
   const reste = remainingToPay(order)
   const anonymized = !!order.anonymizedAt
+  const errors = orderFormErrors(fields)
 
   useEffect(() => { if (!editing) setFields(fieldsOf(order)) }, [order, editing])
   useEffect(() => {
@@ -499,9 +526,13 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
   }, [onClose])
 
   async function save() {
+    setTried(true)
+    if (Object.keys(errors).length) return
     setSaving(true)
-    try { await onSaveFields(fields); setEditing(false) } finally { setSaving(false) }
+    try { await onSaveFields(fields); setEditing(false); setTried(false) } finally { setSaving(false) }
   }
+
+  function cancelEdit() { setFields(fieldsOf(order)); setEditing(false); setTried(false) }
 
   async function submitNote(e) {
     e.preventDefault()
@@ -520,7 +551,9 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
       `Réf. produit : ${order.ref_produit || '—'}`,
       `Fournisseur : ${order.fournisseur || '—'}${order.refFournisseur ? ` (n° ${order.refFournisseur})` : ''}`,
       `Réception prévue : ${fmtYmd(order.dateReceptionPrevue)}`,
-      `Prix TTC : ${formatEuro(parseEuro(order.prix))}`,
+      `Prix de vente TTC : ${formatEuro(parseEuro(order.prix))}`,
+      port ? `Frais de port : ${formatEuro(port)}` : null,
+      port ? `Total TTC : ${formatEuro(total)}` : null,
       parseEuro(order.acompte) ? `Acompte : ${formatEuro(parseEuro(order.acompte))} · reste ${formatEuro(reste)}` : null,
       `Statut : ${meta.label}`,
       `Vendeur : ${order.createur || '—'}`,
@@ -533,27 +566,23 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
   const history = (order.history || []).slice().reverse()
 
   return (
-    <div ref={overlayRef} onClick={e => { if (e.target === overlayRef.current) onClose() }}
-      className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm flex items-start justify-center p-4 pt-[5vh] overflow-y-auto">
-      <div className="w-full max-w-3xl rounded-2xl border shadow-2xl overflow-hidden bg-white border-gray-200 dark:bg-neutral-900 dark:border-neutral-800">
+    <div ref={overlayRef} onClick={e => { if (e.target === overlayRef.current && !editing) onClose() }}
+      className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm flex items-start justify-center p-3 sm:p-4 sm:pt-[5vh] overflow-y-auto">
+      <div className="w-full max-w-3xl rounded-2xl border shadow-2xl bg-white border-gray-200 dark:bg-neutral-900 dark:border-neutral-800">
 
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <span className="font-mono text-xs text-gray-400 dark:text-neutral-500 shrink-0">{formatOrderNumber(order.numero)}</span>
-            <span className="font-semibold text-sm text-gray-900 dark:text-white truncate">{order.client || (anonymized ? 'Client anonymisé' : '—')}</span>
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-medium shrink-0 ${meta.badge}`}>
-              <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />{meta.label}
-            </span>
+        {/* Header : numéro et statut, client en dessous ; actions à droite */}
+        <div className="flex items-start justify-between gap-3 px-4 sm:px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
+          <div className="min-w-0 space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-mono text-xs text-gray-400 dark:text-neutral-500">{formatOrderNumber(order.numero)}</span>
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-medium ${meta.badge}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />{meta.label}
+              </span>
+            </div>
+            <p className="font-semibold text-sm text-gray-900 dark:text-white break-words">{order.client || (anonymized ? 'Client anonymisé' : '—')}</p>
           </div>
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
             {!editing && !anonymized && <SmallBtn onClick={() => setEditing(true)}>Modifier</SmallBtn>}
-            {editing && <>
-              <SmallBtn onClick={() => { setFields(fieldsOf(order)); setEditing(false) }}>Annuler</SmallBtn>
-              <SmallBtn primary onClick={save} disabled={saving || !fields.client.trim() || !fields.produit.trim()}>
-                {saving ? 'Enregistrement…' : 'Enregistrer'}
-              </SmallBtn>
-            </>}
             <IconBtn title="Copier les infos" onClick={copyInfo}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
             </IconBtn>
@@ -568,38 +597,40 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
           </div>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-3 sm:p-5 space-y-3 sm:space-y-4">
 
           {/* Parcours de la commande */}
-          <MCard title="Suivi">
-            <div className="flex flex-wrap gap-1.5">
-              {ORDER_STATUSES.map(s => (
-                <button key={s} type="button" onClick={() => onChangeStatut(s)} disabled={s === status} title={ORDER_STATUS_META[s].hint}
-                  className={`h-7 px-2.5 rounded-lg text-[11px] font-medium transition-colors border ${s === status
-                    ? 'bg-gray-900 text-white border-transparent dark:bg-white dark:text-black'
-                    : 'text-gray-600 border-gray-200 hover:bg-gray-50 dark:text-neutral-400 dark:border-neutral-700 dark:hover:bg-neutral-800'}`}>
-                  {ORDER_STATUS_META[s].label}
-                </button>
-              ))}
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-3 mt-3">
-              <p className="text-xs text-gray-500 dark:text-neutral-400">
-                {meta.hint} · {sinceLabel(orderStatusSince(order))}
-                {isLateDelivery(order) && <span className="text-red-600 dark:text-red-400"> · ⚠ réception prévue le {fmtYmd(order.dateReceptionPrevue)}</span>}
-              </p>
-              {next && (
-                <button type="button" onClick={() => onChangeStatut(next.to)}
-                  className="h-8 px-3 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
-                  {next.label} →
-                </button>
-              )}
-            </div>
-          </MCard>
+          {!editing && (
+            <MCard title="Suivi">
+              <div className="flex flex-wrap gap-1.5">
+                {ORDER_STATUSES.map(s => (
+                  <button key={s} type="button" onClick={() => onChangeStatut(s)} disabled={s === status} title={ORDER_STATUS_META[s].hint}
+                    className={`h-8 sm:h-7 px-2.5 rounded-lg text-[11px] font-medium transition-colors border ${s === status
+                      ? 'bg-gray-900 text-white border-transparent dark:bg-white dark:text-black'
+                      : 'text-gray-600 border-gray-200 hover:bg-gray-50 dark:text-neutral-400 dark:border-neutral-700 dark:hover:bg-neutral-800'}`}>
+                    {ORDER_STATUS_META[s].label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-3">
+                <p className="text-xs text-gray-500 dark:text-neutral-400">
+                  {meta.hint} · {sinceLabel(orderStatusSince(order))}
+                  {isLateDelivery(order) && <span className="text-red-600 dark:text-red-400"> · ⚠ réception prévue le {fmtYmd(order.dateReceptionPrevue)}</span>}
+                </p>
+                {next && (
+                  <button type="button" onClick={() => onChangeStatut(next.to)}
+                    className="h-9 sm:h-8 px-3 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
+                    {next.label} →
+                  </button>
+                )}
+              </div>
+            </MCard>
+          )}
 
           {editing ? (
-            <OrderFields fields={fields} setFields={setFields} staff={staff} />
+            <OrderFields fields={fields} setFields={setFields} staff={staff} errors={tried ? errors : {}} />
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
               <MCard title="Client">
                 <MGrid>
                   <MField label="Nom"><MVal>{order.client}</MVal></MField>
@@ -610,9 +641,11 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
               </MCard>
               <MCard title="Paiement">
                 <MGrid>
-                  <MField label="Prix TTC"><MVal>{formatEuro(parseEuro(order.prix))}</MVal></MField>
+                  <MField label="Prix de vente TTC"><MVal>{formatEuro(parseEuro(order.prix))}</MVal></MField>
+                  <MField label="Frais de port"><MVal>{port ? formatEuro(port) : 'Aucun'}</MVal></MField>
+                  <MField label="Total TTC"><p className="text-sm font-semibold text-gray-900 dark:text-white">{formatEuro(total)}</p></MField>
                   <MField label="Acompte"><MVal>{parseEuro(order.acompte) ? formatEuro(parseEuro(order.acompte)) : 'Aucun'}</MVal></MField>
-                  <MField label="Reste à payer" span2><MVal>{formatEuro(reste)}</MVal></MField>
+                  <MField label="Reste à payer" span2><p className="text-sm font-semibold text-gray-900 dark:text-white">{formatEuro(reste)}</p></MField>
                 </MGrid>
               </MCard>
               <MCard title="Produit">
@@ -634,51 +667,68 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
           )}
 
           {/* Notes */}
-          <MCard title="Notes">
-            <div className="space-y-2.5 mb-3 max-h-48 overflow-y-auto">
-              {notes.length === 0 && !order.commentaire && <p className="text-xs text-gray-400 dark:text-neutral-500">Aucune note.</p>}
-              {order.commentaire && (
-                <p className="text-sm text-gray-800 dark:text-neutral-200 whitespace-pre-wrap">{order.commentaire}</p>
+          {!editing && (
+            <MCard title="Notes">
+              <div className="space-y-2.5 mb-3 max-h-48 overflow-y-auto">
+                {notes.length === 0 && !order.commentaire && <p className="text-xs text-gray-400 dark:text-neutral-500">Aucune note.</p>}
+                {order.commentaire && (
+                  <p className="text-sm text-gray-800 dark:text-neutral-200 whitespace-pre-wrap">{order.commentaire}</p>
+                )}
+                {notes.map((n, i) => (
+                  <div key={i}>
+                    <p className="text-[11px] text-gray-400 dark:text-neutral-500">
+                      <span className="font-semibold text-gray-600 dark:text-neutral-300">{n.author}</span> · {fmtDate(n.at)}
+                    </p>
+                    <p className="text-sm text-gray-800 dark:text-neutral-200 whitespace-pre-wrap break-words">{n.text}</p>
+                  </div>
+                ))}
+              </div>
+              {!anonymized && (
+                <form onSubmit={submitNote} className="space-y-1.5">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <select value={noteAuthor} onChange={e => { setNoteAuthor(e.target.value); setNoteError(false) }}
+                      className={`Input h-9 sm:!w-36 text-xs shrink-0 ${noteError ? '!border-red-400' : ''}`}>
+                      <option value="">— Auteur</option>
+                      {staff.map(s => <option key={s.id} value={s.nom}>{s.nom}</option>)}
+                    </select>
+                    <div className="flex gap-2 flex-1 min-w-0">
+                      <input className="Input h-9 text-sm min-w-0" placeholder="Ajouter une note…" value={noteText} onChange={e => setNoteText(e.target.value)} />
+                      <SmallBtn primary type="submit" disabled={!noteText.trim()}>Ajouter</SmallBtn>
+                    </div>
+                  </div>
+                  {noteError && <p className="text-xs text-red-500 dark:text-red-400">Choisis le vendeur qui écrit la note.</p>}
+                </form>
               )}
-              {notes.map((n, i) => (
-                <div key={i}>
-                  <p className="text-[11px] text-gray-400 dark:text-neutral-500">
-                    <span className="font-semibold text-gray-600 dark:text-neutral-300">{n.author}</span> · {fmtDate(n.at)}
-                  </p>
-                  <p className="text-sm text-gray-800 dark:text-neutral-200 whitespace-pre-wrap">{n.text}</p>
-                </div>
-              ))}
-            </div>
-            {!anonymized && (
-              <form onSubmit={submitNote} className="space-y-1.5">
-                <div className="flex gap-2">
-                  <select value={noteAuthor} onChange={e => { setNoteAuthor(e.target.value); setNoteError(false) }}
-                    className={`Input h-9 !w-36 text-xs shrink-0 ${noteError ? '!border-red-400' : ''}`}>
-                    <option value="">— Auteur</option>
-                    {staff.map(s => <option key={s.id} value={s.nom}>{s.nom}</option>)}
-                  </select>
-                  <input className="Input h-9 text-sm" placeholder="Ajouter une note…" value={noteText} onChange={e => setNoteText(e.target.value)} />
-                  <SmallBtn primary type="submit" disabled={!noteText.trim()}>Ajouter</SmallBtn>
-                </div>
-                {noteError && <p className="text-xs text-red-500 dark:text-red-400">Choisis le vendeur qui écrit la note.</p>}
-              </form>
-            )}
-          </MCard>
+            </MCard>
+          )}
 
           {/* Historique */}
-          <MCard title="Historique">
-            <div className="max-h-40 overflow-y-auto space-y-0.5">
-              {history.length === 0 && <p className="text-xs text-gray-400 dark:text-neutral-500">Créée le {fmtDate(order.createdAt)}.</p>}
-              {history.map((h, i) => (
-                <div key={i} className="flex gap-2 text-xs py-1">
-                  <span className="text-gray-400 dark:text-neutral-500 shrink-0 w-36">{toDate(h.at)?.toLocaleString('fr-FR') || '—'}</span>
-                  <span className="text-gray-700 dark:text-neutral-300">{h.note}</span>
-                  <span className="text-gray-400 dark:text-neutral-500 ml-auto shrink-0">{h.by}</span>
-                </div>
-              ))}
-            </div>
-          </MCard>
+          {!editing && (
+            <MCard title="Historique">
+              <div className="max-h-48 overflow-y-auto divide-y divide-gray-100 dark:divide-neutral-800 sm:divide-y-0">
+                {history.length === 0 && <p className="text-xs text-gray-400 dark:text-neutral-500">Créée le {fmtDate(order.createdAt)}.</p>}
+                {history.map((h, i) => (
+                  <div key={i} className="flex flex-col sm:flex-row sm:gap-2 text-xs py-1.5 sm:py-1">
+                    <span className="text-gray-400 dark:text-neutral-500 shrink-0 sm:w-36">
+                      {toDate(h.at)?.toLocaleString('fr-FR') || '—'}<span className="sm:hidden"> · {h.by}</span>
+                    </span>
+                    <span className="text-gray-700 dark:text-neutral-300">{h.note}</span>
+                    <span className="hidden sm:block text-gray-400 dark:text-neutral-500 ml-auto shrink-0">{h.by}</span>
+                  </div>
+                ))}
+              </div>
+            </MCard>
+          )}
         </div>
+
+        {/* Modification : actions en bas, toujours visibles */}
+        {editing && (
+          <div className="sticky bottom-0 flex items-center justify-end gap-2 px-4 sm:px-5 py-3 border-t rounded-b-2xl border-gray-100 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+            {tried && Object.keys(errors).length > 0 && <p className="text-xs text-red-600 dark:text-red-400 mr-auto">Corrige les champs en rouge.</p>}
+            <SmallBtn onClick={cancelEdit}>Annuler</SmallBtn>
+            <SmallBtn primary onClick={save} disabled={saving}>{saving ? 'Enregistrement…' : 'Enregistrer'}</SmallBtn>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -690,6 +740,7 @@ function OrderForm({ staff, onSubmit, onClose }) {
   const [statut, setStatut]   = useState('a-commander')
   const [note, setNote]       = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [tried, setTried]     = useState(false)
   const [error, setError]     = useState('')
 
   useEffect(() => {
@@ -698,11 +749,13 @@ function OrderForm({ staff, onSubmit, onClose }) {
     return () => window.removeEventListener('keydown', fn)
   }, [onClose])
 
-  const missing = !fields.client.trim() || !fields.produit.trim() || (staff.length > 0 && !fields.createur)
+  const errors = orderFormErrors(fields, { requireCreateur: staff.length > 0 })
+  const invalid = Object.keys(errors).length > 0
 
   async function submit(e) {
     e.preventDefault()
-    if (missing) return
+    setTried(true)
+    if (invalid) return
     setSubmitting(true); setError('')
     try { await onSubmit(fields, statut, note.trim()) }
     catch (err) { setError(err.message || 'Création impossible') }
@@ -710,18 +763,17 @@ function OrderForm({ staff, onSubmit, onClose }) {
   }
 
   return (
-    <div onMouseDown={e => e.target === e.currentTarget && onClose()}
-      className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm flex items-start justify-center p-4 pt-[5vh] overflow-y-auto">
-      <div className="w-full max-w-3xl rounded-2xl border shadow-2xl overflow-hidden bg-white border-gray-200 dark:bg-neutral-900 dark:border-neutral-800">
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
+    <div className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm flex items-start justify-center p-3 sm:p-4 sm:pt-[5vh] overflow-y-auto">
+      <div className="w-full max-w-3xl rounded-2xl border shadow-2xl bg-white border-gray-200 dark:bg-neutral-900 dark:border-neutral-800">
+        <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
           <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Nouvelle commande client</h2>
           <IconBtn title="Fermer" onClick={onClose}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></IconBtn>
         </div>
 
-        <form onSubmit={submit}>
-          <div className="p-5 space-y-4">
-            <OrderFields fields={fields} setFields={setFields} staff={staff} autoFocus />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <form onSubmit={submit} noValidate>
+          <div className="p-3 sm:p-5 space-y-3 sm:space-y-4">
+            <OrderFields fields={fields} setFields={setFields} staff={staff} errors={tried ? errors : {}} autoFocus />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
               <MCard title="Où en est la commande ?">
                 <div className="flex flex-col gap-2">
                   {['a-commander', 'commandee'].map(s => (
@@ -738,11 +790,15 @@ function OrderForm({ staff, onSubmit, onClose }) {
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-gray-100 dark:border-neutral-800">
-            {error && <p className="text-xs text-red-600 dark:text-red-400 mr-auto">{error}</p>}
-            {!error && missing && <p className="text-xs text-gray-400 dark:text-neutral-500 mr-auto">Client, désignation et vendeur sont obligatoires.</p>}
+          <div className="sticky bottom-0 flex flex-wrap items-center justify-end gap-2 px-4 sm:px-5 py-3 border-t rounded-b-2xl border-gray-100 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+            {error && <p className="text-xs text-red-600 dark:text-red-400 w-full sm:w-auto sm:mr-auto">{error}</p>}
+            {!error && (
+              <p className={`text-xs w-full sm:w-auto sm:mr-auto ${tried && invalid ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-neutral-500'}`}>
+                {tried && invalid ? 'Corrige les champs en rouge.' : 'Client, désignation, prix de vente et vendeur sont obligatoires.'}
+              </p>
+            )}
             <SmallBtn onClick={onClose}>Annuler</SmallBtn>
-            <SmallBtn primary type="submit" disabled={submitting || missing}>{submitting ? 'Création…' : 'Créer la commande'}</SmallBtn>
+            <SmallBtn primary type="submit" disabled={submitting}>{submitting ? 'Création…' : 'Créer la commande'}</SmallBtn>
           </div>
         </form>
       </div>
@@ -751,36 +807,50 @@ function OrderForm({ staff, onSubmit, onClose }) {
 }
 
 /* ── Champs d'une commande (création et modification) ─────────────────────── */
-function OrderFields({ fields, setFields, staff, autoFocus = false }) {
+function OrderFields({ fields, setFields, staff, errors = {}, autoFocus = false }) {
   const set = (k, v) => setFields(f => ({ ...f, [k]: v }))
-  const acompte = parseEuro(fields.acompte)
+  const total = orderTotal(fields)
   const reste = remainingToPay(fields)
+  const port = parseEuro(fields.fraisPort)
+  const bad = k => (errors[k] ? INVALID : '')
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
       <MCard title="Client">
         <MGrid>
-          <FField label="Nom du client" required>
-            <input className="Input" value={fields.client} onChange={e => set('client', e.target.value)} autoFocus={autoFocus} />
+          <FField label="Nom du client" required wide error={errors.client}>
+            <input className={`Input ${bad('client')}`} value={fields.client} onChange={e => set('client', e.target.value)} autoFocus={autoFocus} autoComplete="off" />
           </FField>
-          <FField label="Téléphone">
-            <input className="Input" type="tel" value={fields.tel} onChange={e => set('tel', e.target.value)} />
+          <FField label="Téléphone" wide>
+            <input className="Input" type="tel" inputMode="tel" value={fields.tel} onChange={e => set('tel', e.target.value)} autoComplete="off" />
           </FField>
         </MGrid>
       </MCard>
 
       <MCard title="Paiement">
         <MGrid>
-          <FField label="Prix TTC (€)">
-            <input className="Input" inputMode="decimal" placeholder="0,00" value={fields.prix ?? ''} onChange={e => set('prix', e.target.value)} />
+          <FField label="Prix de vente TTC (€)" required error={errors.prix}>
+            <input className={`Input ${bad('prix')}`} inputMode="decimal" placeholder="0,00" value={fields.prix ?? ''} onChange={e => set('prix', e.target.value)} />
           </FField>
-          <FField label="Acompte versé (€)">
-            <input className="Input" inputMode="decimal" placeholder="Aucun" value={fields.acompte ?? ''} onChange={e => set('acompte', e.target.value)} />
+          <FField label="Frais de port (€)" error={errors.fraisPort}>
+            <input className={`Input ${bad('fraisPort')}`} inputMode="decimal" placeholder="Aucun" value={fields.fraisPort ?? ''} onChange={e => set('fraisPort', e.target.value)} />
           </FField>
+          <FField label="Acompte versé (€)" error={errors.acompte}>
+            <input className={`Input ${bad('acompte')}`} inputMode="decimal" placeholder="Aucun" value={fields.acompte ?? ''} onChange={e => set('acompte', e.target.value)} />
+          </FField>
+          {/* Calculé automatiquement */}
+          <div className="space-y-1">
+            <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Total TTC</span>
+            <p className="h-[42px] flex items-center px-3 rounded-xl bg-gray-50 dark:bg-neutral-800/60 text-sm font-semibold text-gray-900 dark:text-white tabular-nums">
+              {total != null ? formatEuro(total) : '—'}
+            </p>
+          </div>
           <p className="col-span-full text-xs text-gray-500 dark:text-neutral-400">
-            {reste != null ? `Reste à payer : ${formatEuro(reste)}` : 'Renseigne le prix pour calculer le reste à payer.'}
-            {acompte != null && parseEuro(fields.prix) != null && acompte > parseEuro(fields.prix) && (
-              <span className="text-red-600 dark:text-red-400"> · l'acompte dépasse le prix</span>
-            )}
+            {total == null
+              ? 'Renseigne le prix de vente : le total et le reste à payer se calculent tout seuls.'
+              : <>
+                  {port ? `${formatEuro(parseEuro(fields.prix))} + ${formatEuro(port)} de port · ` : ''}
+                  Reste à payer : <span className="font-semibold text-gray-900 dark:text-white">{formatEuro(reste)}</span>
+                </>}
           </p>
         </MGrid>
       </MCard>
@@ -795,26 +865,26 @@ function OrderFields({ fields, setFields, staff, autoFocus = false }) {
           <FField label="Référence">
             <input className="Input font-mono" value={fields.ref_produit} onChange={e => set('ref_produit', e.target.value)} />
           </FField>
-          <FField label="Désignation" required span2>
-            <input className="Input" placeholder="Nom complet du produit" value={fields.produit} onChange={e => set('produit', e.target.value)} />
+          <FField label="Désignation" required span2 error={errors.produit}>
+            <input className={`Input ${bad('produit')}`} placeholder="Nom complet du produit" value={fields.produit} onChange={e => set('produit', e.target.value)} />
           </FField>
         </MGrid>
       </MCard>
 
       <MCard title="Fournisseur">
         <MGrid>
-          <FField label="Fournisseur">
+          <FField label="Fournisseur" wide>
             <input className="Input" value={fields.fournisseur} onChange={e => set('fournisseur', e.target.value)} />
           </FField>
-          <FField label="N° de commande fournisseur">
+          <FField label="N° de commande fournisseur" wide>
             <input className="Input font-mono" value={fields.refFournisseur} onChange={e => set('refFournisseur', e.target.value)} />
           </FField>
-          <FField label="Réception prévue">
+          <FField label="Réception prévue" wide>
             <input type="date" className="Input" value={fields.dateReceptionPrevue || ''} onChange={e => set('dateReceptionPrevue', e.target.value)} />
           </FField>
-          <FField label="Vendeur" required={staff.length > 0}>
+          <FField label="Vendeur" required={staff.length > 0} wide error={errors.createur}>
             {staff.length > 0 ? (
-              <select className="Input" value={fields.createur || ''} onChange={e => set('createur', e.target.value)}>
+              <select className={`Input ${bad('createur')}`} value={fields.createur || ''} onChange={e => set('createur', e.target.value)}>
                 <option value="">— Sélectionner</option>
                 {staff.map(u => <option key={u.id} value={u.nom}>{u.nom}</option>)}
                 {fields.createur && !staff.some(u => u.nom === fields.createur) && <option value={fields.createur}>{fields.createur}</option>}
@@ -830,19 +900,58 @@ function OrderFields({ fields, setFields, staff, autoFocus = false }) {
 }
 
 /* ── Composants UI ────────────────────────────────────────────────────────── */
+const INVALID = '!border-red-400 dark:!border-red-500/70'
+
+// Téléphone : carte d'une commande (le statut se change directement)
+function OrderCard({ order: o, magasin, onOpen, onChangeStatut }) {
+  const late = isLateDelivery(o)
+  const total = orderTotal(o)
+  const reste = remainingToPay(o)
+  const acompte = parseEuro(o.acompte)
+  return (
+    <div role="button" tabIndex={0} onClick={onOpen} onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onOpen())}
+      className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-3.5 space-y-2 cursor-pointer active:bg-gray-50 dark:active:bg-neutral-800/50">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-gray-900 dark:text-white break-words">{o.client || (o.anonymizedAt ? 'Client anonymisé' : '—')}</p>
+          <p className="text-[11px] text-gray-400 dark:text-neutral-500">
+            <span className="font-mono">{formatOrderNumber(o.numero)}</span> · {fmtDate(o.createdAt)}{o.createur ? ` · ${o.createur}` : ''}
+          </p>
+        </div>
+        <div className="shrink-0 text-right tabular-nums">
+          <p className="text-sm font-bold text-gray-900 dark:text-white">{formatEuro(total)}</p>
+          {acompte > 0 && <p className="text-[11px] text-gray-500 dark:text-neutral-400">reste {formatEuro(reste)}</p>}
+        </div>
+      </div>
+      <p className="text-xs text-gray-700 dark:text-neutral-300 line-clamp-2 break-words">
+        {o.type && <span className="mr-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-neutral-500">{ORDER_TYPES[o.type]}</span>}
+        {o.produit || '—'}
+        {o.fournisseur && <span className="text-gray-400 dark:text-neutral-500"> · {o.fournisseur}</span>}
+      </p>
+      <div className="flex items-center justify-between gap-2 pt-1" onClick={e => e.stopPropagation()}>
+        <StatusSelect value={orderStatus(o)} onChange={onChangeStatut} />
+        <span className={`text-[11px] text-right ${late ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-neutral-500'}`}>
+          {late ? `⚠ réception prévue le ${fmtYmd(o.dateReceptionPrevue)}` : sinceLabel(orderStatusSince(o))}
+          {magasin && <span className="block">{magasin}</span>}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 function StatCard({ status, value, active, onClick }) {
   const meta = ORDER_STATUS_META[status]
   return (
     <button onClick={onClick} title={active ? 'Retirer le filtre' : `Afficher : ${meta.label}`}
-      className={`text-left rounded-2xl border px-4 py-3 transition-colors ${active
+      className={`text-left rounded-2xl border px-3 py-2.5 sm:px-4 sm:py-3 transition-colors min-w-0 ${active
         ? 'border-gray-900 ring-1 ring-gray-900 dark:border-white dark:ring-white'
         : 'border-gray-200 hover:border-gray-300 dark:border-neutral-800 dark:hover:border-neutral-700'} bg-white dark:bg-neutral-900`}>
       <div className="flex items-center gap-2 mb-1">
         <span className={`h-2 w-2 rounded-full shrink-0 ${meta.dot}`} />
-        <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">{meta.label}</span>
+        <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide truncate">{meta.label}</span>
       </div>
-      <p className="text-2xl font-bold text-gray-900 dark:text-white tabular-nums">{value}</p>
-      <p className="text-[11px] text-gray-400 dark:text-neutral-500 truncate">{meta.hint}</p>
+      <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white tabular-nums">{value}</p>
+      <p className="hidden sm:block text-[11px] text-gray-400 dark:text-neutral-500 truncate">{meta.hint}</p>
     </button>
   )
 }
@@ -896,13 +1005,13 @@ function MCard({ title, children }) {
         <span className="h-1.5 w-1.5 rounded-full bg-gray-300 dark:bg-neutral-600" />
         <span className="text-[11px] font-semibold text-gray-600 dark:text-neutral-400 uppercase tracking-wide">{title}</span>
       </div>
-      <div className="p-4">{children}</div>
+      <div className="p-3 sm:p-4">{children}</div>
     </div>
   )
 }
 
 function MGrid({ children }) {
-  return <div className="grid grid-cols-2 gap-x-5 gap-y-3">{children}</div>
+  return <div className="grid grid-cols-2 gap-x-3 sm:gap-x-5 gap-y-3">{children}</div>
 }
 
 function MField({ label, children, span2 = false }) {
@@ -918,13 +1027,15 @@ function MVal({ children, mono = false }) {
   return <p className={`text-sm text-gray-900 dark:text-white ${mono ? 'font-mono' : ''}`}>{children || '—'}</p>
 }
 
-function FField({ label, children, required = false, span2 = false }) {
+// wide : pleine largeur sur téléphone, demi-largeur ensuite
+function FField({ label, children, required = false, span2 = false, wide = false, error }) {
   return (
-    <label className={`block space-y-1 ${span2 ? 'col-span-full' : ''}`}>
+    <label className={`block space-y-1 min-w-0 ${span2 ? 'col-span-full' : wide ? 'col-span-full sm:col-span-1' : ''}`}>
       <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">
         {label}{required && <span className="text-red-500 ml-0.5">*</span>}
       </span>
       {children}
+      {error && <span className="block text-[11px] text-red-600 dark:text-red-400">{error}</span>}
     </label>
   )
 }
