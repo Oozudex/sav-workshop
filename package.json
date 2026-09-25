@@ -13,9 +13,10 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "test:unit": "node --test tests/unit/*.test.mjs",
-    "emulators": "firebase emulators:start --import=./emulator-data --export-on-exit",
+    "emulators": "firebase emulators:start --project sav-workshop --import=./emulator-data --export-on-exit",
     "test:rules": "firebase emulators:exec --only firestore --project demo-sav-workshop \"node --test tests/firestore.rules.test.mjs\"",
-    "deploy:rules": "firebase deploy --only firestore:rules"
+    "deploy:rules": "firebase deploy --only firestore:rules",
+    "deploy": "npm run build && firebase deploy --only hosting,firestore:rules"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",

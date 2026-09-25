@@ -12,7 +12,7 @@
  *   (ajouter --dry-run pour simuler sans écrire)
  *
  * Usage (émulateur) :
- *   FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 node scripts/migrate-bon-plan.mjs
+ *   FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=sav-workshop node scripts/migrate-bon-plan.mjs
  */
 import { initializeApp, applicationDefault } from 'firebase-admin/app'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
@@ -20,7 +20,7 @@ import { bonPlanDocId } from '../src/lib/bonPlan.js'
 import { parsePrice } from '../src/lib/opImport.js'
 
 const DRY_RUN = process.argv.includes('--dry-run')
-const projectId = process.env.GCLOUD_PROJECT || 'sav-workshop'
+const projectId = process.env.GCLOUD_PROJECT || 'groupe-nivault'
 
 initializeApp(
   process.env.FIRESTORE_EMULATOR_HOST ? { projectId } : { credential: applicationDefault(), projectId }
