@@ -10,6 +10,7 @@ import {
 } from 'firebase/firestore'
 import { GLOBAL_ROLES, RAYON_TYPE_LABELS } from '../lib/constants'
 import { OpModal } from './Operations'
+import IlvDialog from '../components/IlvDialog'
 import { deleteOperation, opFormData } from '../lib/opActions'
 import { opRayons } from '../lib/opSearch'
 import { readSheetWithFills } from '../lib/excel'
@@ -486,6 +487,21 @@ export default function OperationDetail() {
   const [searchProd, setSearchProd] = useState('')
   const [showImport, setShowImport] = useState(false)
   const [transfer,   setTransfer]   = useState({ busy: false, error: '' })
+  const [ilv,        setIlv]        = useState(null)
+
+  // Déclinaisons d'un produit de l'OP → sources d'ILV (prix promo par défaut)
+  function openIlv(group, p) {
+    setIlv({
+      initialKey: p.id,
+      preferredType: 'promo',
+      sources: group.map(v => ({
+        key: v.id, label: [v.couleur, v.reference, v.chrono].filter(Boolean).join(' · ') || v.nom,
+        chrono: v.chrono, refFournisseur: v.refFournisseur, nom: v.nom, marque: v.marque, reference: v.reference,
+        couleur: v.couleur, prixFort: v.prixFort ?? null, prixOp: v.prixOp, prixBonPlan: v.prixBonPlan ?? null,
+        dateDebut: op.dateDebut, dateFin: op.dateFin,
+      })),
+    })
+  }
 
   useEffect(() => {
     return onSnapshot(doc(db, 'op_commerciales', id), snap => {
@@ -783,6 +799,12 @@ export default function OperationDetail() {
                                   : <span className="text-[10px] text-gray-300 dark:text-neutral-600 italic shrink-0">N.B</span>}
                                 <span className="text-[11px] font-mono text-gray-700 dark:text-neutral-300">{p.reference || '—'}</span>
                                 <span className="text-[10px] font-mono text-gray-400 dark:text-neutral-500">{p.chrono || '—'}</span>
+                                {p.prixOp != null && (
+                                  <button onClick={() => openIlv(group, p)} title="Télécharger l’ILV de cette déclinaison"
+                                    className="relative z-10 h-5 px-1.5 rounded-md text-[10px] font-semibold text-gray-600 border border-gray-200 hover:bg-gray-100 dark:text-neutral-300 dark:border-neutral-700 dark:hover:bg-neutral-800">
+                                    ILV
+                                  </button>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -900,6 +922,7 @@ export default function OperationDetail() {
       {showImport && (
         <ImportModal opId={id} produits={produits} onClose={() => setShowImport(false)} />
       )}
+      {ilv && <IlvDialog {...ilv} onClose={() => setIlv(null)} />}
     </div>
   )
 }

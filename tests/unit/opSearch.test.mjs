@@ -105,3 +105,14 @@ describe('magasin affiché et formulaire', () => {
     assert.equal(opFormError({ ...form, dateFin: '2026-10-10' }), null)
   })
 })
+
+describe('prix engagés dans la recherche', () => {
+  it('un vélo en prix engagé ressort en premier, avec ses produits pour l’ILV', () => {
+    const index = buildPromoIndex({ ops: [], produits: [], bonPlanList: [], engageList: [
+      { id: 'c1', nom: 'ATOM CITY WAVE', marque: 'BH', chrono: '1-17587', couleur: 'NOIR', prixFort: 2099.99, prixEngage: 1499.99 },
+    ] })
+    const [g] = searchPromos(index, 'atom')
+    assert.equal(g.rank, 0)
+    assert.deepEqual(g.engages.map(e => [e.prix, e.remise, e.items[0].id]), [[1499.99, 29, 'c1']])
+  })
+})

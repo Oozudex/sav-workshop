@@ -5,11 +5,13 @@ import { useAuth } from '../store/useAuth'
 import { useShallow } from 'zustand/react/shallow'
 import { db } from '../lib/firebase'
 import {
-  collection, onSnapshot, query, orderBy,
+  collection, onSnapshot, query, orderBy, where,
   addDoc, updateDoc, deleteDoc, doc, serverTimestamp, setDoc,
   writeBatch, getDocs,
 } from 'firebase/firestore'
 import { GLOBAL_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
+import IlvDialog from '../components/IlvDialog'
+import CatalogueProductModal from '../components/CatalogueProductModal'
 import { formatEuro } from '../lib/orders'
 import { buildPromoIndex, isOpVisibleFor, opFormError, opRayons, opStatus, searchPromos } from '../lib/opSearch'
 import { deleteOperation, opFormData } from '../lib/opActions'
@@ -270,28 +272,36 @@ function CatalogueImportModal({ catalogueCount, onClose }) {
     }).catch(() => setError('Impossible de lire le fichier.'))
   }
 
+  // Mise à jour par chrono : les champs du fichier sont rafraîchis, le prix fort, le pack et le prix
+  // engagé saisis par l'acheteur sont conservés. En mode « replace », les chronos absents du fichier sont retirés.
   async function handleImport(mode) {
     if (!rows?.length) return
     setImporting(true)
+    setError('')
     try {
-      if (mode === 'replace') {
-        // Supprimer l'existant d'abord
-        const snap = await getDocs(collection(db, 'catalogue_produits'))
-        for (let i = 0; i < snap.docs.length; i += 400) {
-          const batch = writeBatch(db)
-          snap.docs.slice(i, i + 400).forEach(d => batch.delete(d.ref))
-          await batch.commit()
-        }
+      const snap = await getDocs(collection(db, 'catalogue_produits'))
+      const byChrono = new Map(snap.docs.map(d => [cleanRef(d.get('chrono')), d.ref]))
+      const inFile = new Set()
+      const writes = []
+      for (const r of rows) {
+        const { stock: _stock, valeurStock: _valeur, ...rest } = r
+        const chrono = cleanRef(rest.chrono)
+        const data = { ...rest, chrono: chrono || null, importedAt: serverTimestamp() }
+        const existing = chrono && byChrono.get(chrono)
+        if (chrono) inFile.add(chrono)
+        writes.push(b => existing ? b.set(existing, data, { merge: true }) : b.set(doc(collection(db, 'catalogue_produits')), data))
       }
-      for (let i = 0; i < rows.length; i += 400) {
+      if (mode === 'replace') {
+        for (const [chrono, ref] of byChrono) if (!inFile.has(chrono)) writes.push(b => b.delete(ref))
+      }
+      for (let i = 0; i < writes.length; i += 450) {
         const batch = writeBatch(db)
-        rows.slice(i, i + 400).forEach(r => {
-          const { stock, valeurStock, ...rest } = r
-          batch.set(doc(collection(db, 'catalogue_produits')), { ...rest, importedAt: serverTimestamp() })
-        })
+        writes.slice(i, i + 450).forEach(w => w(batch))
         await batch.commit()
       }
       onClose()
+    } catch {
+      setError("L'import a échoué en cours de route. Relance-le : les produits déjà importés seront mis à jour.")
     } finally { setImporting(false) }
   }
 
@@ -331,7 +341,8 @@ function CatalogueImportModal({ catalogueCount, onClose }) {
                 <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20">
                   <svg className="h-4 w-4 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
                   <p className="text-[11px] text-amber-700 dark:text-amber-300">
-                    Le catalogue contient déjà <strong>{catalogueCount} références</strong>. Choisissez le mode d'import ci-dessous.
+                    La base contient déjà <strong>{catalogueCount} références</strong>. Les produits déjà présents (même chrono) sont mis à jour
+                    sans perdre leur prix fort, leur pack ni leur prix engagé. « Remplacer » retire en plus les chronos absents du fichier.
                   </p>
                 </div>
               )}
@@ -369,7 +380,7 @@ function CatalogueImportModal({ catalogueCount, onClose }) {
           {rows?.length > 0 && catalogueCount > 0 && (
             <button onClick={() => handleImport('add')} disabled={importing}
               className="h-8 px-4 rounded-lg text-xs font-semibold disabled:opacity-50 border border-gray-900 text-gray-900 hover:bg-gray-50 dark:border-white dark:text-white dark:hover:bg-neutral-800">
-              {importing ? '…' : `Ajouter aux ${catalogueCount} existants`}
+              {importing ? '…' : 'Ajouter et mettre à jour'}
             </button>
           )}
           <button onClick={() => handleImport(catalogueCount > 0 ? 'replace' : 'add')} disabled={!rows?.length || importing}
@@ -377,142 +388,117 @@ function CatalogueImportModal({ catalogueCount, onClose }) {
             {importing ? 'Import…' : catalogueCount > 0 ? `Remplacer (${rows?.length || 0} produits)` : `Importer ${rows?.length || 0} produits`}
           </button>
         </div>
+        {rows && error && <p className="px-5 pb-3 text-xs text-red-500 text-right">{error}</p>}
       </div>
     </div>
   )
 }
 
-// ── Modal ajout manuel catalogue ──────────────────────────────────────────────
-function AddCatalogueModal({ onClose }) {
-  const empty = { chrono: '', reference: '', nom: '', couleur: '', famille: '', marque: '', univers: '', segment: '' }
-  const [form, setForm] = useState(empty)
-  const [saving, setSaving] = useState(false)
-  function set(k, v) { setForm(f => ({ ...f, [k]: v })) }
+// ── Base de données (vélos en stock) ──────────────────────────────────────────
 
-  async function handleSave(e) {
-    e.preventDefault()
-    if (!form.nom.trim() && !form.reference.trim()) return
-    setSaving(true)
-    try {
-      const data = {}
-      Object.entries(form).forEach(([k, v]) => { if (v.trim()) data[k] = v.trim() })
-      await addDoc(collection(db, 'catalogue_produits'), { ...data, importedAt: serverTimestamp() })
-      onClose()
-    } finally { setSaving(false) }
+const PACK_COURT = { enfant: 'Enfant', classique: 'Classique', sport: 'Sport', electrique: 'Électrique' }
+
+// Produit de la base → source d'ILV
+export function catalogueSource(p) {
+  return {
+    key: p.id, label: [p.couleur, p.reference, p.chrono].filter(Boolean).join(' · ') || p.nom,
+    chrono: p.chrono, nom: p.nom, marque: p.marque, reference: p.reference, couleur: p.couleur,
+    prixFort: p.prixFort ?? null, pack: p.pack || null,
   }
+}
 
+// Produit d'une OP → source d'ILV (prix promo)
+function opProductSource(p) {
+  return {
+    key: p.id, label: [p.couleur, p.reference, p.chrono].filter(Boolean).join(' · ') || p.nom,
+    chrono: p.chrono, refFournisseur: p.refFournisseur, nom: p.nom, marque: p.marque, reference: p.reference,
+    couleur: p.couleur, prixFort: p.prixFort ?? null, prixOp: p.prixOp, prixBonPlan: p.prixBonPlan ?? null,
+    dateDebut: p.dateDebut, dateFin: p.dateFin,
+  }
+}
+
+// Prix bon plan → source d'ILV (bons plans)
+function bonPlanSource(b) {
+  return {
+    key: b.id, label: [b.couleur, b.chrono || b.refFournisseur].filter(Boolean).join(' · ') || b.nom,
+    chrono: b.chrono, refFournisseur: b.refFournisseur, nom: b.nom, marque: b.marque, couleur: b.couleur,
+    prixFort: b.prixFort ?? null, prixBonPlan: b.prixBonPlan,
+  }
+}
+
+function IlvButton({ onClick, title = 'Télécharger l’ILV' }) {
   return (
-    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
-          <span className="text-sm font-semibold text-gray-900 dark:text-white">Ajouter une référence catalogue</span>
-          <button onClick={onClose} className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
-        </div>
-        <form onSubmit={handleSave} className="p-5 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Chrono</span>
-              <input className="Input" value={form.chrono} onChange={e => set('chrono', e.target.value)} />
-            </label>
-            <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Référence</span>
-              <input className="Input" value={form.reference} onChange={e => set('reference', e.target.value)} />
-            </label>
-            <label className="col-span-2 space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Nom / Désignation *</span>
-              <input className="Input" value={form.nom} onChange={e => set('nom', e.target.value)} autoFocus />
-            </label>
-            <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Marque</span>
-              <input className="Input" value={form.marque} onChange={e => set('marque', e.target.value)} />
-            </label>
-            <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Couleur</span>
-              <input className="Input" value={form.couleur} onChange={e => set('couleur', e.target.value)} />
-            </label>
-            <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Famille</span>
-              <input className="Input" value={form.famille} onChange={e => set('famille', e.target.value)} />
-            </label>
-            <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Univers</span>
-              <input className="Input" value={form.univers} onChange={e => set('univers', e.target.value)} />
-            </label>
-            <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Segment</span>
-              <input className="Input" value={form.segment} onChange={e => set('segment', e.target.value)} />
-            </label>
-          </div>
-          <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="h-8 px-3 rounded-lg text-xs border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800">Annuler</button>
-            <button type="submit" disabled={saving || (!form.nom.trim() && !form.reference.trim())}
-              className="h-8 px-4 rounded-lg text-xs font-semibold disabled:opacity-50 bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
-              {saving ? 'Ajout…' : 'Ajouter'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <button onClick={onClick} title={title}
+      className="h-7 px-2 inline-flex items-center gap-1 rounded-lg text-[11px] font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 dark:text-neutral-300 dark:border-neutral-700 dark:hover:bg-neutral-800 whitespace-nowrap">
+      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+      ILV
+    </button>
   )
 }
 
-// ── Section catalogue ─────────────────────────────────────────────────────────
-function CatalogueSection({ canCreate }) {
+function CatalogueSection({ canCreate, engagesOnly = false }) {
   const [produits, setProduits] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const [search, setSearch] = useState('')
   const [showImport, setShowImport] = useState(false)
-  const [showAdd, setShowAdd] = useState(false)
+  const [edit, setEdit] = useState(null) // null | {} (ajout) | produit
+  const [ilv, setIlv] = useState(null)
 
   useEffect(() => {
-    return onSnapshot(
-      collection(db, 'catalogue_produits'),
+    const q = engagesOnly
+      ? query(collection(db, 'catalogue_produits'), where('prixEngage', '!=', null))
+      : collection(db, 'catalogue_produits')
+    return onSnapshot(q,
       snap => {
         const data = snap.docs.map(d => ({ id: d.id, ...d.data() }))
         data.sort((a, b) => (a.nom || '').localeCompare(b.nom || '', 'fr'))
         setProduits(data)
         setLoading(false)
       },
-      err => { console.error('catalogue_produits:', err); setLoading(false) }
+      () => { setError(true); setLoading(false) },
     )
-  }, [])
+  }, [engagesOnly])
 
   const filtered = useMemo(() => {
-    const t = search.trim().toLowerCase()
-    if (!t) return produits
-    return produits.filter(p =>
-      (p.reference || '').toLowerCase().includes(t) ||
-      (p.nom || '').toLowerCase().includes(t) ||
-      (p.chrono || '').toLowerCase().includes(t)
-    )
+    const words = normName(search).split(' ').filter(Boolean)
+    if (!words.length) return produits
+    return produits.filter(p => {
+      const text = normName([p.nom, p.marque, p.reference, p.chrono, p.couleur].join(' '))
+      return words.every(w => text.includes(w))
+    })
   }, [produits, search])
 
+  const incomplets = engagesOnly ? 0 : produits.filter(p => p.prixFort == null || !p.pack).length
+
   async function handleClear() {
-    if (!confirm(`Vider le catalogue (${produits.length} produits) ?`)) return
-    for (let i = 0; i < produits.length; i += 400) {
+    if (!confirm(`Supprimer toute la base de données (${produits.length} produits), y compris les prix et packs saisis ? Cette action est irréversible.`)) return
+    for (let i = 0; i < produits.length; i += 450) {
       const batch = writeBatch(db)
-      produits.slice(i, i + 400).forEach(p => batch.delete(doc(db, 'catalogue_produits', p.id)))
+      produits.slice(i, i + 450).forEach(p => batch.delete(doc(db, 'catalogue_produits', p.id)))
       await batch.commit()
     }
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white">Catalogue produits</h2>
-          <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">Base de données ({produits.length} références) — utilisée pour résoudre les chronos lors de l'import OP</p>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-white">{engagesOnly ? 'Prix engagés' : 'Base de données'}</h2>
+          <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">
+            {engagesOnly
+              ? `Vélos dont l'ILV sort toujours en prix engagé (${produits.length})`
+              : `Vélos en stock dans le groupe (${produits.length} références) : prix fort, pack optionnel et ILV`}
+          </p>
         </div>
-        {canCreate && (
+        {canCreate && !engagesOnly && (
           <div className="flex items-center gap-2">
             {produits.length > 0 && (
               <button onClick={handleClear} className="h-8 px-3 rounded-lg text-xs border border-red-200 text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10">
-                Vider
+                Tout supprimer
               </button>
             )}
-            <button onClick={() => setShowAdd(true)}
+            <button onClick={() => setEdit({})}
               className="h-8 px-3 rounded-lg text-xs font-medium border border-gray-200 dark:border-neutral-700 text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors">
               + Ajouter
             </button>
@@ -523,36 +509,54 @@ function CatalogueSection({ canCreate }) {
           </div>
         )}
       </div>
+      {canCreate && incomplets > 0 && (
+        <p className="text-[11px] text-amber-700 dark:text-amber-400">
+          {incomplets} produit{incomplets > 1 ? 's' : ''} sans prix fort ou sans pack : leur ILV ne peut pas encore être générée. Clique sur une ligne pour la compléter.
+        </p>
+      )}
       <div className="relative">
         <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 104.5 4.5a7.5 7.5 0 0012.15 12.15z" /></svg>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher par référence, chrono ou nom…"
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher par nom, marque, référence, chrono, couleur…"
           className="w-full h-9 pl-9 pr-4 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-white/10" />
       </div>
       {loading ? (
         <div className="text-center py-12 text-sm text-gray-400">Chargement…</div>
+      ) : error ? (
+        <div className="text-center py-12 text-sm text-red-500">Impossible de charger la base de données. Recharge la page.</div>
       ) : produits.length === 0 ? (
         <div className="text-center py-12 text-sm text-gray-400 dark:text-neutral-500">
-          Catalogue vide.{canCreate && ' Importez le listing stock pour démarrer.'}
+          {engagesOnly ? 'Aucun vélo en prix engagé. L’acheteur le coche dans la fiche du produit (Base de données).' : `Base de données vide.${canCreate ? ' Importez le listing stock ou ajoutez un produit.' : ''}`}
         </div>
       ) : (
-        <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 overflow-hidden">
+        <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-gray-100 dark:border-neutral-800 bg-gray-50/50 dark:bg-neutral-800/30">
-                {['Chrono', 'Référence', 'Nom', 'Couleur', 'Famille', 'Marque'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{h}</th>
+                {['Nom', 'Couleur', 'Référence', 'Chrono', 'Marque', 'Prix fort', 'Pack', engagesOnly ? 'Prix engagé' : ''].map(h => (
+                  <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
                 ))}
+                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
               {filtered.slice(0, 200).map(p => (
-                <tr key={p.id} className="border-b last:border-0 border-gray-100 dark:border-neutral-800">
-                  <td className="px-4 py-2.5 font-mono text-gray-500 dark:text-neutral-400">{p.chrono || '—'}</td>
-                  <td className="px-4 py-2.5 font-mono text-gray-700 dark:text-neutral-300">{p.reference || '—'}</td>
+                <tr key={p.id} onClick={canCreate ? () => setEdit(p) : undefined}
+                  className={['border-b last:border-0 border-gray-100 dark:border-neutral-800', canCreate ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-neutral-800/50' : ''].join(' ')}>
                   <td className="px-4 py-2.5 font-medium text-gray-900 dark:text-white">{p.nom || '—'}</td>
                   <td className="px-4 py-2.5 text-gray-500 dark:text-neutral-400">{p.couleur || <span className="text-gray-300 dark:text-neutral-600 italic text-[10px]">N.B</span>}</td>
-                  <td className="px-4 py-2.5 text-gray-500 dark:text-neutral-400">{p.famille || '—'}</td>
+                  <td className="px-4 py-2.5 font-mono text-gray-700 dark:text-neutral-300 whitespace-nowrap">{p.reference || '—'}</td>
+                  <td className="px-4 py-2.5 font-mono text-gray-500 dark:text-neutral-400">{p.chrono || '—'}</td>
                   <td className="px-4 py-2.5 text-gray-500 dark:text-neutral-400">{p.marque || '—'}</td>
+                  <td className="px-4 py-2.5 whitespace-nowrap">{p.prixFort != null ? formatEuro(p.prixFort) : <span className="text-amber-600 dark:text-amber-400">à saisir</span>}</td>
+                  <td className="px-4 py-2.5 whitespace-nowrap">{p.pack ? PACK_COURT[p.pack] : <span className="text-amber-600 dark:text-amber-400">à choisir</span>}</td>
+                  <td className="px-4 py-2.5 whitespace-nowrap">
+                    {p.prixEngage != null && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-700 text-white">Prix engagé {formatEuro(p.prixEngage)}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 text-right" onClick={e => e.stopPropagation()}>
+                    <IlvButton onClick={() => setIlv({ sources: [catalogueSource(p)], initialKey: p.id, preferredType: p.prixEngage != null ? 'engage' : 'normal' })} />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -565,7 +569,8 @@ function CatalogueSection({ canCreate }) {
         </div>
       )}
       {showImport && <CatalogueImportModal catalogueCount={produits.length} onClose={() => setShowImport(false)} />}
-      {showAdd && <AddCatalogueModal onClose={() => setShowAdd(false)} />}
+      {edit && <CatalogueProductModal produit={edit.id ? edit : null} produits={produits} onClose={() => setEdit(null)} />}
+      {ilv && <IlvDialog {...ilv} onClose={() => setIlv(null)} />}
     </div>
   )
 }
@@ -820,6 +825,7 @@ function BonPlanSection({ canCreate }) {
   const [segmentFilter, setSegmentFilter] = useState('')
   const [showImport, setShowImport] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
+  const [ilv, setIlv] = useState(null)
 
   useEffect(() => {
     return onSnapshot(
@@ -923,6 +929,7 @@ function BonPlanSection({ canCreate }) {
                 {['Nom', 'Marque', 'Chrono', 'Segment', 'Prix fort', 'Prix bon plan', 'Remise'].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{h}</th>
                 ))}
+                <th className="px-4 py-3" />
                 {canCreate && <th className="px-4 py-3" />}
               </tr>
             </thead>
@@ -938,6 +945,9 @@ function BonPlanSection({ canCreate }) {
                     <td className="px-4 py-2.5 text-gray-500 dark:text-neutral-400 whitespace-nowrap">{formatEuro(p.prixFort)}</td>
                     <td className="px-4 py-2.5 font-semibold text-blue-600 dark:text-blue-400 whitespace-nowrap">{formatEuro(p.prixBonPlan)}</td>
                     <td className="px-4 py-2.5 font-semibold text-emerald-600 dark:text-emerald-400">{rem != null ? `-${rem}%` : '—'}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <IlvButton onClick={() => setIlv({ sources: [bonPlanSource(p)], initialKey: p.id, preferredType: 'bonplan' })} />
+                    </td>
                     {canCreate && (
                       <td className="px-4 py-2.5">
                         <button onClick={() => handleDelete(p)} aria-label={`Supprimer ${p.nom || p.chrono}`}
@@ -955,6 +965,7 @@ function BonPlanSection({ canCreate }) {
       )}
       {showImport && <BonPlanImportModal items={items} onClose={() => setShowImport(false)} />}
       {showAdd && <AddBonPlanModal items={items} onClose={() => setShowAdd(false)} />}
+      {ilv && <IlvDialog {...ilv} onClose={() => setIlv(null)} />}
     </div>
   )
 }
@@ -1007,7 +1018,7 @@ function Prices({ barre, prix, remise, strong }) {
 }
 
 // Une ligne « ce produit est en OP » : en cours ou à venir, avec ses prix et ce qu'il faut savoir
-function OpPromoLine({ s, allCouleurs, onOpenOp }) {
+function OpPromoLine({ s, allCouleurs, onOpenOp, onIlv }) {
   const enCours = s.status === 'en_cours'
   const notes = []
   if (s.couleurs.length && s.couleurs.length < allCouleurs.length) notes.push(`Couleurs : ${s.couleurs.join(', ')}`)
@@ -1033,8 +1044,11 @@ function OpPromoLine({ s, allCouleurs, onOpenOp }) {
             {enCours ? `jusqu'au ${fmtShort(s.op.dateFin)}` : `du ${fmtShort(s.op.dateDebut)} au ${fmtShort(s.op.dateFin)}`}
           </span>
         </div>
-        <Prices barre={s.prixRef} prix={s.prixOp} remise={s.remise}
-          strong={enCours ? 'text-amber-700 dark:text-amber-300' : 'text-green-700 dark:text-green-300'} />
+        <div className="flex items-center gap-2">
+          <Prices barre={s.prixRef} prix={s.prixOp} remise={s.remise}
+            strong={enCours ? 'text-amber-700 dark:text-amber-300' : 'text-green-700 dark:text-green-300'} />
+          <IlvButton onClick={() => onIlv({ sources: s.produits.map(opProductSource), preferredType: 'promo' })} />
+        </div>
       </div>
       {notes.length > 0 && (
         <ul className="mt-1 space-y-0.5">
@@ -1049,7 +1063,7 @@ function OpPromoLine({ s, allCouleurs, onOpenOp }) {
  * Réponse à « ce vélo est-il en remise, ou va-t-il l'être ? » : une carte par produit avec
  * ses OP en cours et à venir et son prix bon plan (carte fidélité).
  */
-function PromoResults({ results, term, loading, error, onOpenOp }) {
+function PromoResults({ results, term, loading, error, onOpenOp, onIlv }) {
   const MAX = 30
   if (error) {
     return (
@@ -1094,7 +1108,22 @@ function PromoResults({ results, term, loading, error, onOpenOp }) {
             )}
           </div>
           <div className="space-y-2">
-            {g.ops.map(s => <OpPromoLine key={s.id} s={s} allCouleurs={g.couleurs} onOpenOp={onOpenOp} />)}
+            {g.engages.map(e => (
+              <div key={`e${e.prix}|${e.prixFort}`}
+                className="rounded-xl border border-blue-300 bg-blue-50 dark:border-blue-500/40 dark:bg-blue-500/10 px-3 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Chip className="bg-blue-800 text-white dark:bg-blue-600">Prix engagé</Chip>
+                  <span className="text-[11px] text-gray-600 dark:text-neutral-400">
+                    Toute l’année{e.couleurs.length > 0 && e.couleurs.length < g.couleurs.length && ` · ${e.couleurs.join(', ')}`}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Prices barre={e.prixFort} prix={e.prix} remise={e.remise} strong="text-blue-800 dark:text-blue-300" />
+                  <IlvButton onClick={() => onIlv({ sources: e.items.map(catalogueSource), preferredType: 'engage' })} />
+                </div>
+              </div>
+            ))}
+            {g.ops.map(s => <OpPromoLine key={s.id} s={s} allCouleurs={g.couleurs} onOpenOp={onOpenOp} onIlv={onIlv} />)}
             {g.bonPlans.map(b => (
               <div key={`${b.prix}|${b.prixFort}`}
                 className="rounded-xl border border-blue-200 bg-blue-50/60 dark:border-blue-500/30 dark:bg-blue-500/10 px-3 py-2.5 flex items-center justify-between gap-3 flex-wrap">
@@ -1105,7 +1134,10 @@ function PromoResults({ results, term, loading, error, onOpenOp }) {
                     {g.bonPlans.length > 1 && (b.couleurs.length ? ` · ${b.couleurs.join(', ')}` : b.chronos.length > 0 && <span className="font-mono"> · {b.chronos.join(', ')}</span>)}
                   </span>
                 </div>
-                <Prices barre={b.prixFort} prix={b.prix} remise={b.remise} strong="text-blue-700 dark:text-blue-300" />
+                <div className="flex items-center gap-2">
+                  <Prices barre={b.prixFort} prix={b.prix} remise={b.remise} strong="text-blue-700 dark:text-blue-300" />
+                  <IlvButton onClick={() => onIlv({ sources: b.items.map(bonPlanSource), preferredType: 'bonplan' })} />
+                </div>
               </div>
             ))}
           </div>
@@ -1125,6 +1157,8 @@ export default function Operations() {
 
   const [ops, setOps] = useState([])
   const [bonPlanList, setBonPlanList] = useState([])
+  const [engageList, setEngageList] = useState([])
+  const [ilv, setIlv] = useState(null)
   const [bonPlanError, setBonPlanError] = useState(false)
   const [modal, setModal] = useState(null) // null | {} | {id,...}
   const [section, setSection] = useState('en_cours')
@@ -1152,9 +1186,16 @@ export default function Operations() {
       () => setBonPlanError(true))
   }, [searchUsed])
 
+  useEffect(() => {
+    if (!searchUsed) return
+    return onSnapshot(query(collection(db, 'catalogue_produits'), where('prixEngage', '!=', null)),
+      snap => setEngageList(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      () => setBonPlanError(true))
+  }, [searchUsed])
+
   const promoIndex = useMemo(
-    () => buildPromoIndex({ ops: visibleOps, produits: opProduits.produits, bonPlanList }),
-    [visibleOps, opProduits.produits, bonPlanList],
+    () => buildPromoIndex({ ops: visibleOps, produits: opProduits.produits, bonPlanList, engageList }),
+    [visibleOps, opProduits.produits, bonPlanList, engageList],
   )
   const searchResults = useMemo(() => searchPromos(promoIndex, search), [promoIndex, search])
 
@@ -1186,6 +1227,7 @@ export default function Operations() {
     { key: 'a_venir', label: 'À venir', count: grouped.a_venir.length },
     { key: 'terminee', label: 'Terminées', count: grouped.terminee.length },
     { key: 'bon_plan', label: 'Prix bon plan', count: null },
+    { key: 'engages', label: 'Prix engagés', count: null },
     { key: 'catalogue', label: 'Base de données', count: null },
   ]
 
@@ -1282,7 +1324,7 @@ export default function Operations() {
           {search.trim() && (
             <PromoResults results={searchResults} term={search.trim()}
               loading={opProduits.loading} error={opProduits.error || bonPlanError}
-              onOpenOp={id => navigate(`/operations/${id}`)} />
+              onOpenOp={id => navigate(`/operations/${id}`)} onIlv={setIlv} />
           )}
 
           {/* Tabs + Contenu (masqués pendant la recherche) */}
@@ -1293,6 +1335,7 @@ export default function Operations() {
                   en_cours: 'border-amber-500 text-amber-700 dark:border-amber-400 dark:text-amber-300',
                   a_venir: 'border-green-600 text-green-700 dark:border-green-500 dark:text-green-300',
                   terminee: 'border-violet-500 text-violet-600 dark:border-violet-400 dark:text-violet-300',
+                  engages: 'border-blue-800 text-blue-900 dark:border-blue-400 dark:text-blue-300',
                   bon_plan: 'border-blue-500 text-blue-600 dark:border-blue-400 dark:text-blue-300',
                   catalogue: 'border-gray-900 text-gray-900 dark:border-white dark:text-white',
                 }
@@ -1317,6 +1360,7 @@ export default function Operations() {
             {/* Sections spéciales */}
             {section === 'bon_plan' && <BonPlanSection canCreate={canCreate} />}
             {section === 'catalogue' && <CatalogueSection canCreate={canCreate} />}
+            {section === 'engages' && <CatalogueSection canCreate={canCreate} engagesOnly />}
 
             {/* Liste des OPs (sections standard) */}
             {['en_cours', 'a_venir', 'terminee'].includes(section) && (
@@ -1393,6 +1437,7 @@ export default function Operations() {
       {modal !== null && (
         <OpModal op={modal?.id ? modal : null} onClose={() => setModal(null)} onSave={handleSave} />
       )}
+      {ilv && <IlvDialog {...ilv} onClose={() => setIlv(null)} />}
     </div>
   )
 }

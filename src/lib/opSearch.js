@@ -58,10 +58,13 @@ function groupKey(p) {
 /**
  * Regroupe par produit (nom + marque, ou même chrono) tout ce qui concerne son prix :
  * - `ops` : ses OP en cours ou à venir (prix barré, prix OP, remise, futur bon plan) ;
- * - `bonPlans` : ses prix bon plan actuels (carte fidélité), avec les chronos concernés.
- * `produits` : produits des OP (avec `opId`) ; `bonPlanList` : collection des prix bon plan.
+ * - `bonPlans` : ses prix bon plan actuels (carte fidélité), avec les chronos concernés ;
+ * - `engages` : son prix engagé (base de données).
+ * Chaque situation garde ses produits (`produits` / `items`) pour générer les ILV.
+ * `produits` : produits des OP (avec `opId`) ; `bonPlanList` : collection des prix bon plan ;
+ * `engageList` : produits de la base de données en prix engagé.
  */
-export function buildPromoIndex({ ops, produits, bonPlanList = [], today = todayStr() }) {
+export function buildPromoIndex({ ops, produits, bonPlanList = [], engageList = [], today = todayStr() }) {
   const opsById = new Map(ops.map(o => [o.id, o]))
   const groups = new Map()
   const byChrono = new Map()
@@ -70,7 +73,7 @@ export function buildPromoIndex({ ops, produits, bonPlanList = [], today = today
     const chrono = cleanRef(p.chrono)
     const key = (chrono && byChrono.get(chrono)) || groupKey(p)
     if (!groups.has(key)) {
-      groups.set(key, { key, nom: p.nom || '', marque: p.marque || null, couleurs: [], refs: [], references: [], chronos: [], ops: [], bonPlans: [] })
+      groups.set(key, { key, nom: p.nom || '', marque: p.marque || null, couleurs: [], refs: [], references: [], chronos: [], ops: [], bonPlans: [], engages: [] })
     }
     if (chrono && !byChrono.has(chrono)) byChrono.set(chrono, key)
     const g = groups.get(key)
@@ -94,11 +97,12 @@ export function buildPromoIndex({ ops, produits, bonPlanList = [], today = today
       s = {
         id, status, op: { id: op.id, nom: op.nom, dateDebut: op.dateDebut, dateFin: op.dateFin },
         prixOp: p.prixOp, prixRef, prixFort: p.prixFort ?? null, refIsBonPlan: prixRef != null && prixRef === p.prixBonPlan,
-        remise: remisePct(p), bonPlanBetter: isBonPlanBetter(p), futurBonPlan: false, couleurs: [],
+        remise: remisePct(p), bonPlanBetter: isBonPlanBetter(p), futurBonPlan: false, couleurs: [], produits: [],
       }
       g.ops.push(s)
     }
     add(s.couleurs, p.couleur)
+    s.produits.push({ ...p, dateDebut: op.dateDebut, dateFin: op.dateFin })
     if (p.passeBonPlan && !p.bonPlanTransfere) s.futurBonPlan = true
   }
 
@@ -109,16 +113,31 @@ export function buildPromoIndex({ ops, produits, bonPlanList = [], today = today
     const prixFort = parsePrice(b.prixFort)
     let s = g.bonPlans.find(x => x.prix === prix && x.prixFort === prixFort)
     if (!s) {
-      s = { prix, prixFort, remise: prixFort > 0 ? Math.round((1 - prix / prixFort) * 100) : null, couleurs: [], chronos: [] }
+      s = { prix, prixFort, remise: prixFort > 0 ? Math.round((1 - prix / prixFort) * 100) : null, couleurs: [], chronos: [], items: [] }
       g.bonPlans.push(s)
     }
     add(s.couleurs, b.couleur)
     add(s.chronos, cleanRef(b.chrono))
+    s.items.push(b)
+  }
+
+  for (const c of engageList) {
+    const prix = parsePrice(c.prixEngage)
+    if (prix == null) continue
+    const g = groupFor(c)
+    const prixFort = parsePrice(c.prixFort)
+    let s = g.engages.find(x => x.prix === prix && x.prixFort === prixFort)
+    if (!s) {
+      s = { prix, prixFort, remise: prixFort > 0 ? Math.round((1 - prix / prixFort) * 100) : null, couleurs: [], items: [] }
+      g.engages.push(s)
+    }
+    add(s.couleurs, c.couleur)
+    s.items.push(c)
   }
 
   for (const g of groups.values()) {
     g.ops.sort((a, b) => (a.status === b.status ? a.op.dateDebut.localeCompare(b.op.dateDebut) : a.status === 'en_cours' ? -1 : 1))
-    g.rank = g.ops.some(s => s.status === 'en_cours') ? 0 : g.ops.length ? 1 : 2
+    g.rank = g.engages.length || g.ops.some(s => s.status === 'en_cours') ? 0 : g.ops.length ? 1 : 2
     if (!g.refs.length) g.refs = g.references // réf. fournisseur de préférence, sinon références de la base
     g.text = normName([g.nom, g.marque, ...g.refs, ...g.references, ...g.chronos, ...g.couleurs].join(' '))
   }
@@ -127,7 +146,7 @@ export function buildPromoIndex({ ops, produits, bonPlanList = [], today = today
 
 /**
  * Produits dont le texte contient tous les mots recherchés (sans tenir compte des accents),
- * ceux en OP en cours d'abord, puis à venir, puis en bon plan seulement.
+ * ceux en prix engagé ou en OP en cours d'abord, puis à venir, puis en bon plan seulement.
  */
 export function searchPromos(index, term) {
   const words = normName(term).split(' ').filter(Boolean)
