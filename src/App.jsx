@@ -21,10 +21,22 @@ const Flocage         = lazy(() => import('./pages/Flocage'))
 const Transfert       = lazy(() => import('./pages/Transfert'))
 const Obut            = lazy(() => import('./pages/Obut'))
 
+// Écran d'attente (session en cours de vérification, page en téléchargement)
+function PageLoader() {
+  return (
+    <div className="min-h-screen grid place-items-center bg-gray-50 dark:bg-neutral-950" role="status" aria-live="polite">
+      <div className="flex flex-col items-center gap-3">
+        <span className="h-6 w-6 rounded-full border-2 border-gray-300 border-t-gray-900 dark:border-neutral-700 dark:border-t-white animate-spin" />
+        <span className="text-xs text-gray-400 dark:text-neutral-500">Chargement…</span>
+      </div>
+    </div>
+  )
+}
+
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth(useShallow(s => ({ user: s.user, loading: s.loading })))
   const location = useLocation()
-  if (loading) return <div className="p-6">Chargement…</div>
+  if (loading) return <PageLoader />
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />
   return children
 }
@@ -32,7 +44,7 @@ function PrivateRoute({ children }) {
 function RoleRoute({ children, roles, acheteurRayons }) {
   const { user, loading, profile } = useAuth(useShallow(s => ({ user: s.user, loading: s.loading, profile: s.profile })))
   const location = useLocation()
-  if (loading) return <div className="p-6">Chargement…</div>
+  if (loading) return <PageLoader />
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />
   if (!roles.includes(profile?.role)) return <Navigate to="/" replace />
   if (profile?.role === 'acheteur' && acheteurRayons) {
@@ -54,7 +66,7 @@ export default function App() {
   return (
     <>
       <AlertsWatcher />
-      <Suspense fallback={<div className="p-6">Chargement…</div>}>
+      <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<PrivateRoute><Home /></PrivateRoute>} />
