@@ -38,6 +38,52 @@ async function createAuthAccount(email, displayName) {
   }
 }
 
+// E-mail pour choisir (ou rechoisir) son mot de passe. Renvoie null si l'envoi est parti, sinon la raison.
+const MAIL_ERRORS = {
+  'auth/too-many-requests': 'trop d’envois rapprochés, réessaie dans quelques minutes',
+  'auth/user-not-found': 'aucun compte de connexion avec cette adresse',
+  'auth/invalid-email': 'adresse e-mail invalide',
+  'auth/network-request-failed': 'pas de connexion internet',
+}
+async function sendSetupEmail(email) {
+  try {
+    await sendPasswordResetEmail(getAuth(), email)
+    return null
+  } catch (err) {
+    return MAIL_ERRORS[err.code] || err.message || 'erreur inconnue'
+  }
+}
+const MAIL_HINT = 'S’il n’arrive pas d’ici quelques minutes : vérifier les spams / la quarantaine, puis « Renvoyer l’e-mail » (icône enveloppe).'
+
+// Bouton « Renvoyer l'e-mail » d'un compte
+function ResendButton({ email }) {
+  const [state, setState] = useState('idle') // idle | sending | sent | error
+  const [error, setError] = useState('')
+  async function send() {
+    if (!email || state === 'sending') return
+    setState('sending')
+    const err = await sendSetupEmail(email)
+    setError(err || '')
+    setState(err ? 'error' : 'sent')
+    setTimeout(() => setState('idle'), err ? 6000 : 3000)
+  }
+  const title = state === 'sent' ? `E-mail envoyé à ${email}`
+    : state === 'error' ? `Échec : ${error}` : `Renvoyer l’e-mail de mot de passe à ${email}`
+  return (
+    <button onClick={send} disabled={!email || state === 'sending'} title={title} aria-label={title}
+      className={['h-7 min-w-7 px-1.5 inline-flex items-center justify-center gap-1 rounded-lg text-[10px] font-semibold transition-colors disabled:opacity-50',
+        state === 'sent' ? 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-500/10'
+          : state === 'error' ? 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-500/10'
+            : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800'].join(' ')}>
+      {state === 'sent' ? '✓ Envoyé' : state === 'error' ? 'Échec' : (
+        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+        </svg>
+      )}
+    </button>
+  )
+}
+
 /* ── Comptes de direction (administrateurs uniquement) ───────────────────── */
 const DIRECTION_LABELS = { admin: 'Administrateur', directeurgen: 'Directeur général' }
 const DIRECTION_HINTS = {
@@ -80,8 +126,9 @@ function DirectionSection({ me }) {
         createdAt: serverTimestamp(),
         createdBy: me,
       })
-      try { await sendPasswordResetEmail(getAuth(), email) } catch { /* l'utilisateur pourra utiliser « mot de passe oublié » */ }
-      setMsg(`${DIRECTION_LABELS[form.role]} créé · email de définition du mot de passe envoyé à ${email}`)
+      const mailErr = await sendSetupEmail(email)
+      if (mailErr) setErr(`${DIRECTION_LABELS[form.role]} créé, mais l’e-mail n’est pas parti (${mailErr}). Utilise « Renvoyer l’e-mail ».`)
+      else setMsg(`${DIRECTION_LABELS[form.role]} créé · e-mail pour choisir le mot de passe envoyé à ${email}. ${MAIL_HINT}`)
       setForm({ nom: '', email: '', role: 'directeurgen' })
       setShowNew(false)
     } catch (error) {
@@ -204,6 +251,7 @@ function DirectionSection({ me }) {
                       <p className="text-[11px] text-gray-400 dark:text-neutral-500 break-all">{c.email}</p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
+                      <ResendButton email={c.email} />
                       <button aria-label={`Modifier ${c.displayName}`}
                         onClick={() => { setEditId(c.id); setDraft({ displayName: c.displayName, role: c.role }); setErr(null) }}
                         className={`${iconBtn} hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800`}>
@@ -362,8 +410,9 @@ export default function StoreSettings() {
         createdAt:   serverTimestamp(),
         createdBy:   user.uid,
       })
-      try { await sendPasswordResetEmail(getAuth(), acheteurEmail.trim()) } catch {}
-      setAcheteurMsg(`Acheteur créé · email de définition du mot de passe envoyé à ${acheteurEmail.trim()}`)
+      const mailErr = await sendSetupEmail(acheteurEmail.trim())
+      if (mailErr) setAcheteurErr(`Acheteur créé, mais l’e-mail n’est pas parti (${mailErr}). Utilise « Renvoyer l’e-mail ».`)
+      else setAcheteurMsg(`Acheteur créé · e-mail pour choisir le mot de passe envoyé à ${acheteurEmail.trim()}. ${MAIL_HINT}`)
       setAcheteurNom(''); setAcheteurEmail(''); setAcheteurRayonsSel([])
       setShowNewAcheteur(false)
     } catch (err) {
@@ -487,8 +536,9 @@ export default function StoreSettings() {
         createdAt:   serverTimestamp(),
         createdBy:   user.uid,
       })
-      try { await sendPasswordResetEmail(getAuth(), newRayonEmail.trim()) } catch {}
-      setRayonMsg(`Rayon créé · email de définition du mot de passe envoyé à ${newRayonEmail.trim()}`)
+      const mailErr = await sendSetupEmail(newRayonEmail.trim())
+      if (mailErr) setRayonErr(`Rayon créé, mais l’e-mail n’est pas parti (${mailErr}). Utilise « Renvoyer l’e-mail ».`)
+      else setRayonMsg(`Rayon créé · e-mail pour choisir le mot de passe envoyé à ${newRayonEmail.trim()}. ${MAIL_HINT}`)
       setNewRayonNom(''); setNewRayonEmail(''); setNewRayonType(RAYON_TYPES[0])
       setShowNewRayon(false)
     } catch (err) {
@@ -518,8 +568,9 @@ export default function StoreSettings() {
         createdAt:   serverTimestamp(),
         createdBy:   user.uid,
       })
-      try { await sendPasswordResetEmail(getAuth(), dmEmail.trim()) } catch {}
-      setDmMsg(`Compte créé · email de définition du mot de passe envoyé à ${dmEmail.trim()}`)
+      const mailErr = await sendSetupEmail(dmEmail.trim())
+      if (mailErr) setDmErr(`Compte créé, mais l’e-mail n’est pas parti (${mailErr}). Utilise « Renvoyer l’e-mail ».`)
+      else setDmMsg(`Compte créé · e-mail pour choisir le mot de passe envoyé à ${dmEmail.trim()}. ${MAIL_HINT}`)
       setDmName(''); setDmEmail(''); setDmMagasinId('')
       setShowNewDirMag(false)
     } catch (err) {
@@ -732,6 +783,7 @@ export default function StoreSettings() {
                               </div>
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
+                              <ResendButton email={a.email} />
                               <button
                                 onClick={() => { setEditAcheteurId(a.id); setEditAcheteurDraft({ displayName: a.displayName, rayons: a.rayons ?? [] }) }}
                                 className="h-7 w-7 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors"
@@ -843,6 +895,7 @@ export default function StoreSettings() {
                                 <p className="text-[11px] text-gray-400 dark:text-neutral-500">{d.email} · {mag?.nom || d.magasinId}</p>
                               </div>
                               <div className="flex items-center gap-1 shrink-0">
+                                <ResendButton email={d.email} />
                                 <button onClick={() => { setEditDirId(d.id); setEditDirDraft({ displayName: d.displayName, magasinId: d.magasinId }) }}
                                   className="h-7 w-7 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors">
                                   <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -1066,6 +1119,7 @@ export default function StoreSettings() {
                                   <span className="text-[11px] text-gray-400 dark:text-neutral-500">{r.email}</span>
                                 </button>
                                 <div className="flex items-center gap-1 shrink-0">
+                                  {r.email && <ResendButton email={r.email} />}
                                   <button onClick={() => { setEditRayonId(r.id); setEditRayonDraft({ nom: r.nom, type: r.type }) }}
                                     className="h-7 w-7 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors">
                                     <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>

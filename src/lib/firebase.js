@@ -13,6 +13,8 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
+// E-mails envoyés par Firebase (définition / réinitialisation du mot de passe) en français
+auth.languageCode = 'fr'
 export const db = getFirestore(app)
 
 if (import.meta.env.DEV && import.meta.env.VITE_USE_EMULATOR === 'true') {
