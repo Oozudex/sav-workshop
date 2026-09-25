@@ -20,3 +20,30 @@ export async function readSheetWithFills(file) {
   }))
   return { rows, fills }
 }
+
+// Crée un classeur (une feuille par entrée { name, table }) et le télécharge.
+// table : tableau de lignes, la première étant les en-têtes.
+export async function downloadWorkbook(sheets, fileName) {
+  const { utils, writeFile } = await import('xlsx')
+  const wb = utils.book_new()
+  for (const { name, table } of sheets) {
+    const ws = utils.aoa_to_sheet(table)
+    ws['!cols'] = table[0].map((_, j) => ({
+      wch: Math.min(60, Math.max(10, ...table.map(r => String(r[j] ?? '').length + 2))),
+    }))
+    utils.book_append_sheet(wb, ws, name)
+  }
+  writeFile(wb, `${fileName}.xlsx`)
+}
+
+// Télécharge un fichier texte (CSV…)
+export function downloadText(text, fileName, type = 'text/plain;charset=utf-8') {
+  const url = URL.createObjectURL(new Blob([text], { type }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
