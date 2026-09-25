@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { BON_PLAN_COLLECTION, bonPlanDocId } from '../lib/bonPlan'
-import { ILV_TYPES, PACKS, buildIlv, ilvTypesFor, oneyAllowed, packPrice } from '../lib/ilv'
+import { ILV_TYPES, PACKS, buildIlv, ilvTypesFor, oneyAllowed, packPrice, sansPack } from '../lib/ilv'
 import { cleanRef } from '../lib/opImport'
 
 /**
@@ -31,6 +31,7 @@ async function enrich(sources) {
       marque:      s.marque || cat.marque,
       reference:   cat.reference || s.reference,
       couleur:     s.couleur || cat.couleur,
+      segment:     cat.segment || s.segment || null,
       prixFort:    s.prixFort ?? cat.prixFort ?? bp?.prixFort ?? null,
       pack:        cat.pack || s.pack || null,
       prixEngage:  cat.prixEngage ?? null,
@@ -81,9 +82,11 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
   const item = items?.find(i => i.key === key) || items?.[0]
   const types = item ? ilvTypesFor(item) : []
   const current = types.includes(type) ? type : types[0]
-  const product = item && { ...item, type: current, pack: item.pack || packChoisi || null }
-  const total = product?.prixFort != null && product.pack
-    ? Math.round((product.prixFort + packPrice(product.pack, duree)) * 100) / 100 : null
+  const noPack = item ? sansPack(item.segment) : false // accessoire : ni pack ni durée à choisir
+  const product = item && { ...item, type: current, pack: noPack ? null : item.pack || packChoisi || null }
+  const packAjoute = noPack ? 0 : product?.pack ? packPrice(product.pack, duree) : null
+  const total = product?.prixFort != null && packAjoute != null
+    ? Math.round((product.prixFort + packAjoute) * 100) / 100 : null
   const ilv = useMemo(() => product && current
     ? buildIlv(product, { duree, oney: current === 'normal' ? oney : null }) : null,
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -166,7 +169,7 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
                   {!types.length && <p className="text-[11px] text-red-500">Aucun prix pour ce produit : l’acheteur doit renseigner son prix fort dans la base de données.</p>}
                 </div>
 
-                {!item.pack && (
+                {!item.pack && !noPack && (
                   <label className="block space-y-1">
                     <span className={label}>Pack optionnel</span>
                     <select className="Input" value={packChoisi} onChange={e => setPackChoisi(e.target.value)}>
@@ -177,7 +180,7 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
                   </label>
                 )}
 
-                <div className="space-y-1.5">
+                {!noPack && <div className="space-y-1.5">
                   <span className={label}>Pack inclus dans le prix</span>
                   <div className="flex gap-1.5">
                     {[1, 2].map(d => (
@@ -186,7 +189,8 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
                       </button>
                     ))}
                   </div>
-                </div>
+                </div>}
+                {noPack && <p className="text-[11px] text-gray-500 dark:text-neutral-400">Accessoire : pas de pack optionnel, l’ILV affiche le prix seul.</p>}
 
                 {current === 'normal' && (
                   <div className="space-y-1.5">

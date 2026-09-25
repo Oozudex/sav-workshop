@@ -81,3 +81,24 @@ describe('modèles', () => {
     assert.match(buildIlv({ ...ALLROAD, type: 'engage' }).error, /engagé/)
   })
 })
+
+describe('accessoires', () => {
+  const ANTIVOL = { nom: 'ANTIVOL ABUS 6000K', marque: 'ABUS', reference: '6000K', segment: 'accessoires', prixFort: 99.99 }
+  it('pas de pack : ni dans le prix, ni dans le détail', () => {
+    const n = buildIlv({ ...ANTIVOL, type: 'normal' }, { duree: 2 })
+    assert.deepEqual(n.big, { int: '99', dec: '.99' })
+    assert.deepEqual(n.lines, ['PRIX ANTIVOL ABUS 6000K : 99.99€'])
+    const bp = buildIlv({ ...ANTIVOL, type: 'bonplan', prixBonPlan: 69.99, pack: 'sport' })
+    assert.equal(bp.conseille, 'Prix conseillé : 99€99')
+    assert.equal(bp.lines.length, 2)
+    const promo = buildIlv({ ...ANTIVOL, type: 'promo', prixOp: 79.99 })
+    assert.equal(promo.barre, '99€99')
+    assert.equal(promo.remise, '-20€')
+  })
+})
+
+describe('référence', () => {
+  it('sans référence, on affiche la réf. fournisseur ou le chrono', () => {
+    assert.equal(buildIlv({ ...ALLROAD, reference: null, chrono: '0-228749', type: 'normal' }).refLine, 'Réf. :  0-228749 / Allroad 450')
+  })
+})

@@ -56,3 +56,12 @@ describe('segments', () => {
     assert.equal(catalogueData({ ...valide, segment: 'velo_pp' }).segment, 'velo_pp')
   })
 })
+
+describe('accessoires sans pack', () => {
+  it('le pack n’est pas demandé et n’est pas enregistré', () => {
+    const accessoire = { ...valide, segment: 'accessoires', pack: '' }
+    assert.deepEqual(catalogueFormErrors(accessoire), {})
+    assert.equal(catalogueData({ ...accessoire, pack: 'sport' }).pack, null)
+    assert.equal(catalogueFormErrors({ ...valide, pack: '' }).pack, 'Choisis le pack de ce vélo')
+  })
+})

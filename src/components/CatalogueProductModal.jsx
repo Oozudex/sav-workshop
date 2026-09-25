@@ -121,6 +121,7 @@ export default function CatalogueProductModal({ produit, produits, start, onClos
   }, [onClose, saving])
 
   const errors = catalogueFormErrors(form, { produits, id: produit?.id })
+  const accessoire = form.segment === 'accessoires'
   const shown = submitted ? errors : {}
 
   async function handleSave(e) {
@@ -198,11 +199,12 @@ export default function CatalogueProductModal({ produit, produits, start, onClos
             </div>
           </Section>
 
-          <Section title="Prix et pack" hint="Utilisés pour les ILV : le pack est toujours ajouté au prix affiché.">
+          <Section title={accessoire ? 'Prix' : 'Prix et pack'}
+            hint={accessoire ? 'Accessoire : pas de pack optionnel, l’ILV affiche le prix seul.' : 'Utilisés pour les ILV : le pack est toujours ajouté au prix affiché.'}>
             <Field label="Prix fort *" error={shown.prixFort} className="w-44">
               <PriceInput {...input('prixFort')} placeholder="Ex. 1499,99" />
             </Field>
-            <div className="space-y-1">
+            {!accessoire && <div className="space-y-1">
               <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400">Pack optionnel *</span>
               <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Pack optionnel">
                 {Object.entries(PACKS).map(([k, p]) => {
@@ -219,7 +221,7 @@ export default function CatalogueProductModal({ produit, produits, start, onClos
                 })}
               </div>
               {shown.pack && <span className="block text-[11px] text-red-500">{shown.pack}</span>}
-            </div>
+            </div>}
           </Section>
 
           <Section title="Prix spéciaux">

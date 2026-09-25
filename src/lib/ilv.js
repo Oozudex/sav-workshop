@@ -1,5 +1,6 @@
 // ILV (étiquettes prix en rayon) : packs, calcul des prix affichés et textes de chaque modèle.
 // Fonctions pures (tests/unit/ilv.test.mjs) ; le dessin du PDF est dans lib/ilvPdf.js.
+import { normSegment } from './opImport.js'
 
 export const PACKS = {
   enfant:     { label: 'Pack enfant',     prix: { 1: 9.99,  2: 15.98 } },
@@ -78,6 +79,11 @@ export function titleName(nom) {
   }).join('-')).join(' ')
 }
 
+// Les accessoires n'ont pas de pack optionnel
+export function sansPack(segment) {
+  return normSegment(segment) === 'accessoires'
+}
+
 export function packPrice(pack, duree = 1) {
   return PACKS[pack]?.prix[duree] ?? null
 }
@@ -107,12 +113,14 @@ export function ilvTypesFor({ prixEngage, prixOp, prixBonPlan, prixFort }) {
 
 /**
  * Contenu d'une ILV : prix calculés (pack inclus) et textes prêts à dessiner.
- * p : { type, nom, marque, reference, prixFort, prixOp, prixBonPlan, prixEngage, pack, dateDebut, dateFin }
+ * p : { type, nom, marque, reference, segment, prixFort, prixOp, prixBonPlan, prixEngage, pack, dateDebut, dateFin }
+ * Accessoires : pas de pack, ni dans le prix ni dans le détail.
  * options : { duree: 1 | 2 (pack 1 an / 2 ans), oney: null | 3 | 4 (ILV normale uniquement) }
  * Renvoie { error } si une donnée manque.
  */
 export function buildIlv(p, { duree = 1, oney = null } = {}) {
-  const pack = packPrice(p.pack, duree)
+  const noPack = sansPack(p.segment)
+  const pack = noPack ? 0 : packPrice(p.pack, duree)
   if (pack == null) return { error: 'Pack optionnel non renseigné pour ce produit.' }
   if (p.prixFort == null) return { error: 'Prix fort non renseigné pour ce produit.' }
 
@@ -120,8 +128,8 @@ export function buildIlv(p, { duree = 1, oney = null } = {}) {
   const base = {
     type: p.type,
     marque: p.marque || '',
-    refLine: `Réf. :  ${p.reference || ''} / ${titleName(p.nom)}`,
-    packLine: `PRIX PACK OPTIONNEL ${fmtPoint(pack)}`,
+    refLine: `Réf. :  ${p.reference || p.refFournisseur || p.chrono || ''} / ${titleName(p.nom)}`,
+    packLine: noPack ? null : `PRIX PACK OPTIONNEL ${fmtPoint(pack)}`,
     prixLine: `PRIX ${nom} : ${fmtPoint(p.prixFort)}`,
   }
   const plusPack = v => euros(cents(v) + cents(pack))
@@ -133,7 +141,7 @@ export function buildIlv(p, { duree = 1, oney = null } = {}) {
       return {
         ...base,
         big: bigPrice(total),
-        lines: [base.prixLine, base.packLine],
+        lines: [base.prixLine, base.packLine].filter(Boolean),
         oney: n && { n, monthly: fmtEuroCents(oneyMonthly(total, n)), mentions: ONEY_MENTIONS[n] },
       }
     }
@@ -153,7 +161,7 @@ export function buildIlv(p, { duree = 1, oney = null } = {}) {
           ...(refBonPlan ? [`PRIX BON PLAN : ${fmtPoint(p.prixBonPlan)}`] : []),
           `PRIX PROMO : ${fmtPoint(p.prixOp)}`,
           base.packLine,
-        ],
+        ].filter(Boolean),
         dates: p.dateDebut && p.dateFin ? `Du ${fmtDateFr(p.dateDebut)} au ${fmtDateFr(p.dateFin)}` : '',
       }
     }
@@ -165,7 +173,7 @@ export function buildIlv(p, { duree = 1, oney = null } = {}) {
         ...base,
         conseille: `Prix conseillé : ${fmtEuroCents(plusPack(p.prixFort))}`,
         big: bigPrice(plusPack(prix)),
-        lines: [base.prixLine, `${p.type === 'engage' ? 'PRIX ENGAGÉ' : 'PRIX BON PLAN'} : ${fmtPoint(prix)}`, base.packLine],
+        lines: [base.prixLine, `${p.type === 'engage' ? 'PRIX ENGAGÉ' : 'PRIX BON PLAN'} : ${fmtPoint(prix)}`, base.packLine].filter(Boolean),
       }
     }
     default:

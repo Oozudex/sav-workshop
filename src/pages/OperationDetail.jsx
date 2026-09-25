@@ -620,7 +620,7 @@ export default function OperationDetail() {
       sources: group.map(v => ({
         key: v.id, label: [v.couleur, v.reference, v.chrono].filter(Boolean).join(' · ') || v.nom,
         chrono: v.chrono, refFournisseur: v.refFournisseur, nom: v.nom, marque: v.marque, reference: v.reference,
-        couleur: v.couleur, prixFort: v.prixFort ?? null, prixOp: v.prixOp, prixBonPlan: v.prixBonPlan ?? null,
+        couleur: v.couleur, segment: v.segment, prixFort: v.prixFort ?? null, prixOp: v.prixOp, prixBonPlan: v.prixBonPlan ?? null,
         dateDebut: op.dateDebut, dateFin: op.dateFin,
       })),
     })

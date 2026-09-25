@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore'
 import { GLOBAL_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
 import IlvDialog from '../components/IlvDialog'
+import { sansPack } from '../lib/ilv'
 import CatalogueProductModal from '../components/CatalogueProductModal'
 import ActionsMenu from '../components/ActionsMenu'
 import { formatEuro } from '../lib/orders'
@@ -398,7 +399,7 @@ const PACK_COURT = { enfant: 'Enfant', classique: 'Classique', sport: 'Sport', e
 export function catalogueSource(p) {
   return {
     key: p.id, label: [p.couleur, p.reference, p.chrono].filter(Boolean).join(' · ') || p.nom,
-    chrono: p.chrono, nom: p.nom, marque: p.marque, reference: p.reference, couleur: p.couleur,
+    chrono: p.chrono, nom: p.nom, marque: p.marque, reference: p.reference, couleur: p.couleur, segment: p.segment,
     prixFort: p.prixFort ?? null, pack: p.pack || null,
   }
 }
@@ -408,7 +409,7 @@ function opProductSource(p) {
   return {
     key: p.id, label: [p.couleur, p.reference, p.chrono].filter(Boolean).join(' · ') || p.nom,
     chrono: p.chrono, refFournisseur: p.refFournisseur, nom: p.nom, marque: p.marque, reference: p.reference,
-    couleur: p.couleur, prixFort: p.prixFort ?? null, prixOp: p.prixOp, prixBonPlan: p.prixBonPlan ?? null,
+    couleur: p.couleur, segment: p.segment, prixFort: p.prixFort ?? null, prixOp: p.prixOp, prixBonPlan: p.prixBonPlan ?? null,
     dateDebut: p.dateDebut, dateFin: p.dateFin,
   }
 }
@@ -417,7 +418,7 @@ function opProductSource(p) {
 function bonPlanSource(b) {
   return {
     key: b.id, label: [b.couleur, b.chrono || b.refFournisseur].filter(Boolean).join(' · ') || b.nom,
-    chrono: b.chrono, refFournisseur: b.refFournisseur, nom: b.nom, marque: b.marque, couleur: b.couleur,
+    chrono: b.chrono, refFournisseur: b.refFournisseur, nom: b.nom, marque: b.marque, couleur: b.couleur, segment: b.segment,
     prixFort: b.prixFort ?? null, prixBonPlan: b.prixBonPlan,
   }
 }
@@ -503,7 +504,7 @@ function ProduitsSection({ canCreate, mode }) {
     return list.sort((a, b) => (a.v.nom || '').localeCompare(b.v.nom || '', 'fr'))
   }, [mode, produits, bonPlanDocs])
 
-  const incomplet = r => !r.p || r.p.prixFort == null || !r.p.pack
+  const incomplet = r => !r.p || r.p.prixFort == null || (!r.p.pack && !sansPack(r.p.segment))
   const FILTRES = {
     incomplets: incomplet,
     engages: r => r.v.prixEngage != null,
@@ -661,7 +662,7 @@ function ProduitsSection({ canCreate, mode }) {
                     </td>
                     <td className="px-3 sm:px-4 py-2.5 hidden md:table-cell text-gray-500 dark:text-neutral-400">{v.marque || '—'}</td>
                     <td className="px-3 sm:px-4 py-2.5 whitespace-nowrap">{prixFort != null ? formatEuro(prixFort) : <span className="text-amber-600 dark:text-amber-400">à saisir</span>}</td>
-                    <td className="px-3 sm:px-4 py-2.5 hidden md:table-cell whitespace-nowrap">{v.pack ? PACK_COURT[v.pack] : <span className="text-amber-600 dark:text-amber-400">à choisir</span>}</td>
+                    <td className="px-3 sm:px-4 py-2.5 hidden md:table-cell whitespace-nowrap">{sansPack(v.segment) ? <span className="text-gray-300 dark:text-neutral-600">—</span> : v.pack ? PACK_COURT[v.pack] : <span className="text-amber-600 dark:text-amber-400">à choisir</span>}</td>
                     <td className="px-3 sm:px-4 py-2.5 hidden sm:table-cell"><div className="flex flex-col items-start gap-1">{badges(r)}</div></td>
                     <td className="pl-1 pr-3 sm:px-4 py-2.5" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
