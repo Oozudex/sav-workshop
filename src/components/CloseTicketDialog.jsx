@@ -67,10 +67,10 @@ export default function CloseTicketDialog({ ticket, onCancel, onConfirm }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[400] flex items-start justify-center p-4 pt-[8vh] bg-black/60 backdrop-blur-sm overflow-y-auto"
+    <div className="fixed inset-0 z-[400] flex items-start justify-center p-3 sm:p-4 sm:pt-[8vh] bg-black/60 backdrop-blur-sm overflow-y-auto"
       role="dialog" aria-modal="true" aria-labelledby="close-ticket-title">
       <div className="w-full max-w-xl rounded-2xl overflow-hidden shadow-2xl border-2 border-amber-400 dark:border-amber-500/70 bg-white dark:bg-neutral-900">
-        <div className="flex items-start gap-3 px-5 py-4 bg-amber-50 border-b border-amber-200 dark:bg-amber-500/10 dark:border-amber-500/30">
+        <div className="flex items-start gap-3 px-4 sm:px-5 py-4 bg-amber-50 border-b border-amber-200 dark:bg-amber-500/10 dark:border-amber-500/30">
           <span aria-hidden className="h-9 w-9 shrink-0 rounded-full grid place-items-center bg-amber-400 text-amber-950 text-lg font-bold">!</span>
           <div>
             <h2 id="close-ticket-title" className="text-sm font-bold text-amber-900 dark:text-amber-200">
@@ -83,7 +83,7 @@ export default function CloseTicketDialog({ ticket, onCancel, onConfirm }) {
           </div>
         </div>
 
-        <div className="p-5 space-y-3">
+        <div className="p-4 sm:p-5 space-y-3">
           <textarea
             ref={textareaRef}
             readOnly
@@ -106,7 +106,7 @@ export default function CloseTicketDialog({ ticket, onCancel, onConfirm }) {
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-gray-100 dark:border-neutral-800">
+        <div className="flex flex-wrap items-center justify-end gap-2 px-4 sm:px-5 py-3.5 border-t border-gray-100 dark:border-neutral-800">
           <button onClick={onCancel} disabled={closing}
             className="h-9 px-4 rounded-lg text-xs font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800">
             Annuler

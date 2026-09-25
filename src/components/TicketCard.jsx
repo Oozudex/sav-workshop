@@ -1,6 +1,6 @@
 import { Draggable } from '@hello-pangea/dnd'
 
-const STATUS_DOT = {
+export const STATUS_DOT = {
   New:             'bg-gray-400',
   InProgress:      'bg-indigo-500',
   WaitingParts:    'bg-amber-400',
@@ -21,12 +21,85 @@ function dueDateInfo(ymd) {
   } catch { return null }
 }
 
-export default function TicketCard({ ticket, onOpen, index }) {
+// Contenu d'une carte (tableau sur ordinateur, liste sur téléphone)
+export function TicketCardBody({ ticket }) {
   const urgent = ticket.priority === 'Urgent'
   // Ticket clôturé : la date prévue n'a plus d'intérêt (plus d'alerte « En retard »)
   const due = ticket.status === 'Closed' ? null : dueDateInfo(ticket.dueDate)
   const dot = urgent ? 'bg-red-500' : (STATUS_DOT[ticket.status] || 'bg-gray-300')
 
+  return (
+    <>
+      {/* Left accent bar */}
+      <div className={`absolute left-0 top-3 bottom-3 w-0.5 rounded-full ${dot}`} />
+
+      <div className="p-3 pl-4">
+        {/* Top row: ticket # + urgent badge */}
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xs font-mono font-semibold text-gray-400 dark:text-neutral-500">
+            #{ticket.ticketNumber || ticket.id.slice(0, 6)}
+          </span>
+          {urgent && (
+            <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full
+                             bg-red-50 text-red-600 border border-red-200
+                             dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20">
+              ⚡ Urgent
+            </span>
+          )}
+        </div>
+
+        {/* Customer + bike */}
+        <p className="text-sm font-medium text-gray-900 dark:text-neutral-100 leading-snug break-words">
+          {ticket.customerName || 'Client inconnu'}
+        </p>
+        {ticket.bikeType && (
+          <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
+            {ticket.bikeType}{ticket.bikeBrand ? ` · ${ticket.bikeBrand}` : ''}
+          </p>
+        )}
+
+        {/* N° de suivi SAV fournisseur */}
+        {ticket.trackingNumber && (
+          <p className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 mt-1 truncate" title="N° de suivi SAV">
+            📦 {ticket.trackingNumber}
+          </p>
+        )}
+
+        {/* Issue description */}
+        {ticket.issueDescription && (
+          <p className="text-xs text-gray-400 dark:text-neutral-500 line-clamp-2 mt-2 leading-relaxed">
+            {ticket.issueDescription}
+          </p>
+        )}
+
+        {/* Footer: créé par + due date */}
+        {(ticket.createdByName || due) && (
+          <div className="flex items-center justify-between gap-2 mt-3 pt-2 border-t border-gray-100 dark:border-neutral-700/50">
+            {ticket.createdByName ? (
+              <span className="text-[11px] font-medium text-gray-400 dark:text-neutral-500 truncate">
+                {ticket.createdByName}
+              </span>
+            ) : <span />}
+            {due && (
+              <div className={`flex items-center gap-1 text-[11px] font-medium shrink-0 ${due.cls}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${due.dot}`} />
+                {due.label}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
+export const CARD_CLASS = [
+  'group relative rounded-xl border cursor-pointer transition-all select-none',
+  'bg-white border-gray-200 hover:border-gray-300 hover:shadow-md',
+  'dark:bg-neutral-800/60 dark:border-neutral-700/60 dark:hover:border-neutral-600 dark:hover:bg-neutral-800',
+].join(' ')
+
+export default function TicketCard({ ticket, onOpen, index }) {
   return (
     <Draggable draggableId={ticket.id} index={index}>
       {(provided, snapshot) => (
@@ -35,72 +108,9 @@ export default function TicketCard({ ticket, onOpen, index }) {
           {...provided.draggableProps}
           {...provided.dragHandleProps}
           onClick={() => onOpen(ticket)}
-          className={[
-            'group relative rounded-xl border cursor-pointer transition-all select-none',
-            'bg-white border-gray-200 hover:border-gray-300 hover:shadow-md',
-            'dark:bg-neutral-800/60 dark:border-neutral-700/60 dark:hover:border-neutral-600 dark:hover:bg-neutral-800',
-            snapshot.isDragging ? 'shadow-xl rotate-1 scale-[1.02]' : 'shadow-sm',
-          ].join(' ')}
+          className={`${CARD_CLASS} ${snapshot.isDragging ? 'shadow-xl rotate-1 scale-[1.02]' : 'shadow-sm'}`}
         >
-          {/* Left accent bar */}
-          <div className={`absolute left-0 top-3 bottom-3 w-0.5 rounded-full ${dot}`} />
-
-          <div className="p-3 pl-4">
-            {/* Top row: ticket # + urgent badge */}
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-xs font-mono font-semibold text-gray-400 dark:text-neutral-500">
-                #{ticket.ticketNumber || ticket.id.slice(0, 6)}
-              </span>
-              {urgent && (
-                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full
-                                 bg-red-50 text-red-600 border border-red-200
-                                 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20">
-                  ⚡ Urgent
-                </span>
-              )}
-            </div>
-
-            {/* Customer + bike */}
-            <p className="text-sm font-medium text-gray-900 dark:text-neutral-100 leading-snug">
-              {ticket.customerName || 'Client inconnu'}
-            </p>
-            {ticket.bikeType && (
-              <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
-                {ticket.bikeType}{ticket.bikeBrand ? ` · ${ticket.bikeBrand}` : ''}
-              </p>
-            )}
-
-            {/* N° de suivi SAV fournisseur */}
-            {ticket.trackingNumber && (
-              <p className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 mt-1 truncate" title="N° de suivi SAV">
-                📦 {ticket.trackingNumber}
-              </p>
-            )}
-
-            {/* Issue description */}
-            {ticket.issueDescription && (
-              <p className="text-xs text-gray-400 dark:text-neutral-500 line-clamp-2 mt-2 leading-relaxed">
-                {ticket.issueDescription}
-              </p>
-            )}
-
-            {/* Footer: créé par + due date */}
-            {(ticket.createdByName || due) && (
-              <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-100 dark:border-neutral-700/50">
-                {ticket.createdByName ? (
-                  <span className="text-[11px] font-medium text-gray-400 dark:text-neutral-500 truncate">
-                    {ticket.createdByName}
-                  </span>
-                ) : <span />}
-                {due && (
-                  <div className={`flex items-center gap-1 text-[11px] font-medium shrink-0 ${due.cls}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${due.dot}`} />
-                    {due.label}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <TicketCardBody ticket={ticket} />
         </div>
       )}
     </Draggable>

@@ -226,22 +226,25 @@ export default function Tickets() {
 
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* ── Toolbar ── */}
-        <div className="px-5 py-3 border-b border-gray-200 dark:border-neutral-800
+        <div className="px-4 sm:px-5 py-3 border-b border-gray-200 dark:border-neutral-800
                         bg-white/80 dark:bg-neutral-900/80 backdrop-blur">
-          <div className="flex items-center gap-3">
+          {/* Téléphone : titre + « Nouveau » / recherche pleine largeur / filtres ; ordinateur : une seule ligne */}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
 
             {/* Title */}
-            <h1 className="text-sm font-semibold text-gray-900 dark:text-white shrink-0">Tickets</h1>
-            <span className="text-xs font-medium px-2 py-0.5 rounded-full
-                             bg-gray-100 text-gray-500
-                             dark:bg-neutral-800 dark:text-neutral-400">
-              {tickets.filter(t => t.status !== 'Closed').length}
-            </span>
+            <div className="order-1 sm:order-none flex items-center gap-2 sm:gap-3">
+              <h1 className="text-sm font-semibold text-gray-900 dark:text-white shrink-0">Tickets</h1>
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full
+                               bg-gray-100 text-gray-500
+                               dark:bg-neutral-800 dark:text-neutral-400">
+                {tickets.filter(t => t.status !== 'Closed').length}
+              </span>
+            </div>
 
-            <div className="w-px h-4 bg-gray-200 dark:bg-neutral-700 mx-1" />
+            <div className="hidden sm:block w-px h-4 bg-gray-200 dark:bg-neutral-700 mx-1" />
 
             {/* Search */}
-            <div className="relative">
+            <div className="relative order-3 sm:order-none w-full sm:w-auto">
               <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 dark:text-neutral-500 pointer-events-none"
                 fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 111 11a6 6 0 0116 0z" />
@@ -250,7 +253,7 @@ export default function Tickets() {
                 value={q}
                 onChange={e => setQ(e.target.value)}
                 placeholder="Rechercher, n° de suivi…"
-                className="h-8 pl-8 pr-3 w-60 rounded-lg border text-sm
+                className="h-9 sm:h-8 pl-8 pr-3 w-full sm:w-60 rounded-lg border text-sm
                            bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400
                            focus:outline-none focus:ring-2 focus:ring-black/20 focus:border-gray-400
                            dark:bg-neutral-800 dark:border-neutral-700 dark:text-neutral-100 dark:placeholder-neutral-500
@@ -259,7 +262,7 @@ export default function Tickets() {
             </div>
 
             {/* Priority segmented */}
-            <div className="flex items-center h-8 rounded-lg border divide-x overflow-hidden
+            <div className="order-4 sm:order-none flex items-center h-8 rounded-lg border divide-x overflow-hidden
                             border-gray-200 divide-gray-200
                             dark:border-neutral-700 dark:divide-neutral-700">
               {[['', 'Tout'], ['Urgent', '⚡ Urgent'], ['Normal', 'Normal']].map(([val, label]) => (
@@ -282,7 +285,7 @@ export default function Tickets() {
               <select
                 value={filterAssigned}
                 onChange={e => setFilterAssigned(e.target.value)}
-                className="h-8 px-3 rounded-lg border text-sm
+                className="order-4 sm:order-none h-8 px-3 rounded-lg border text-sm min-w-0 flex-1 sm:flex-none
                            bg-white border-gray-200 text-gray-700
                            focus:outline-none focus:ring-2 focus:ring-black/20
                            dark:bg-neutral-900 dark:border-neutral-700 dark:text-neutral-300"
@@ -296,7 +299,7 @@ export default function Tickets() {
             {hasFilters && (
               <button
                 onClick={() => { setQ(''); setFilterPriority(''); setFilterAssigned('') }}
-                className="h-8 px-2.5 rounded-lg text-xs text-gray-400 hover:text-gray-700 hover:bg-gray-100
+                className="order-4 sm:order-none h-8 px-2.5 rounded-lg text-xs text-gray-400 hover:text-gray-700 hover:bg-gray-100
                            dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors"
               >
                 ✕ Effacer
@@ -308,7 +311,7 @@ export default function Tickets() {
               <button
                 onClick={clearAlertFilter}
                 title="Retirer le filtre"
-                className="h-8 px-2.5 rounded-lg text-xs font-medium border transition-colors
+                className="order-4 sm:order-none h-8 px-2.5 rounded-lg text-xs font-medium border transition-colors
                            text-red-700 border-red-200 bg-red-50 hover:bg-red-100
                            dark:text-red-300 dark:border-red-500/30 dark:bg-red-500/10 dark:hover:bg-red-500/20"
               >
@@ -316,14 +319,14 @@ export default function Tickets() {
               </button>
             )}
 
-            <div className="flex-1" />
+            <div className="hidden sm:block flex-1" />
 
             {/* Directeurs : statistiques et seuils d'alerte */}
             {canManage && (
               <>
                 <button
                   onClick={() => setShowStats(true)}
-                  className="h-8 px-3 rounded-lg border text-xs font-semibold transition-colors
+                  className="order-5 sm:order-none h-8 px-3 rounded-lg border text-xs font-semibold transition-colors
                              text-gray-700 border-gray-200 hover:bg-gray-50
                              dark:text-neutral-200 dark:border-neutral-700 dark:hover:bg-neutral-800"
                 >
@@ -333,7 +336,7 @@ export default function Tickets() {
                   onClick={() => setShowAlerts(true)}
                   disabled={!effectiveMagasinId}
                   title={effectiveMagasinId ? "Seuils d'alerte de l'atelier" : 'Sélectionne un magasin pour régler ses alertes'}
-                  className="relative h-8 px-3 rounded-lg border text-xs font-semibold transition-colors disabled:opacity-50
+                  className="order-5 sm:order-none relative h-8 px-3 rounded-lg border text-xs font-semibold transition-colors disabled:opacity-50
                              text-gray-700 border-gray-200 hover:bg-gray-50
                              dark:text-neutral-200 dark:border-neutral-700 dark:hover:bg-neutral-800"
                 >
@@ -350,7 +353,7 @@ export default function Tickets() {
             {/* New */}
             <button
               onClick={() => setShowForm(true)}
-              className="h-8 px-4 rounded-lg bg-gray-900 text-white text-xs font-semibold
+              className="order-2 sm:order-none ml-auto sm:ml-0 h-8 px-4 rounded-lg bg-gray-900 text-white text-xs font-semibold
                          hover:bg-gray-700 transition-colors
                          dark:bg-white dark:text-black dark:hover:bg-gray-100"
             >
@@ -360,13 +363,13 @@ export default function Tickets() {
         </div>
 
         {error && (
-          <div className="mx-5 mt-3 text-sm px-3 py-2 rounded-lg border text-red-700 bg-red-50 border-red-200 dark:text-red-300 dark:bg-red-900/20 dark:border-red-500/30">
+          <div className="mx-4 sm:mx-5 mt-3 text-sm px-3 py-2 rounded-lg border text-red-700 bg-red-50 border-red-200 dark:text-red-300 dark:bg-red-900/20 dark:border-red-500/30">
             {error}
           </div>
         )}
 
         {/* ── Board ── */}
-        <div className="flex-1 min-h-0 overflow-hidden px-5 py-4">
+        <div className="flex-1 min-h-0 overflow-hidden px-4 sm:px-5 py-4">
           <DragDropContext onDragEnd={handleDragEnd}>
             <KanbanBoard tickets={filtered} onOpen={setActiveTicket} />
           </DragDropContext>
@@ -400,6 +403,12 @@ export default function Tickets() {
         <TicketModal
           ticket={tickets.find(t => t.id === activeTicket.id) || activeTicket}
           role={profile?.role}
+          onChangeStatus={status => {
+            const t = tickets.find(x => x.id === activeTicket.id) || activeTicket
+            // La clôture passe toujours par le récapitulatif (fiche atelier)
+            if (status === 'Closed') { setClosingTicket(t); return }
+            moveTo(t, status).catch(e => setError(e.message || 'Changement de statut impossible'))
+          }}
           onClose={() => setActiveTicket(null)}
           onDelete={() => setActiveTicket(null)}
         />

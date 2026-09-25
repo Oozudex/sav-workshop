@@ -8,11 +8,12 @@ import {
     serverTimestamp, doc, updateDoc, arrayUnion,
     deleteDoc, getDocs, writeBatch, runTransaction
 } from 'firebase/firestore'
-import { BIKE_TYPES, PRIORITIES, CAN_DELETE_ROLES } from '../lib/constants'
+import { BIKE_TYPES, PRIORITIES, CAN_DELETE_ROLES, STATUSES, STATUS_LABELS } from '../lib/constants'
+import { STATUS_DOT } from './TicketCard'
 import { useStaff } from '../lib/useStaff'
 import { commentExcerpt, withCommentEdited, withCommentRemoved } from '../lib/ticketHistory'
 
-export default function TicketModal({ ticket, role, onClose, onDelete }) {
+export default function TicketModal({ ticket, role, onClose, onDelete, onChangeStatus }) {
     const overlayRef = useRef(null)
     const urgent = ticket.priority === 'Urgent'
     const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
@@ -244,91 +245,86 @@ export default function TicketModal({ ticket, role, onClose, onDelete }) {
         <div
             ref={overlayRef}
             onClick={onOverlayClick}
-            className="fixed inset-0 z-[300] flex items-start justify-center p-4 pt-[5vh] bg-black/50 backdrop-blur-sm overflow-y-auto"
+            className="fixed inset-0 z-[300] flex items-start justify-center p-3 sm:p-4 sm:pt-[5vh] bg-black/50 backdrop-blur-sm overflow-y-auto"
         >
-            <div className="relative w-full max-w-4xl flex flex-col overflow-hidden
+            <div className="relative w-full max-w-4xl flex flex-col
                             rounded-2xl shadow-2xl border
                             bg-white border-gray-200
                             dark:bg-neutral-900 dark:border-neutral-800">
 
-                {/* ── HEADER ── */}
-                <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b
-                                border-gray-100 dark:border-neutral-800">
-                    <div className="flex items-center gap-3 min-w-0">
-                        <span className="text-xs font-mono font-semibold text-gray-400 dark:text-neutral-500 shrink-0">
-                            #{ticket.ticketNumber || ticket.id.slice(0, 8)}
-                        </span>
-                        <StatusBadge status={ticket.status} />
-                        {urgent && (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full
-                                             bg-red-50 text-red-600 border border-red-200
-                                             dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20 shrink-0">
-                                ⚡ Urgent
+                {/* ── HEADER : numéro, statut et actions, puis le client ── */}
+                <div className="px-4 sm:px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 flex-wrap min-w-0">
+                            <span className="text-xs font-mono font-semibold text-gray-400 dark:text-neutral-500 shrink-0">
+                                #{ticket.ticketNumber || ticket.id.slice(0, 8)}
                             </span>
-                        )}
-                        {editing ? (
-                            <div className="flex items-center gap-2 min-w-0">
-                                <input className="Input h-8 !w-44 text-sm" placeholder="Nom du client" aria-label="Nom du client"
-                                    value={draft.customerName} onChange={e => onChange('customerName', e.target.value)} />
-                                <input className="Input h-8 !w-36 text-sm" type="tel" placeholder="Téléphone" aria-label="Téléphone"
-                                    value={draft.customerPhone || ''} onChange={e => onChange('customerPhone', e.target.value)} />
-                            </div>
-                        ) : (
-                            <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                                {ticket.customerName || 'Client inconnu'}
-                                {ticket.customerPhone && (
-                                    <>
-                                        <span className="text-gray-400 dark:text-neutral-500"> - </span>
-                                        <a href={`tel:${ticket.customerPhone.replace(/\s/g, '')}`} title="Appeler le client"
-                                            className="font-medium text-gray-700 dark:text-neutral-300 hover:underline underline-offset-2">
-                                            {ticket.customerPhone}
-                                        </a>
-                                    </>
-                                )}
-                            </h3>
-                        )}
+                            <StatusBadge status={ticket.status} />
+                            {urgent && (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full
+                                                 bg-red-50 text-red-600 border border-red-200
+                                                 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20 shrink-0">
+                                    ⚡ Urgent
+                                </span>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                            {canEdit && !editing && (
+                                <Btn onClick={() => { setDraft(makeDraft(ticket)); setEditing(true) }}>Modifier</Btn>
+                            )}
+                            {canAdmin && !editing && (
+                                <Btn onClick={handleDelete} disabled={deleting} danger>
+                                    {deleting ? '…' : 'Supprimer'}
+                                </Btn>
+                            )}
+                            <button
+                                onClick={onClose}
+                                aria-label="Fermer"
+                                className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100
+                                           dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors"
+                            >
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                        {canEdit && !editing && (
-                            <Btn onClick={() => { setDraft(makeDraft(ticket)); setEditing(true) }}>Modifier</Btn>
-                        )}
-                        {editing && <>
-                            <Btn onClick={() => { setDraft(makeDraft(ticket)); setEditing(false) }}>Annuler</Btn>
-                            <Btn onClick={saveEdits} disabled={saving} primary>
-                                {saving ? 'Enregistrement…' : 'Enregistrer'}
-                            </Btn>
-                        </>}
-                        {canAdmin && (
-                            <Btn onClick={handleDelete} disabled={deleting} danger>
-                                {deleting ? '…' : 'Supprimer'}
-                            </Btn>
-                        )}
-                        <button
-                            onClick={onClose}
-                            className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100
-                                       dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors"
-                        >
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    </div>
+                    {editing ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:max-w-md">
+                            <input className="Input h-9 text-sm" placeholder="Nom du client" aria-label="Nom du client"
+                                value={draft.customerName} onChange={e => onChange('customerName', e.target.value)} />
+                            <input className="Input h-9 text-sm" type="tel" placeholder="Téléphone" aria-label="Téléphone"
+                                value={draft.customerPhone || ''} onChange={e => onChange('customerPhone', e.target.value)} />
+                        </div>
+                    ) : (
+                        <h3 className="text-base font-semibold text-gray-900 dark:text-white break-words">
+                            {ticket.customerName || 'Client inconnu'}
+                            {ticket.customerPhone && (
+                                <>
+                                    <span className="text-gray-300 dark:text-neutral-600"> · </span>
+                                    <a href={`tel:${ticket.customerPhone.replace(/\s/g, '')}`} title="Appeler le client"
+                                        className="font-medium text-gray-700 dark:text-neutral-300 underline sm:no-underline hover:underline underline-offset-2 whitespace-nowrap">
+                                        {ticket.customerPhone}
+                                    </a>
+                                </>
+                            )}
+                        </h3>
+                    )}
                 </div>
 
                 {/* ── BODY ── */}
-                <div className="p-5 grid grid-cols-1 md:grid-cols-12 gap-4">
+                <div className="p-3 sm:p-5 grid grid-cols-1 md:grid-cols-12 gap-3 sm:gap-4">
 
                     {/* ── Commentaires (en haut, pleine largeur) ── */}
                     <div className="md:col-span-12">
                         <Card title="Commentaires" action={comments.length > 0 && <CopyBtn onClick={copyComments} label="Copier l'historique" />}>
                             <form onSubmit={submitComment} className="space-y-1.5 mb-3">
-                                <div className="flex gap-2 items-center">
+                                <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
                                     {users.length > 0 ? (
                                         <select
                                             value={commentAuthor}
                                             onChange={e => { setCommentAuthor(e.target.value); setAuthorError(false) }}
-                                            className={`h-9 px-2 rounded-xl border text-xs font-medium bg-white dark:bg-neutral-800 text-gray-700 dark:text-neutral-200 shrink-0 w-32 ${authorError ? 'border-red-400 dark:border-red-500' : 'border-gray-200 dark:border-neutral-700'}`}
+                                            className={`h-9 px-2 rounded-xl border text-xs font-medium bg-white dark:bg-neutral-800 text-gray-700 dark:text-neutral-200 shrink-0 w-full sm:w-32 ${authorError ? 'border-red-400 dark:border-red-500' : 'border-gray-200 dark:border-neutral-700'}`}
                                         >
                                             <option value="">— Auteur</option>
                                             {users.map(u => <option key={u.id} value={u.nom}>{u.nom}</option>)}
@@ -338,14 +334,15 @@ export default function TicketModal({ ticket, role, onClose, onDelete }) {
                                             value={commentAuthor}
                                             onChange={e => { setCommentAuthor(e.target.value); setAuthorError(false) }}
                                             placeholder="Votre nom"
-                                            className={`Input h-9 w-32 shrink-0 ${authorError ? 'border-red-400 dark:border-red-500' : ''}`}
+                                            className={`Input h-9 sm:!w-32 shrink-0 ${authorError ? 'border-red-400 dark:border-red-500' : ''}`}
                                         />
                                     )}
+                                    <div className="flex gap-2 flex-1 min-w-0">
                                     <input
                                         value={commentText}
                                         onChange={e => setCommentText(e.target.value)}
                                         placeholder="Ajouter un commentaire…"
-                                        className="Input flex-1 h-9"
+                                        className="Input flex-1 h-9 min-w-0"
                                         onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment() } }}
                                     />
                                     <button
@@ -357,6 +354,7 @@ export default function TicketModal({ ticket, role, onClose, onDelete }) {
                                     >
                                         Envoyer
                                     </button>
+                                    </div>
                                 </div>
                                 {authorError && (
                                     <p className="text-xs text-red-500 dark:text-red-400">Veuillez sélectionner la personne qui a écrit le commentaire.</p>
@@ -373,13 +371,13 @@ export default function TicketModal({ ticket, role, onClose, onDelete }) {
                                             {(c.author || '?')[0].toUpperCase()}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <div className="flex items-baseline gap-2 mb-0.5">
+                                            <div className="flex items-baseline flex-wrap gap-x-2 mb-0.5">
                                                 <span className="text-xs font-semibold text-gray-700 dark:text-neutral-300">{c.author || '—'}</span>
                                                 <span className="text-[11px] text-gray-400 dark:text-neutral-500">
                                                     {formatTS(c.createdAt)}{c.editedAt ? ' · modifié' : ''}
                                                 </span>
                                                 {canEdit && editingCommentId !== c.id && (
-                                                    <span className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                                                    <span className="ml-auto flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                                                         <button type="button" onClick={() => startEditComment(c)}
                                                             className="text-[11px] px-1.5 py-0.5 rounded text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-neutral-400 dark:hover:text-white dark:hover:bg-neutral-800">
                                                             Modifier
@@ -405,7 +403,7 @@ export default function TicketModal({ ticket, role, onClose, onDelete }) {
                                                     </div>
                                                 </div>
                                             ) : (
-                                                <p className="text-sm text-gray-800 dark:text-neutral-200 leading-relaxed whitespace-pre-wrap">{c.text}</p>
+                                                <p className="text-sm text-gray-800 dark:text-neutral-200 leading-relaxed whitespace-pre-wrap break-words">{c.text}</p>
                                             )}
                                         </div>
                                     </div>
@@ -479,12 +477,23 @@ export default function TicketModal({ ticket, role, onClose, onDelete }) {
                     <div className="md:col-span-5 space-y-4">
 
                         <Card title="Suivi">
-                            <div className="flex items-center justify-between gap-3 mb-3">
-                                <div>
-                                    <p className="text-[11px] font-medium text-gray-400 dark:text-neutral-500 uppercase tracking-wide mb-1">Statut</p>
-                                    <StatusBadge status={ticket.status} />
-                                </div>
-                                <p className="text-[11px] text-gray-400 dark:text-neutral-500 text-right">Pour changer de statut,<br />déplace le ticket dans le tableau.</p>
+                            <div className="mb-4">
+                                <p className="text-[11px] font-medium text-gray-400 dark:text-neutral-500 uppercase tracking-wide mb-1.5">Statut</p>
+                                {onChangeStatus && canEdit ? (
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {STATUSES.map(st => (
+                                            <button key={st} type="button" disabled={st === ticket.status} onClick={() => onChangeStatus(st)}
+                                                className={['h-8 sm:h-7 px-2.5 inline-flex items-center gap-1.5 rounded-lg border text-[11px] font-medium transition-colors',
+                                                    st === ticket.status
+                                                        ? 'bg-gray-900 text-white border-transparent dark:bg-white dark:text-black'
+                                                        : 'text-gray-600 border-gray-200 hover:bg-gray-50 dark:text-neutral-400 dark:border-neutral-700 dark:hover:bg-neutral-800'].join(' ')}>
+                                                <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[st]}`} />
+                                                {STATUS_LABELS[st]}
+                                            </button>
+                                        ))}
+                                    </div>
+                                ) : <StatusBadge status={ticket.status} />}
+                                <p className="hidden md:block text-[11px] text-gray-400 dark:text-neutral-500 mt-1.5">Tu peux aussi déplacer le ticket dans le tableau.</p>
                             </div>
                             <div className="mb-4">
                                 <div className="flex items-center justify-between mb-1">
@@ -553,10 +562,12 @@ export default function TicketModal({ ticket, role, onClose, onDelete }) {
                                     <p className="text-xs text-gray-400 dark:text-neutral-500 py-2">Aucun événement.</p>
                                 )}
                                 {(ticket.history || []).slice().reverse().map((h, i) => (
-                                    <div key={i} className="flex gap-2 text-xs py-1.5 px-2 rounded-lg hover:bg-gray-50 dark:hover:bg-neutral-800">
-                                        <span className="text-gray-400 dark:text-neutral-500 shrink-0 w-32">{formatTS(h.at)}</span>
-                                        <span className="text-gray-500 dark:text-neutral-400 shrink-0">{h.action}</span>
-                                        <span className="text-gray-700 dark:text-neutral-300 truncate">{h.note}</span>
+                                    <div key={i} className="flex flex-col sm:flex-row sm:gap-2 text-xs py-1.5 px-2 rounded-lg hover:bg-gray-50 dark:hover:bg-neutral-800">
+                                        <span className="text-gray-400 dark:text-neutral-500 shrink-0 sm:w-32">
+                                            {formatTS(h.at)}<span className="sm:hidden"> · {h.action}</span>
+                                        </span>
+                                        <span className="hidden sm:block text-gray-500 dark:text-neutral-400 shrink-0">{h.action}</span>
+                                        <span className="text-gray-700 dark:text-neutral-300 sm:truncate break-words">{h.note}</span>
                                     </div>
                                 ))}
                             </div>
@@ -564,6 +575,16 @@ export default function TicketModal({ ticket, role, onClose, onDelete }) {
                     </div>
 
                 </div>
+
+                {editing && (
+                    <div className="sticky bottom-0 z-10 flex items-center justify-end gap-2 px-4 sm:px-5 py-3 border-t rounded-b-2xl
+                                    border-gray-100 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+                        <Btn onClick={() => { setDraft(makeDraft(ticket)); setEditing(false) }}>Annuler</Btn>
+                        <Btn onClick={saveEdits} disabled={saving} primary>
+                            {saving ? 'Enregistrement…' : 'Enregistrer'}
+                        </Btn>
+                    </div>
+                )}
 
                 {/* Toast */}
                 {toast && (
@@ -611,7 +632,7 @@ function CopyBtn({ onClick, label }) {
 function Card({ title, children, action }) {
     return (
         <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-neutral-800
+            <div className="flex items-center justify-between gap-2 px-3 sm:px-4 py-2.5 border-b border-gray-100 dark:border-neutral-800
                             bg-gray-50/50 dark:bg-neutral-800/30">
                 <div className="flex items-center gap-2">
                     <span className="h-1.5 w-1.5 rounded-full bg-gray-300 dark:bg-neutral-600" />
@@ -619,13 +640,13 @@ function Card({ title, children, action }) {
                 </div>
                 {action}
             </div>
-            <div className="p-4">{children}</div>
+            <div className="p-3 sm:p-4">{children}</div>
         </div>
     )
 }
 
 function Grid({ children }) {
-    return <div className="grid grid-cols-2 gap-x-6 gap-y-3">{children}</div>
+    return <div className="grid grid-cols-2 gap-x-3 sm:gap-x-6 gap-y-3">{children}</div>
 }
 
 function Field({ label, children, vertical = false }) {

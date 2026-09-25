@@ -47,14 +47,14 @@ export default function TicketForm({ onSubmit, onClose, users = [], initialValue
     <div
       ref={overlayRef}
       onClick={onOverlayClick}
-      className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm flex items-start justify-center p-4 pt-[5vh] overflow-y-auto"
+      className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm flex items-start justify-center p-3 sm:p-4 sm:pt-[5vh] overflow-y-auto"
     >
-      <div className="w-full max-w-3xl flex flex-col rounded-2xl shadow-2xl border overflow-hidden
+      <div className="w-full max-w-3xl flex flex-col rounded-2xl shadow-2xl border
                       bg-white border-gray-200
                       dark:bg-neutral-900 dark:border-neutral-800">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b
+        <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b
                         border-gray-100 dark:border-neutral-800">
           <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Nouveau ticket</h2>
           <button
@@ -70,7 +70,7 @@ export default function TicketForm({ onSubmit, onClose, users = [], initialValue
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div className="p-5 space-y-4">
+          <div className="p-3 sm:p-5 space-y-3 sm:space-y-4">
 
             {error && (
               <div className="text-sm px-3 py-2 rounded-xl border
@@ -87,7 +87,7 @@ export default function TicketForm({ onSubmit, onClose, users = [], initialValue
                   <input className="Input" value={form.customerName} onChange={e => set('customerName', e.target.value)} autoFocus />
                 </Field>
                 <Field label="Téléphone">
-                  <input className="Input" type="tel" value={form.customerPhone} onChange={e => set('customerPhone', e.target.value)} />
+                  <input className="Input" type="tel" inputMode="tel" value={form.customerPhone} onChange={e => set('customerPhone', e.target.value)} />
                 </Field>
               </Grid>
             </Card>
@@ -113,7 +113,7 @@ export default function TicketForm({ onSubmit, onClose, users = [], initialValue
                   <input type="date" className="Input" value={form.purchaseDate} onChange={e => set('purchaseDate', e.target.value)} />
                 </Field>
                 <Field label="Garantie">
-                  <label className="inline-flex items-center gap-2 h-10 cursor-pointer">
+                  <label className="flex items-center gap-2 h-[42px] cursor-pointer">
                     <input id="warranty" type="checkbox" className="h-4 w-4 rounded" checked={form.underWarranty} onChange={e => set('underWarranty', e.target.checked)} />
                     <span className="text-sm text-gray-700 dark:text-neutral-300">Oui</span>
                   </label>
@@ -160,8 +160,8 @@ export default function TicketForm({ onSubmit, onClose, users = [], initialValue
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t
-                          border-gray-100 dark:border-neutral-800">
+          <div className="sticky bottom-0 flex items-center justify-end gap-2 px-4 sm:px-5 py-3 border-t rounded-b-2xl
+                          bg-white dark:bg-neutral-900 border-gray-100 dark:border-neutral-800">
             <button
               type="button"
               onClick={onClose}
@@ -196,14 +196,14 @@ function Card({ title, children }) {
         <span className="h-1.5 w-1.5 rounded-full bg-gray-300 dark:bg-neutral-600" />
         <span className="text-xs font-semibold text-gray-600 dark:text-neutral-400 uppercase tracking-wide">{title}</span>
       </div>
-      <div className="p-4">{children}</div>
+      <div className="p-3 sm:p-4">{children}</div>
     </div>
   )
 }
 
 function Grid({ children, cols = 2 }) {
   return (
-    <div className={`grid gap-x-5 gap-y-3 ${cols === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+    <div className={`grid gap-x-3 sm:gap-x-5 gap-y-3 ${cols === 3 ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
       {children}
     </div>
   )
@@ -212,7 +212,7 @@ function Grid({ children, cols = 2 }) {
 function Field({ label, children, required = false, span2 = false }) {
   return (
     <label className={`block space-y-1 ${span2 ? 'col-span-full' : ''}`}>
-      <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">
+      <span className="block text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">
         {label}{required && <span className="text-red-500 ml-0.5">*</span>}
       </span>
       {children}
