@@ -19,7 +19,11 @@ service cloud.firestore {
 
     function rayonRoles() { return ['velo', 'chaussure', 'textile', 'randonnee', 'caisse']; }
 
-    function isDirGen()   { return role() == 'directeurgen'; }
+    // Administrateurs (gestion de l'outil) : tous les droits du directeur général,
+    // et eux seuls gèrent les comptes de direction (directeur général, administrateur)
+    function directionRoles() { return ['directeurgen', 'admin']; }
+    function isAdmin()    { return role() == 'admin'; }
+    function isDirGen()   { return role() in directionRoles(); }
     function isAcheteur() { return role() == 'acheteur'; }
     function isGlobal()   { return isAcheteur() || isDirGen(); }
     function isDirMag()   { return role() == 'directeurmag'; }
@@ -52,7 +56,8 @@ service cloud.firestore {
     function isCreator(data) { return data.get('createdBy', null) == request.auth.uid; }
 
     /* ── Utilisateurs ────────────────────────────────────────────────────── */
-    // - directeurgen : gère tous les comptes
+    // - admin        : gère tous les comptes, y compris directeurs généraux et administrateurs
+    // - directeurgen : gère tous les comptes sauf ceux de direction
     // - acheteur     : gère uniquement les comptes rayon
     // - directeurmag : gère les comptes rayon de son magasin, et peut se rattacher
     //                  au magasin qu'il vient de créer s'il n'en a pas encore
@@ -60,13 +65,17 @@ service cloud.firestore {
       allow read: if isSignedIn();
 
       allow create: if isSignedIn() && (
-        isDirGen() ||
+        isAdmin() ||
+        (isDirGen() && !(request.resource.data.get('role', null) in directionRoles())) ||
         (isAcheteur() && request.resource.data.role in rayonRoles()) ||
         (isDirMag() && request.resource.data.role in rayonRoles() && inMyStoreNew())
       );
 
       allow update: if isSignedIn() && (
-        isDirGen() ||
+        isAdmin() ||
+        (isDirGen() &&
+          !(resource.data.get('role', null) in directionRoles()) &&
+          !(request.resource.data.get('role', null) in directionRoles())) ||
         (isAcheteur() &&
           resource.data.role in rayonRoles() &&
           request.resource.data.role in rayonRoles()) ||
@@ -81,7 +90,8 @@ service cloud.firestore {
       );
 
       allow delete: if isSignedIn() && (
-        isDirGen() ||
+        isAdmin() ||
+        (isDirGen() && !(resource.data.get('role', null) in directionRoles())) ||
         (isAcheteur() && resource.data.role in rayonRoles()) ||
         (isDirMag() && resource.data.role in rayonRoles() && inMyStore(resource.data))
       );

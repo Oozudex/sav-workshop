@@ -9,7 +9,7 @@ import {
 } from 'firebase/firestore'
 import { getApp, getApps, initializeApp, deleteApp } from 'firebase/app'
 import { getAuth, connectAuthEmulator, createUserWithEmailAndPassword, sendPasswordResetEmail, updateProfile } from 'firebase/auth'
-import { STAFF_POSTES, STAFF_POSTE_LABELS, GLOBAL_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
+import { STAFF_POSTES, STAFF_POSTE_LABELS, GLOBAL_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS, DIRECTION_ROLES } from '../lib/constants'
 import { useMagasin } from '../store/useMagasin'
 import { randomPassword } from '../lib/security'
 
@@ -36,6 +36,199 @@ async function createAuthAccount(email, displayName) {
   } finally {
     if (secApp) { try { await deleteApp(secApp) } catch {} }
   }
+}
+
+/* ── Comptes de direction (administrateurs uniquement) ───────────────────── */
+const DIRECTION_LABELS = { admin: 'Administrateur', directeurgen: 'Directeur général' }
+const DIRECTION_HINTS = {
+  admin: 'Tous les droits, dont la création des comptes de direction.',
+  directeurgen: 'Voit tous les magasins, gère magasins, acheteurs et directeurs de magasin.',
+}
+
+function DirectionSection({ me }) {
+  const [comptes, setComptes] = useState([])
+  const [showNew, setShowNew] = useState(false)
+  const [form, setForm] = useState({ nom: '', email: '', role: 'directeurgen' })
+  const [loading, setLoading] = useState(false)
+  const [msg, setMsg] = useState(null)
+  const [err, setErr] = useState(null)
+  const [editId, setEditId] = useState(null)
+  const [draft, setDraft] = useState({})
+
+  useEffect(() => {
+    const q = query(collection(db, 'users'), where('role', 'in', DIRECTION_ROLES))
+    return onSnapshot(q, snap => setComptes(snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (a.role === b.role ? (a.displayName || '').localeCompare(b.displayName || '') : a.role === 'admin' ? -1 : 1))))
+  }, [])
+
+  async function create(e) {
+    e.preventDefault()
+    setErr(null); setMsg(null)
+    if (!form.nom.trim()) return setErr('Le nom est requis')
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return setErr('Email invalide')
+    setLoading(true)
+    try {
+      const email = form.email.trim()
+      const uid = await createAuthAccount(email, form.nom.trim())
+      await setDoc(doc(db, 'users', uid), {
+        displayName: form.nom.trim(),
+        email,
+        role: form.role,
+        magasinId: null,
+        isActive: true,
+        createdAt: serverTimestamp(),
+        createdBy: me,
+      })
+      try { await sendPasswordResetEmail(getAuth(), email) } catch { /* l'utilisateur pourra utiliser « mot de passe oublié » */ }
+      setMsg(`${DIRECTION_LABELS[form.role]} créé · email de définition du mot de passe envoyé à ${email}`)
+      setForm({ nom: '', email: '', role: 'directeurgen' })
+      setShowNew(false)
+    } catch (error) {
+      const map = { 'auth/email-already-in-use': 'Cet email existe déjà.', 'auth/invalid-email': 'Email invalide.' }
+      setErr(map[error.code] || error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function save(c) {
+    const role = c.id === me ? c.role : draft.role // on ne change pas son propre rôle
+    const others = comptes.filter(x => x.id !== c.id && x.role === 'admin' && x.isActive !== false)
+    if (c.role === 'admin' && role !== 'admin' && others.length === 0) return setErr('Il doit rester au moins un administrateur.')
+    await updateDoc(doc(db, 'users', c.id), {
+      displayName: draft.displayName?.trim() || c.displayName,
+      role,
+      updatedAt: serverTimestamp(),
+    })
+    setEditId(null)
+  }
+
+  async function remove(c) {
+    if (c.id === me) return
+    if (!confirm(`Supprimer le compte de ${c.displayName} (${DIRECTION_LABELS[c.role]}) ? Il n'aura plus accès à l'outil.`)) return
+    await deleteDoc(doc(db, 'users', c.id))
+  }
+
+  const iconBtn = 'h-7 w-7 grid place-items-center rounded-lg text-gray-400 transition-colors'
+
+  return (
+    <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-hidden">
+      <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-gray-100 dark:border-neutral-800 bg-gray-50/50 dark:bg-neutral-800/30">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="h-1.5 w-1.5 rounded-full bg-gray-900 dark:bg-white" />
+          <span className="text-[11px] font-semibold text-gray-600 dark:text-neutral-400 uppercase tracking-wide">Direction</span>
+          <span className="text-[10px] text-gray-400 dark:text-neutral-500 normal-case truncate">· visible des administrateurs uniquement</span>
+        </div>
+        <button onClick={() => { setShowNew(v => !v); setErr(null); setMsg(null) }}
+          className="shrink-0 h-6 px-2.5 rounded-lg text-[11px] font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100 transition-colors">
+          + Nouveau compte
+        </button>
+      </div>
+      <div className="p-4 space-y-4">
+        {err && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2 dark:text-red-300 dark:bg-red-900/20 dark:border-red-500/30">{err}</p>}
+        {msg && <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 dark:text-emerald-300 dark:bg-emerald-500/10 dark:border-emerald-500/20">{msg}</p>}
+
+        {showNew && (
+          <form onSubmit={create} className="p-3 rounded-xl border border-gray-100 dark:border-neutral-800 bg-gray-50 dark:bg-neutral-800/30 space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="space-y-1">
+                <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Nom</span>
+                <input className="Input" value={form.nom} onChange={e => setForm(f => ({ ...f, nom: e.target.value }))} placeholder="Prénom Nom" autoFocus />
+              </label>
+              <label className="space-y-1">
+                <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Email</span>
+                <input type="email" className="Input" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="prenom.nom@exemple.com" />
+              </label>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {['directeurgen', 'admin'].map(r => (
+                <label key={r} className={['flex items-start gap-2 p-2.5 rounded-xl border cursor-pointer transition-colors',
+                  form.role === r ? 'border-gray-900 dark:border-white bg-white dark:bg-neutral-900' : 'border-gray-200 dark:border-neutral-700'].join(' ')}>
+                  <input type="radio" name="direction-role" className="mt-0.5 accent-gray-900 dark:accent-white" checked={form.role === r} onChange={() => setForm(f => ({ ...f, role: r }))} />
+                  <span>
+                    <span className="block text-xs font-semibold text-gray-900 dark:text-white">{DIRECTION_LABELS[r]}</span>
+                    <span className="block text-[11px] text-gray-500 dark:text-neutral-400 leading-snug">{DIRECTION_HINTS[r]}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <p className="text-[11px] text-gray-500 dark:text-neutral-400">La personne reçoit un email pour choisir son mot de passe.</p>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setShowNew(false)}
+                className="h-8 px-3 rounded-lg text-xs border border-gray-200 dark:border-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-800 text-gray-600 dark:text-neutral-400">
+                Annuler
+              </button>
+              <button type="submit" disabled={loading || !form.nom.trim() || !form.email.trim()}
+                className="h-8 px-4 rounded-lg text-xs font-semibold disabled:opacity-50 bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
+                {loading ? 'Création…' : 'Créer le compte'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {comptes.length > 0 && (
+          <div className="border border-gray-100 dark:border-neutral-800 rounded-xl overflow-hidden">
+            {comptes.map(c => (
+              <div key={c.id} className="flex items-start gap-3 px-3 py-2.5 border-b last:border-0 border-gray-100 dark:border-neutral-800">
+                <div className={`h-7 w-7 rounded-full grid place-items-center shrink-0 mt-0.5 ${c.role === 'admin' ? 'bg-gray-900 text-white dark:bg-white dark:text-black' : 'bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-300'}`}>
+                  <span className="text-[10px] font-semibold">{c.displayName?.[0]?.toUpperCase() || '?'}</span>
+                </div>
+                {editId === c.id ? (
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <input className="Input h-8 text-xs w-full" value={draft.displayName ?? ''}
+                      onChange={e => setDraft(v => ({ ...v, displayName: e.target.value }))} />
+                    {c.id !== me && (
+                      <select className="Input h-8 text-xs" value={draft.role} onChange={e => setDraft(v => ({ ...v, role: e.target.value }))}>
+                        <option value="directeurgen">Directeur général</option>
+                        <option value="admin">Administrateur</option>
+                      </select>
+                    )}
+                    <div className="flex gap-2">
+                      <button onClick={() => save(c)}
+                        className="h-8 px-3 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">OK</button>
+                      <button onClick={() => setEditId(null)}
+                        className="h-8 px-3 rounded-lg text-xs border border-gray-200 dark:border-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-800 text-gray-600 dark:text-neutral-400">Annuler</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="text-xs font-medium text-gray-900 dark:text-white">{c.displayName || '—'}</p>
+                        <span className={`h-5 px-1.5 inline-flex items-center rounded text-[10px] font-semibold ${c.role === 'admin' ? 'bg-gray-900 text-white dark:bg-white dark:text-black' : 'bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-300'}`}>
+                          {DIRECTION_LABELS[c.role]}
+                        </span>
+                        {c.id === me && <span className="text-[10px] font-semibold text-gray-400">· vous</span>}
+                      </div>
+                      <p className="text-[11px] text-gray-400 dark:text-neutral-500 break-all">{c.email}</p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button aria-label={`Modifier ${c.displayName}`}
+                        onClick={() => { setEditId(c.id); setDraft({ displayName: c.displayName, role: c.role }); setErr(null) }}
+                        className={`${iconBtn} hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800`}>
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
+                      {c.id !== me && (
+                        <button aria-label={`Supprimer ${c.displayName}`} onClick={() => remove(c)}
+                          className={`${iconBtn} hover:text-red-600 hover:bg-red-50 dark:text-neutral-500 dark:hover:text-red-400 dark:hover:bg-red-500/10`}>
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M8 6V4.8A1.8 1.8 0 019.8 3h4.4A1.8 1.8 0 0116 4.8V6m3 0l-1 13a2 2 0 01-2 1.8H8A2 2 0 016 19L5 6M10 10v7M14 10v7" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 export default function StoreSettings() {
@@ -423,6 +616,9 @@ export default function StoreSettings() {
               ))}
             </div>
           )}
+
+          {/* Direction — onglet Personnel, administrateurs uniquement */}
+          {profile?.isAdmin && adminTab === 'personnel' && <DirectionSection me={user.uid} />}
 
           {/* Acheteurs — onglet Personnel */}
           {isDirecteurGen && adminTab === 'personnel' && (

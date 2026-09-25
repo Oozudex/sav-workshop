@@ -18,7 +18,9 @@ let env
 
 // Comptes de test
 const USERS = {
+  admin:      { role: 'admin' },
   dirgen:     { role: 'directeurgen' },
+  dirgen2:    { role: 'directeurgen' },
   acheteur:   { role: 'acheteur', rayons: ['velo'] },
   dirmagA:    { role: 'directeurmag', magasinId: 'A' },
   dirmagNew:  { role: 'directeurmag', magasinId: null },
@@ -72,6 +74,20 @@ describe('users', () => {
   })
   it("le directeur général peut créer un acheteur", async () => {
     await assertSucceeds(setDoc(doc(as('dirgen'), 'users', 'x'), { role: 'acheteur' }))
+  })
+  it("seul un administrateur gère les comptes de direction", async () => {
+    await assertFails(setDoc(doc(as('dirgen'), 'users', 'x'), { role: 'directeurgen' }))
+    await assertFails(setDoc(doc(as('dirgen'), 'users', 'y'), { role: 'admin' }))
+    await assertFails(updateDoc(doc(as('dirgen'), 'users', 'dirgen2'), { displayName: 'X' }))
+    await assertFails(updateDoc(doc(as('dirgen'), 'users', 'veloA'), { role: 'admin' }))
+    await assertFails(deleteDoc(doc(as('dirgen'), 'users', 'admin')))
+    await assertSucceeds(setDoc(doc(as('admin'), 'users', 'x'), { role: 'directeurgen' }))
+    await assertSucceeds(setDoc(doc(as('admin'), 'users', 'y'), { role: 'admin' }))
+    await assertSucceeds(deleteDoc(doc(as('admin'), 'users', 'dirgen2')))
+  })
+  it("un administrateur a les droits du directeur général", async () => {
+    await assertSucceeds(getDoc(doc(as('admin'), 'tickets', 'tB')))
+    await assertSucceeds(getDocs(collection(as('admin'), 'b2b_tools', 'tool', 'credentials')))
   })
   it("un directeur de magasin crée un compte rayon dans son magasin uniquement", async () => {
     await assertSucceeds(setDoc(doc(as('dirmagA'), 'users', 'x'), { role: 'textile', magasinId: 'A' }))

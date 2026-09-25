@@ -26,7 +26,7 @@ export const RAYON_TYPE_LABELS = {
 }
 
 // ── Rôles ─────────────────────────────────────────────────────────────────────
-export const ROLES = ['velo', 'chaussure', 'textile', 'randonnee', 'caisse', 'acheteur', 'directeurmag', 'directeurgen']
+export const ROLES = ['velo', 'chaussure', 'textile', 'randonnee', 'caisse', 'acheteur', 'directeurmag', 'directeurgen', 'admin']
 
 export const ROLE_LABELS = {
   velo:         'Vélo',
@@ -37,7 +37,11 @@ export const ROLE_LABELS = {
   acheteur:     'Acheteur',
   directeurmag: 'Dir. Magasin',
   directeurgen: 'Dir. Général',
+  admin:        'Administrateur',
 }
+
+// Comptes de direction : seuls les administrateurs les créent et les modifient
+export const DIRECTION_ROLES = ['directeurgen', 'admin']
 
 // Voit tous les magasins (avec sélecteur dans la navbar)
 export const GLOBAL_ROLES = ['acheteur', 'directeurgen']
