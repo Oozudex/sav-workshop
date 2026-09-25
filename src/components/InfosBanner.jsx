@@ -9,6 +9,7 @@ import {
 } from 'firebase/firestore'
 import { RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
 import { safeUrl } from '../lib/security'
+import { isOpVisibleFor } from '../lib/opSearch'
 
 function getTodayStr() {
   const d = new Date()
@@ -185,20 +186,8 @@ export default function InfosBanner({ magasinId }) {
     return onSnapshot(q, snap => {
       const result = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
-        .filter(op => {
-          if (op.dateDebut !== today && op.dateFin !== today) return false
-
-          const rayons = op.rayonTypes?.length ? op.rayonTypes : (op.rayonType ? [op.rayonType] : [])
-          if (isRayonRole) {
-            if (rayons.length > 0 && !rayons.includes(profile.role)) return false
-          } else if (isAcheteur) {
-            const userRayons = profile.rayons || []
-            if (rayons.length > 0 && !rayons.some(r => userRayons.includes(r))) return false
-          }
-
-          if (op.magasinIds?.length && magasinId && !op.magasinIds.includes(magasinId)) return false
-          return true
-        })
+        // OP qui commencent ou finissent aujourd'hui, visibles par l'utilisateur (même règle que la page OP)
+        .filter(op => (op.dateDebut === today || op.dateFin === today) && isOpVisibleFor(op, profile, magasinId))
       setOps(result)
     })
   }, [profile, magasinId, today])

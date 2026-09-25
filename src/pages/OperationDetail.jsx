@@ -10,10 +10,12 @@ import {
 } from 'firebase/firestore'
 import { GLOBAL_ROLES, RAYON_TYPE_LABELS } from '../lib/constants'
 import { OpModal } from './Operations'
+import { deleteOperation, opFormData } from '../lib/opActions'
+import { opRayons } from '../lib/opSearch'
 import { readSheetWithFills } from '../lib/excel'
 import { BON_PLAN_COLLECTION, bonPlanTransfer } from '../lib/bonPlan'
 import {
-  SEGMENT_LABELS, bonPlanPrices, isBonPlanBetter, parseOpSheet, planImport, prixReference, remisePct, resolveLines,
+  SEGMENT_LABELS, bonPlanPrices, cleanRef, isBonPlanBetter, normName, parseOpSheet, planImport, prixReference, remisePct, resolveLines,
 } from '../lib/opImport'
 
 const SEGMENTS = ['velo', 'trottinette', 'roller', 'accessoires', 'textile']
@@ -49,6 +51,8 @@ function ProduitModal({ produit, onClose, onSave }) {
     marque:        produit?.marque        || '',
     reference:     produit?.reference     || '',
     refFournisseur:produit?.refFournisseur|| '',
+    chrono:        produit?.chrono        || '',
+    couleur:       produit?.couleur       || '',
     segment:       produit?.segment       || SEGMENTS[0],
     prixFort:      produit?.prixFort      ?? '',
     prixOp:        produit?.prixOp        ?? '',
@@ -100,6 +104,14 @@ function ProduitModal({ produit, onClose, onSave }) {
               <input className="Input" value={form.refFournisseur} onChange={e => set('refFournisseur', e.target.value)} />
             </label>
             <label className="space-y-1">
+              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Chrono</span>
+              <input className="Input" value={form.chrono} onChange={e => set('chrono', e.target.value)} />
+            </label>
+            <label className="space-y-1">
+              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Couleur</span>
+              <input className="Input" value={form.couleur} onChange={e => set('couleur', e.target.value)} />
+            </label>
+            <label className="space-y-1">
               <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Segment</span>
               <select className="Input" value={form.segment} onChange={e => set('segment', e.target.value)}>
                 {SEGMENTS.map(s => <option key={s} value={s}>{SEGMENT_LABELS[s]}</option>)}
@@ -124,7 +136,10 @@ function ProduitModal({ produit, onClose, onSave }) {
           </div>
           <div className="flex items-center justify-between pt-1">
             {produit?.id ? (
-              <button type="button" onClick={() => { onSave(null); onClose() }}
+              <button type="button" onClick={() => {
+                if (!confirm(`Retirer « ${produit.nom}${produit.couleur ? ` ${produit.couleur}` : ''} » de l'OP ?`)) return
+                onSave(null); onClose()
+              }}
                 className="h-8 px-3 rounded-lg text-xs font-medium text-red-600 border border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-500/30 dark:hover:bg-red-500/10">
                 Supprimer
               </button>
@@ -464,20 +479,13 @@ export default function OperationDetail() {
   const { profile } = useAuth(useShallow(s => ({ profile: s.profile })))
   const canCreate = GLOBAL_ROLES.includes(profile?.role)
 
-  const [op,         setOp]       = useState(null)
+  const [op,         setOp]       = useState(undefined) // undefined : chargement, null : introuvable
   const [produits,   setProduits] = useState([])
   const [modal,      setModal]    = useState(null) // null | {} | {id,...}
   const [filterSeg,  setFilterSeg] = useState('')
   const [searchProd, setSearchProd] = useState('')
-  const [sortBy,     setSortBy]   = useState(null)
-  const [sortDir,    setSortDir]  = useState('asc')
   const [showImport, setShowImport] = useState(false)
   const [transfer,   setTransfer]   = useState({ busy: false, error: '' })
-
-  function handleSort(col) {
-    if (sortBy === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortBy(col); setSortDir('asc') }
-  }
 
   useEffect(() => {
     return onSnapshot(doc(db, 'op_commerciales', id), snap => {
@@ -491,12 +499,13 @@ export default function OperationDetail() {
   }, [id])
 
   async function handleSaveProduit(form) {
-    if (!form) return // suppression
     const data = {
       nom:            form.nom.trim(),
       marque:         form.marque.trim()         || null,
       reference:      form.reference.trim()      || null,
       refFournisseur: form.refFournisseur.trim()  || null,
+      chrono:         cleanRef(form.chrono)       || null,
+      couleur:        form.couleur.trim()         || null,
       segment:        form.segment,
       prixFort:       form.prixFort !== '' ? Number(form.prixFort) : null,
       prixOp:         form.prixOp   !== '' ? Number(form.prixOp)   : null,
@@ -545,55 +554,44 @@ export default function OperationDetail() {
   }
 
   async function handleDeleteOp() {
-    if (!confirm(`Supprimer l'opération "${op?.nom}" ? Cette action est irréversible.`)) return
-    await deleteDoc(doc(db, 'op_commerciales', id))
-    navigate('/operations')
+    if (!confirm(`Supprimer l'opération « ${op?.nom} » et ses ${produits.length} produit${produits.length > 1 ? 's' : ''} ? Cette action est irréversible.`)) return
+    try {
+      await deleteOperation(id)
+      navigate('/operations')
+    } catch {
+      alert("La suppression a échoué. Réessaie : ce qui reste de l'opération sera supprimé.")
+    }
   }
 
   async function handleSaveOp(form) {
-    const data = {
-      nom:        form.nom.trim(),
-      dateDebut:  form.dateDebut,
-      dateFin:    form.dateFin,
-      description:form.description.trim() || null,
-      lien:       form.lien?.trim()        || null,
-      globale:    form.globale             ?? false,
-      rayonTypes: form.rayonTypes?.length  ? form.rayonTypes : null,
-      rayonType:  null,
-      magasinIds: form.magasinIds?.length  ? form.magasinIds : null,
-    }
-    await updateDoc(doc(db, 'op_commerciales', id), { ...data, updatedAt: serverTimestamp() })
+    await updateDoc(doc(db, 'op_commerciales', id), { ...opFormData(form), updatedAt: serverTimestamp() })
   }
 
-  if (!op) return <div className="min-h-screen flex flex-col"><Navbar /><div className="flex-1 flex items-center justify-center text-sm text-gray-400">Chargement…</div></div>
+  if (!op) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Navbar />
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-sm text-gray-400">
+          {op === undefined ? 'Chargement…' : (
+            <>
+              <p>Cette opération n'existe plus.</p>
+              <button onClick={() => navigate('/operations')} className="text-xs underline hover:text-gray-600">Retour aux opérations</button>
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   const status = getStatus(op)
   const filtered = (() => {
-    const term = searchProd.trim().toLowerCase()
     let list = produits
     if (filterSeg) list = list.filter(p => p.segment === filterSeg)
-    if (term) list = list.filter(p =>
-      (p.nom       || '').toLowerCase().includes(term) ||
-      (p.reference || '').toLowerCase().includes(term) ||
-      (p.chrono    || '').toLowerCase().includes(term) ||
-      (p.couleur   || '').toLowerCase().includes(term)
-    )
-    if (sortBy) {
-      const seg_order = SEGMENTS
-      list = [...list].sort((a, b) => {
-        let va, vb
-        if (sortBy === 'marque') {
-          va = (a.marque || '').toLowerCase()
-          vb = (b.marque || '').toLowerCase()
-        } else {
-          va = seg_order.indexOf(a.segment)
-          vb = seg_order.indexOf(b.segment)
-        }
-        if (va < vb) return sortDir === 'asc' ? -1 : 1
-        if (va > vb) return sortDir === 'asc' ? 1 : -1
-        return 0
-      })
-    }
+    const words = normName(searchProd).split(' ').filter(Boolean)
+    if (words.length) list = list.filter(p => {
+      const text = normName([p.nom, p.marque, p.reference, p.refFournisseur, p.chrono, p.couleur].join(' '))
+      return words.every(w => text.includes(w))
+    })
     return list
   })()
 
@@ -612,12 +610,12 @@ export default function OperationDetail() {
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
       <Navbar />
 
-      <main className="flex-1 p-6">
+      <main className="flex-1 p-4 sm:p-6">
         <div className="max-w-6xl mx-auto space-y-6">
 
           {/* Header */}
           <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 p-5">
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2">
                   <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${status.pill}`}>{status.label}</span>
@@ -628,9 +626,12 @@ export default function OperationDetail() {
                 </p>
                 {op.description && <p className="text-sm text-gray-600 dark:text-neutral-400 mt-2">{op.description}</p>}
                 <div className="flex items-center gap-2 mt-2 flex-wrap">
-                  {op.rayonType && (
+                  {op.globale && (
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-500 text-white">OP Animation</span>
+                  )}
+                  {opRayons(op).length > 0 && (
                     <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-400">
-                      Rayon : {RAYON_TYPE_LABELS[op.rayonType] || op.rayonType}
+                      Rayon{opRayons(op).length > 1 ? 's' : ''} : {opRayons(op).map(r => RAYON_TYPE_LABELS[r] || r).join(', ')}
                     </span>
                   )}
                   {op.magasinIds?.length > 0 && (
@@ -641,7 +642,7 @@ export default function OperationDetail() {
                 </div>
               </div>
               {canCreate && (
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <button onClick={() => navigate('/operations')}
                     className="h-8 px-3 rounded-lg text-xs border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800">
                     ← Retour
@@ -707,9 +708,9 @@ export default function OperationDetail() {
           </div>
 
           {/* Filtres segment */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button onClick={() => setFilterSeg('')}
-              className={['h-7 px-3 rounded-lg text-[11px] font-semibold transition-colors',
+              className={['h-7 px-3 rounded-lg text-[11px] font-semibold transition-colors whitespace-nowrap',
                 !filterSeg ? 'bg-gray-900 text-white dark:bg-white dark:text-black' : 'text-gray-500 dark:text-neutral-400 border border-gray-200 dark:border-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-800',
               ].join(' ')}>
               Tous ({produits.length})
@@ -719,7 +720,7 @@ export default function OperationDetail() {
               if (!count) return null
               return (
                 <button key={s} onClick={() => setFilterSeg(s === filterSeg ? '' : s)}
-                  className={['h-7 px-3 rounded-lg text-[11px] font-semibold transition-colors',
+                  className={['h-7 px-3 rounded-lg text-[11px] font-semibold transition-colors whitespace-nowrap',
                     filterSeg === s ? SEGMENT_COLORS[s] : 'text-gray-500 dark:text-neutral-400 border border-gray-200 dark:border-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-800',
                   ].join(' ')}>
                   {SEGMENT_LABELS[s]} ({count})
@@ -734,7 +735,7 @@ export default function OperationDetail() {
               Aucun produit.{canCreate && ' Cliquez sur "+ Produit" pour en ajouter.'}
             </div>
           ) : (
-            <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 overflow-hidden">
+            <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-gray-100 dark:border-neutral-800 bg-gray-50/50 dark:bg-neutral-800/30">
@@ -742,7 +743,6 @@ export default function OperationDetail() {
                       <th key={h} className="px-4 py-3 text-left font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide text-[10px]">{h}</th>
                     ))}
                     {canCreate && <th className="px-4 py-3 text-center text-[10px] font-semibold text-blue-500 uppercase tracking-wide">Bon plan fin d'OP</th>}
-                    {canCreate && <th className="px-4 py-3 w-10" />}
                   </tr>
                 </thead>
                 <tbody>
@@ -771,6 +771,13 @@ export default function OperationDetail() {
                           <div className="flex flex-col gap-1.5">
                             {group.map(p => (
                               <div key={p.id} className="flex items-center gap-1.5 flex-wrap">
+                                {canCreate && (
+                                  <button onClick={() => setModal(p)} title="Modifier ou supprimer cette déclinaison"
+                                    aria-label={`Modifier ${p.nom} ${p.couleur || ''} ${p.chrono || ''}`}
+                                    className="h-6 w-6 -ml-1 grid place-items-center rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors shrink-0">
+                                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                  </button>
+                                )}
                                 {p.couleur
                                   ? <span className="text-[10px] font-semibold bg-gray-100 dark:bg-neutral-700 text-gray-600 dark:text-neutral-300 px-1.5 py-0.5 rounded shrink-0">{p.couleur}</span>
                                   : <span className="text-[10px] text-gray-300 dark:text-neutral-600 italic shrink-0">N.B</span>}
@@ -853,21 +860,9 @@ export default function OperationDetail() {
                           </td>
                         )}
 
-                        {/* Édition — acheteur/directeur uniquement, et seulement si 1 seule variante */}
-                        {canCreate && (
-                          <td className="px-4 py-3 align-top">
-                            {group.length === 1 && (
-                              <button onClick={() => setModal(first)}
-                                className="h-7 w-7 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors">
-                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                              </button>
-                            )}
-                          </td>
-                        )}
-
                         {/* Overlay "bon plan moins cher" — grise la ligne + message centré */}
                         {isCheap && (
-                          <td style={{position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, padding: 0, border: 'none', zIndex: 5}}>
+                          <td style={{position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, padding: 0, border: 'none', zIndex: 5, pointerEvents: 'none'}}>
                             <div className="absolute inset-0 bg-white/75 dark:bg-neutral-900/80" />
                             <div className="relative h-full flex items-center justify-center z-10 pointer-events-none">
                               <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-orange-50 dark:bg-orange-500/20 border border-orange-300 dark:border-orange-500/40 shadow-md shadow-orange-100/60 dark:shadow-none">

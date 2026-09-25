@@ -23,15 +23,26 @@ export function opRayons(op) {
  * - vendeur : son rayon et son magasin ;
  * - acheteur : les rayons qu'il suit ;
  * - directeur de magasin : son magasin ; directeur général : tout.
+ * `magasinId` : magasin affiché (choisi dans la barre du haut par l'acheteur et le directeur
+ * général ; null = tous les magasins). Par défaut, celui du profil.
+ * Règle commune à la page OP, à l'accueil, au bandeau d'infos et au calendrier.
  */
-export function isOpVisibleFor(op, profile) {
+export function isOpVisibleFor(op, profile, magasinId = profile?.magasinId) {
   const rayons = opRayons(op)
   if (rayons.length && profile?.role !== 'directeurgen') {
     if (RAYON_TYPES.includes(profile?.role) && !rayons.includes(profile.role)) return false
     if (profile?.role === 'acheteur' && profile.rayons?.length && !rayons.some(r => profile.rayons.includes(r))) return false
   }
-  if (op.magasinIds?.length && profile?.magasinId && !op.magasinIds.includes(profile.magasinId)) return false
+  if (op.magasinIds?.length && magasinId && !op.magasinIds.includes(magasinId)) return false
   return true
+}
+
+// Formulaire d'OP : message d'erreur, ou null si tout est bon
+export function opFormError(form) {
+  if (!form.nom.trim()) return 'Le nom est obligatoire.'
+  if (!form.dateDebut || !form.dateFin) return 'Les dates de début et de fin sont obligatoires.'
+  if (form.dateFin < form.dateDebut) return 'La date de fin doit être après la date de début.'
+  return null
 }
 
 // ── Recherche ───────────────────────────────────────────────────────────────────

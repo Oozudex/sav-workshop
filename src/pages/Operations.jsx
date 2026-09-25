@@ -11,7 +11,9 @@ import {
 } from 'firebase/firestore'
 import { GLOBAL_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
 import { formatEuro } from '../lib/orders'
-import { buildPromoIndex, isOpVisibleFor, opRayons, opStatus, searchPromos } from '../lib/opSearch'
+import { buildPromoIndex, isOpVisibleFor, opFormError, opRayons, opStatus, searchPromos } from '../lib/opSearch'
+import { deleteOperation, opFormData } from '../lib/opActions'
+import { useMagasin } from '../store/useMagasin'
 import { BON_PLAN_COLLECTION, bonPlanDocId, parseBonPlanSheet, remiseBonPlan } from '../lib/bonPlan'
 import { SEGMENT_LABELS, cleanRef, normName, normSegment, parsePrice } from '../lib/opImport'
 import { safeUrl } from '../lib/security'
@@ -74,7 +76,11 @@ export function OpModal({ op, onClose, onSave }) {
   })
   const [magasins, setMagasins] = useState([])
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
   function set(k, v) { setForm(f => ({ ...f, [k]: v })) }
+  const formError = opFormError(form)
+  // Dates saisies dans le mauvais ordre : signalé tout de suite
+  const dateError = form.dateDebut && form.dateFin && form.dateFin < form.dateDebut ? formError : null
 
   useEffect(() => {
     const q = query(collection(db, 'magasins'), orderBy('nom', 'asc'))
@@ -92,9 +98,11 @@ export function OpModal({ op, onClose, onSave }) {
 
   async function handleSave(e) {
     e.preventDefault()
-    if (!form.nom.trim() || !form.dateDebut || !form.dateFin) return
+    if (formError) return
     setSaving(true)
+    setSaveError('')
     try { await onSave(form); onClose() }
+    catch { setSaveError("L'enregistrement a échoué. Vérifie la connexion et réessaie.") }
     finally { setSaving(false) }
   }
 
@@ -143,9 +151,10 @@ export function OpModal({ op, onClose, onSave }) {
             </label>
             <label className="space-y-1">
               <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Date de fin *</span>
-              <input type="date" className="Input" value={form.dateFin} onChange={e => set('dateFin', e.target.value)} />
+              <input type="date" className="Input" value={form.dateFin} min={form.dateDebut || undefined} onChange={e => set('dateFin', e.target.value)} />
             </label>
           </div>
+          {dateError && <p className="text-xs text-red-500 -mt-2">{dateError}</p>}
 
           {/* Lien (OP Globale uniquement) */}
           {form.globale && (
@@ -223,12 +232,13 @@ export function OpModal({ op, onClose, onSave }) {
             <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Description</span>
             <textarea className="Input resize-none h-16 text-xs" value={form.description} onChange={e => set('description', e.target.value)} />
           </label>
+          {saveError && <p className="text-xs text-red-500">{saveError}</p>}
           <div className="flex justify-end gap-2 pt-1">
             <button type="button" onClick={onClose}
               className="h-8 px-3 rounded-lg text-xs border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800">
               Annuler
             </button>
-            <button type="submit" disabled={saving || !form.nom.trim() || !form.dateDebut || !form.dateFin}
+            <button type="submit" disabled={saving || !!formError}
               className="h-8 px-4 rounded-lg text-xs font-semibold disabled:opacity-50 bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
               {saving ? 'Enregistrement…' : 'Enregistrer'}
             </button>
@@ -1109,6 +1119,9 @@ export default function Operations() {
   const navigate = useNavigate()
   const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
   const canCreate = GLOBAL_ROLES.includes(profile?.role)
+  const { selectedId } = useMagasin()
+  // Acheteur et directeur général : magasin choisi dans la barre du haut (null = tous)
+  const magasinId = canCreate ? selectedId : profile?.magasinId
 
   const [ops, setOps] = useState([])
   const [bonPlanList, setBonPlanList] = useState([])
@@ -1124,7 +1137,7 @@ export default function Operations() {
   }, [])
 
   // OP ciblées sur le rayon et le magasin de l'utilisateur
-  const visibleOps = useMemo(() => ops.filter(op => isOpVisibleFor(op, profile)), [ops, profile])
+  const visibleOps = useMemo(() => ops.filter(op => isOpVisibleFor(op, profile, magasinId)), [ops, profile, magasinId])
 
   // Les données de recherche (produits des OP en cours et à venir + prix bon plan) ne sont chargées
   // qu'à la première saisie dans la barre de recherche : ouvrir la page ne coûte pas de lectures.
@@ -1146,17 +1159,7 @@ export default function Operations() {
   const searchResults = useMemo(() => searchPromos(promoIndex, search), [promoIndex, search])
 
   async function handleSave(form) {
-    const data = {
-      nom: form.nom.trim(),
-      dateDebut: form.dateDebut,
-      dateFin: form.dateFin,
-      description: form.description.trim() || null,
-      lien: form.lien?.trim() || null,
-      globale: form.globale ?? false,
-      rayonTypes: form.rayonTypes?.length ? form.rayonTypes : null,
-      rayonType: null, // déprécié, on garde null pour compatibilité
-      magasinIds: form.magasinIds?.length ? form.magasinIds : null,
-    }
+    const data = opFormData(form)
     if (modal?.id) {
       await updateDoc(doc(db, 'op_commerciales', modal.id), { ...data, updatedAt: serverTimestamp() })
     } else {
@@ -1165,17 +1168,18 @@ export default function Operations() {
   }
 
   async function handleDelete(op) {
-    if (!confirm(`Supprimer l'opération "${op.nom}" ?`)) return
-    await deleteDoc(doc(db, 'op_commerciales', op.id))
+    if (!confirm(`Supprimer l'opération « ${op.nom} » et tous ses produits ? Cette action est irréversible.`)) return
+    try { await deleteOperation(op.id) }
+    catch { alert("La suppression a échoué. Réessaie : ce qui reste de l'opération sera supprimé.") }
   }
 
-  // OPs globales en cours uniquement (séparées du reste)
-  const today = new Date().toLocaleDateString('fr-CA')
-  const opGlobales = visibleOps.filter(op => op.globale && op.dateDebut <= today && op.dateFin >= today)
-  const opStandard = visibleOps.filter(op => !op.globale)
-
+  // OP Animation en cours : bandeau en haut de page ; à venir et terminées : avec les autres OP
+  const opGlobales = visibleOps.filter(op => op.globale && getStatus(op) === 'en_cours')
   const grouped = { en_cours: [], a_venir: [], terminee: [] }
-  for (const op of opStandard) grouped[getStatus(op)].push(op)
+  for (const op of visibleOps) {
+    const st = getStatus(op)
+    if (!(op.globale && st === 'en_cours')) grouped[st].push(op)
+  }
 
   const SECTIONS = [
     { key: 'en_cours', label: 'En cours', count: grouped.en_cours.length },
@@ -1189,11 +1193,11 @@ export default function Operations() {
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
       <Navbar />
 
-      <main className="flex-1 p-6">
+      <main className="flex-1 p-4 sm:p-6">
         <div className="max-w-5xl mx-auto space-y-6">
 
           {/* Header */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
               <h1 className="text-lg font-bold text-gray-900 dark:text-white">Opérations Commerciales</h1>
               <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">Suivi des opérations et promotions en cours</p>
@@ -1322,7 +1326,7 @@ export default function Operations() {
                   {canCreate && section !== 'terminee' && ' Cliquez sur "+ Nouvelle OP" pour commencer.'}
                 </div>
               ) : (
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {grouped[section].map(op => {
                     const st = getStatus(op)
                     const cfg = STATUS_CONFIG[st]
@@ -1332,7 +1336,10 @@ export default function Operations() {
                         onClick={() => navigate(`/operations/${op.id}`)}>
                         <div className="flex items-start justify-between gap-2">
                           <h3 className="text-sm font-semibold text-gray-900 dark:text-white leading-snug flex-1">{op.nom}</h3>
-                          <span className={`shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full ${cfg.pill}`}>{cfg.label}</span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {op.globale && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-500 text-white">Animation</span>}
+                            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${cfg.pill}`}>{cfg.label}</span>
+                          </div>
                         </div>
                         {op.description && (
                           <p className="text-xs text-gray-400 dark:text-neutral-500 leading-relaxed line-clamp-2">{op.description}</p>
@@ -1355,7 +1362,7 @@ export default function Operations() {
                         })()}
                         <div className="flex items-center justify-between mt-auto pt-2 border-t border-gray-100 dark:border-neutral-800">
                           <span className="text-[11px] text-gray-400 dark:text-neutral-500">
-                            {op.produitCount != null ? `${op.produitCount} produit${op.produitCount > 1 ? 's' : ''}` : 'Voir les produits'}
+                            {op.globale ? 'Voir le détail' : 'Voir les produits'}
                           </span>
                           <div className="flex items-center gap-1">
                             {canCreate && (

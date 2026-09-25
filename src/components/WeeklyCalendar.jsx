@@ -9,6 +9,7 @@ import {
 } from 'firebase/firestore'
 import { GLOBAL_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
 import { safeUrl } from '../lib/security'
+import { isOpVisibleFor } from '../lib/opSearch'
 import CalendarSettings from './CalendarSettings'
 
 /* ── Constants ──────────────────────────────────────────────────────────────── */
@@ -391,9 +392,7 @@ export default function WeeklyCalendar({ magasinId }) {
         const op = { id: d.id, ...d.data() }
         if (op.dateDebut > end) continue
 
-        const rayons = op.rayonTypes?.length ? op.rayonTypes : (op.rayonType ? [op.rayonType] : [])
-        if (rayons.length > 0 && RAYON_TYPES.includes(profile?.role) && !rayons.includes(profile?.role)) continue
-        if (op.magasinIds && magasinId && !op.magasinIds.includes(magasinId)) continue
+        if (!isOpVisibleFor(op, profile, magasinId)) continue // même règle que la page OP
 
         if (op.dateDebut >= start && op.dateDebut <= end) {
           generated.push({
@@ -418,7 +417,7 @@ export default function WeeklyCalendar({ magasinId }) {
       }
       setOpEvents(generated)
     })
-  }, [isPersonal, magasinId, profile?.role, days[0].getTime()])
+  }, [isPersonal, magasinId, profile, days[0].getTime()])
 
   /* Chargement des tickets avec dueDate dans la semaine */
   useEffect(() => {

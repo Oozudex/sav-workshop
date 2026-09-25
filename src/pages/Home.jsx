@@ -10,6 +10,7 @@ import { db } from '../lib/firebase'
 import { collection, getCountFromServer, onSnapshot, query, where } from 'firebase/firestore'
 import { GLOBAL_ROLES, ORDER_CLOSED_STATUTS } from '../lib/constants'
 import { runCleanup } from '../lib/cleanup'
+import { isOpVisibleFor, opStatus, todayStr } from '../lib/opSearch'
 
 const SECTIONS = [
   {
@@ -317,27 +318,15 @@ export default function Home() {
     return countOnce(q, setOrderCount)
   }, [profile, effectiveMagasinId, isGlobal])
 
-  // Compteur OPs actives (dateDebut <= aujourd'hui <= dateFin), filtrées par rayon et magasin
+  // Compteur des OP en cours visibles par l'utilisateur (même règle que la page OP)
   useEffect(() => {
     if (!profile) return
-    const today = new Date()
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-    const q = query(collection(db, 'op_commerciales'), where('dateFin', '>=', todayStr))
+    const q = query(collection(db, 'op_commerciales'), where('dateFin', '>=', todayStr()))
     return onSnapshot(q, snap => {
-      setOpCount(snap.docs.filter(d => {
-        const op = d.data()
-        if (op.dateDebut > todayStr) return false
-        // Si l'utilisateur est un rôle rayon, ne compter que les OPs sans rayon ou pour son rayon
-        if (!GLOBAL_ROLES.includes(profile.role) && profile.role !== 'directeurmag') {
-          const rayons = op.rayonTypes?.length ? op.rayonTypes : (op.rayonType ? [op.rayonType] : [])
-          if (rayons.length > 0 && !rayons.includes(profile.role)) return false
-        }
-        // Filtrer par magasin si l'OP cible des magasins spécifiques
-        if (op.magasinIds?.length && profile.magasinId && !op.magasinIds.includes(profile.magasinId)) return false
-        return true
-      }).length)
+      setOpCount(snap.docs.map(d => d.data())
+        .filter(op => opStatus(op) === 'en_cours' && isOpVisibleFor(op, profile, effectiveMagasinId)).length)
     })
-  }, [profile])
+  }, [profile, effectiveMagasinId])
 
   // Badge transferts : demandes reçues en attente + réponses non lues sur demandes envoyées
   useEffect(() => {

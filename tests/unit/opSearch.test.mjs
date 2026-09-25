@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildPromoIndex, isOpVisibleFor, opStatus, searchPromos } from '../../src/lib/opSearch.js'
+import { buildPromoIndex, isOpVisibleFor, opFormError, opStatus, searchPromos } from '../../src/lib/opSearch.js'
 
 const TODAY = '2026-09-25'
 const OPS = [
@@ -87,5 +87,21 @@ describe('prix bon plan en double', () => {
       { nom: 'ATOM CITY WAVE', marque: 'BH', chrono: '1-17588', prixBonPlan: 1249.99 },
     ] })
     assert.deepEqual(g.bonPlans.map(b => [b.prix, b.chronos]), [[1415, ['1-17587']], [1249.99, ['1-17588']]])
+  })
+})
+
+describe('magasin affiché et formulaire', () => {
+  it('le magasin choisi dans la barre du haut filtre les OP ciblées', () => {
+    const op = { rayonTypes: ['velo'], magasinIds: ['nord'] }
+    assert.ok(isOpVisibleFor(op, { role: 'directeurgen' }, null))
+    assert.ok(!isOpVisibleFor(op, { role: 'directeurgen' }, 'sud'))
+    assert.ok(isOpVisibleFor(op, { role: 'acheteur', rayons: ['velo'] }, 'nord'))
+  })
+  it('dates obligatoires et dans le bon ordre', () => {
+    const form = { nom: 'OP', dateDebut: '2026-10-10', dateFin: '2026-10-01' }
+    assert.match(opFormError(form), /après la date de début/)
+    assert.match(opFormError({ ...form, nom: ' ' }), /nom/)
+    assert.match(opFormError({ ...form, dateFin: '' }), /obligatoires/)
+    assert.equal(opFormError({ ...form, dateFin: '2026-10-10' }), null)
   })
 })
