@@ -3,6 +3,7 @@ import { db } from '../lib/firebase'
 import { collection, doc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore'
 import { useAuth } from '../store/useAuth'
 import { useShallow } from 'zustand/react/shallow'
+import Portal from './Portal'
 import { RAYON_TYPES, RAYON_TYPE_LABELS, GLOBAL_ROLES } from '../lib/constants'
 
 const DAYS = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
@@ -84,6 +85,7 @@ export default function CalendarSettings({ magasinId, isOpen, onClose }) {
     || (isRayonRole && profile.role === activeRayon)
 
   return (
+    <Portal>
     <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-lg rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl">
 
@@ -172,5 +174,6 @@ export default function CalendarSettings({ magasinId, isOpen, onClose }) {
         </div>
       </div>
     </div>
+    </Portal>
   )
 }

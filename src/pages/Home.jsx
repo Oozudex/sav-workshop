@@ -367,14 +367,14 @@ export default function Home() {
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
       <Navbar />
 
-      <main className="flex-1 flex items-start">
+      <main className="flex-1 flex flex-col lg:flex-row lg:items-start">
 
         {/* Colonne gauche : outils */}
-        <div className={['shrink-0 flex flex-col p-6 overflow-hidden transition-[width] duration-300 ease-in-out',
-          calendarExpanded ? 'w-1/5' : 'w-1/2',
+        <div className={['lg:shrink-0 flex flex-col p-4 sm:p-6 lg:overflow-hidden transition-[width] duration-300 ease-in-out',
+          calendarExpanded ? 'lg:w-1/5' : 'lg:w-2/5',
         ].join(' ')}>
           <InfosBanner magasinId={effectiveMagasinId} />
-          <div className={['grid gap-4', calendarExpanded ? 'grid-cols-1' : 'grid-cols-3'].join(' ')}>
+          <div className={['grid gap-2 sm:gap-4 grid-cols-3', calendarExpanded ? 'lg:grid-cols-1' : 'lg:grid-cols-2'].join(' ')}>
             {visibleSections.map(s => {
               const c = COLOR[s.color]
               return (
@@ -383,7 +383,7 @@ export default function Home() {
                   onClick={() => !s.soon && (s.external ? window.open(s.path, '_blank', 'noopener,noreferrer') : navigate(s.path))}
                   disabled={s.soon}
                   className={[
-                    'relative group flex flex-col items-start gap-4 p-6 rounded-2xl border text-left transition-all',
+                    'relative group flex flex-col items-center text-center lg:items-start lg:text-left gap-2 lg:gap-4 p-3 sm:p-4 lg:p-6 rounded-2xl border transition-all',
                     'bg-white dark:bg-neutral-900',
                     'border-gray-200 dark:border-neutral-800',
                     s.soon
@@ -392,23 +392,23 @@ export default function Home() {
                   ].join(' ')}
                 >
                   {counts[s.path] > 0 && (
-                    <span className="absolute top-4 right-4 min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full text-[11px] font-bold bg-red-500 text-white">
+                    <span className="absolute top-2 right-2 lg:top-4 lg:right-4 min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full text-[11px] font-bold bg-red-500 text-white">
                       {counts[s.path]}
                     </span>
                   )}
-                  <div className={`p-3 rounded-xl ${c.bg}`}>
+                  <div className={`p-2 lg:p-3 rounded-xl ${c.bg}`}>
                     <span className={c.icon}>{s.icon}</span>
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white leading-snug">
+                    <p className="text-xs lg:text-sm font-semibold text-gray-900 dark:text-white leading-snug">
                       {s.label}
                     </p>
-                    <p className="text-xs text-gray-400 dark:text-neutral-500 mt-1 leading-relaxed">
+                    <p className="hidden lg:block text-xs text-gray-400 dark:text-neutral-500 mt-1 leading-relaxed">
                       {s.description}
                     </p>
                   </div>
                   <span className={[
-                    'w-full h-8 flex items-center justify-center rounded-lg text-xs font-semibold transition-colors',
+                    'hidden lg:flex w-full h-8 items-center justify-center rounded-lg text-xs font-semibold transition-colors',
                     s.soon
                       ? 'bg-gray-100 text-gray-400 dark:bg-neutral-800 dark:text-neutral-500'
                       : `text-white ${c.btn}`,
@@ -422,7 +422,7 @@ export default function Home() {
         </div>
 
         {/* Séparateur vertical + bouton expand */}
-        <div className="relative shrink-0 w-px bg-gray-200 dark:bg-neutral-800 self-stretch">
+        <div className="hidden lg:block relative shrink-0 w-px bg-gray-200 dark:bg-neutral-800 self-stretch">
           <button
             onClick={() => setCalendarExpanded(e => !e)}
             title={calendarExpanded ? 'Réduire le calendrier' : 'Agrandir le calendrier'}
@@ -441,8 +441,8 @@ export default function Home() {
         </div>
 
         {/* Colonne droite : calendrier */}
-        <div className={['shrink-0 sticky top-12 h-[calc(100vh-3rem)] flex flex-col p-6 transition-[width] duration-300 ease-in-out',
-          calendarExpanded ? 'w-4/5' : 'w-1/2',
+        <div className={['lg:shrink-0 lg:sticky lg:top-12 lg:h-[calc(100vh-3rem)] flex flex-col px-4 pb-4 sm:px-6 sm:pb-6 lg:p-6 transition-[width] duration-300 ease-in-out',
+          calendarExpanded ? 'lg:w-4/5' : 'lg:w-3/5',
         ].join(' ')}>
           <WeeklyCalendar magasinId={effectiveMagasinId} />
         </div>
