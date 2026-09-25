@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  bonPlanByChrono, isBlueFill, isBonPlanBetter, normSegment, parseOpSheet, parsePrice,
+  bonPlanPrices, isBlueFill, isBonPlanBetter, normSegment, parseOpSheet, parsePrice,
   planImport, prixReference, remisePct, resolveLines,
 } from '../../src/lib/opImport.js'
 
@@ -108,10 +108,10 @@ describe('rapprochement avec la base des vélos', () => {
 })
 
 describe('prix bon plan', () => {
-  const bonPlans = bonPlanByChrono([
-    { chrono: '0-252871', prixExcluTeam: 1099.99, importedAt: new Date('2026-01-01') },
-    { chrono: '0-252871', prixExcluTeam: 1149.99, importedAt: new Date('2026-06-01') },
-    { chrono: '1-17587', prixExcluTeam: 1415 },
+  const bonPlans = bonPlanPrices([
+    { chrono: '0-252871', prixBonPlan: 1099.99, updatedAt: new Date('2026-01-01') },
+    { chrono: '0-252871', prixBonPlan: 1149.99, updatedAt: new Date('2026-06-01') },
+    { chrono: '1-17587', prixBonPlan: 1415 },
   ])
 
   it('prend le prix bon plan le plus récent', () => {
@@ -144,7 +144,7 @@ describe('import et réimport', () => {
     const plan = planImport(r, { bonPlan: { 2: true }, selected: { 6: ['s1'] } })
     assert.equal(plan.length, 8) // 2 hors vélo + ALLROAD + COMPLITE + 2 XV + ATOM + CROSSOVER S
     assert.ok(plan.every(p => p.action === 'create'))
-    assert.equal(plan.find(p => p.data.chrono === '0-252871').data.passExcluTeam, true)
+    assert.equal(plan.find(p => p.data.chrono === '0-252871').data.passeBonPlan, true)
     assert.equal(plan.find(p => p.data.chrono === '0-191743').line, 8)
     const maillot = plan.find(p => p.data.refFournisseur === '2248840').data
     assert.equal(maillot.horsCatalogue, true)

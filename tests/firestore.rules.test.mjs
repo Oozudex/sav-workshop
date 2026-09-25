@@ -201,6 +201,24 @@ describe('flocage / transferts', () => {
   })
 })
 
+describe('opérations commerciales', () => {
+  it('les vendeurs lisent les OP et les prix bon plan sans pouvoir les modifier', async () => {
+    const db = as('veloA')
+    await assertSucceeds(getDocs(collection(db, 'prix_bon_plan')))
+    await assertSucceeds(getDocs(collection(db, 'op_commerciales', 'op1', 'produits')))
+    await assertFails(setDoc(doc(db, 'prix_bon_plan', '0-123'), { prixBonPlan: 1 }))
+    await assertFails(setDoc(doc(db, 'op_commerciales', 'op1', 'produits', 'p1'), { prixOp: 1 }))
+  })
+  it("l'acheteur gère les OP et les prix bon plan", async () => {
+    const db = as('acheteur')
+    await assertSucceeds(setDoc(doc(db, 'prix_bon_plan', '0-123'), { prixBonPlan: 1 }))
+    await assertSucceeds(setDoc(doc(db, 'op_commerciales', 'op1', 'produits', 'p1'), { prixOp: 1 }))
+  })
+  it("l'ancienne collection prix_exclu_team n'est plus accessible", async () => {
+    await assertFails(getDocs(collection(as('acheteur'), 'prix_exclu_team')))
+  })
+})
+
 describe('collections supprimées', () => {
   it("purchase_requests et notifications ne sont plus accessibles", async () => {
     await assertFails(getDocs(collection(as('veloA'), 'notifications')))

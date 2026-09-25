@@ -88,11 +88,11 @@ export function buildPromoIndex({ ops, produits, bonPlanList = [], today = today
       g.ops.push(s)
     }
     add(s.couleurs, p.couleur)
-    if (p.passExcluTeam && !p.excluTeamTransferred) s.futurBonPlan = true
+    if (p.passeBonPlan && !p.bonPlanTransfere) s.futurBonPlan = true
   }
 
   for (const b of latestBonPlans(bonPlanList)) {
-    const prix = parsePrice(b.prixExcluTeam)
+    const prix = parsePrice(b.prixBonPlan)
     if (prix == null) continue
     const g = groupFor(b)
     const prixFort = parsePrice(b.prixFort)

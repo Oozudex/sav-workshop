@@ -6,12 +6,14 @@ import { useShallow } from 'zustand/react/shallow'
 import { db } from '../lib/firebase'
 import {
   collection, onSnapshot, query, orderBy,
-  addDoc, updateDoc, deleteDoc, doc, serverTimestamp,
+  addDoc, updateDoc, deleteDoc, doc, serverTimestamp, setDoc,
   writeBatch, getDocs,
 } from 'firebase/firestore'
 import { GLOBAL_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
 import { formatEuro } from '../lib/orders'
 import { buildPromoIndex, isOpVisibleFor, opRayons, opStatus, searchPromos } from '../lib/opSearch'
+import { BON_PLAN_COLLECTION, bonPlanDocId, parseBonPlanSheet, remiseBonPlan } from '../lib/bonPlan'
+import { SEGMENT_LABELS, cleanRef, normName, normSegment, parsePrice } from '../lib/opImport'
 import { safeUrl } from '../lib/security'
 import { readSheetRows } from '../lib/excel'
 
@@ -42,34 +44,6 @@ function parseCatalogueRows(rows) {
     })
     return obj
   }).filter(r => r.reference || r.nom)
-}
-
-// ── Parseurs prix exclu team ──────────────────────────────────────────────────
-const EXCLU_COLS = {
-  'nom': 'nom', 'produit': 'nom', 'article': 'nom',
-  'marque': 'marque', 'brand': 'marque',
-  'chrono': 'chrono',
-  'segment': 'segment',
-  'prix fort': 'prixFort',
-  'prix exclu team': 'prixExcluTeam', 'prix promo': 'prixExcluTeam', 'prix promo exclu': 'prixExcluTeam',
-}
-function parsePrixExcluRows(rows) {
-  if (!rows.length) return []
-  const headers = rows[0].map(h => String(h || '').toLowerCase().trim())
-  const fieldMap = headers.map(h => EXCLU_COLS[h] || null)
-  return rows.slice(1).map(row => {
-    const obj = {}
-    fieldMap.forEach((field, i) => {
-      if (!field) return
-      const raw = row[i] != null ? String(row[i]).trim() : ''
-      if (!raw) return
-      if (field === 'prixFort' || field === 'prixExcluTeam') {
-        const n = parseFloat(raw.replace('€', '').replace(/\s/g, '').replace(',', '.'))
-        if (!isNaN(n)) obj[field] = n
-      } else { obj[field] = raw }
-    })
-    return obj
-  }).filter(r => r.chrono && (r.prixFort != null || r.prixExcluTeam != null))
 }
 
 const getStatus = op => opStatus(op)
@@ -398,113 +372,6 @@ function CatalogueImportModal({ catalogueCount, onClose }) {
   )
 }
 
-// ── Modal import prix exclu team ──────────────────────────────────────────────
-function PrixExcluImportModal({ onClose }) {
-  const fileRef = useRef(null)
-  const [rows, setRows] = useState(null)
-  const [fileName, setFileName] = useState('')
-  const [importing, setImporting] = useState(false)
-  const [error, setError] = useState('')
-
-  function handleFile(e) {
-    const file = e.target.files[0]
-    if (!file) return
-    setFileName(file.name); setError('')
-    readSheetRows(file).then(raw => {
-      try {
-        const parsed = parsePrixExcluRows(raw)
-        if (!parsed.length) { setError('Aucune ligne valide. En-têtes : Famille, Référence, Nom, Prix fort, Prix promo'); return }
-        setRows(parsed)
-      } catch { setError('Impossible de lire le fichier.') }
-    }).catch(() => setError('Impossible de lire le fichier.'))
-  }
-
-  async function handleImport() {
-    if (!rows?.length) return
-    setImporting(true)
-    try {
-      for (let i = 0; i < rows.length; i += 400) {
-        const batch = writeBatch(db)
-        rows.slice(i, i + 400).forEach(r => batch.set(doc(collection(db, 'prix_exclu_team')), { ...r, importedAt: serverTimestamp() }))
-        await batch.commit()
-      }
-      onClose()
-    } finally { setImporting(false) }
-  }
-
-  return (
-    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-2xl rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800 shrink-0">
-          <span className="text-sm font-semibold text-gray-900 dark:text-white">Importer les prix exclu team</span>
-          <button onClick={onClose} className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
-        </div>
-        <div className="p-5 space-y-4 overflow-y-auto flex-1">
-          {!rows ? (
-            <div>
-              <p className="text-xs text-gray-500 dark:text-neutral-400 mb-3">
-                En-têtes attendues :<br />
-                <span className="font-mono text-[11px] text-gray-400">Nom, Marque, Chrono, Segment, Prix fort, Prix exclu team</span>
-              </p>
-              <label className="flex flex-col items-center gap-3 border-2 border-dashed border-gray-200 dark:border-neutral-700 rounded-xl p-8 cursor-pointer hover:border-gray-400 transition-colors">
-                <svg className="h-8 w-8 text-gray-300 dark:text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
-                <span className="text-xs text-gray-400 dark:text-neutral-500">Cliquez pour choisir un fichier</span>
-                <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
-              </label>
-              {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-500 dark:text-neutral-400">
-                  <strong className="text-gray-700 dark:text-neutral-300">{rows.length} références</strong> dans <span className="font-mono">{fileName}</span>
-                </span>
-                <button onClick={() => { setRows(null); setFileName(''); if (fileRef.current) fileRef.current.value = '' }}
-                  className="text-xs text-gray-400 hover:text-gray-600 underline">Changer</button>
-              </div>
-              <div className="rounded-xl border border-gray-200 dark:border-neutral-700 overflow-hidden">
-                <table className="w-full text-[11px]">
-                  <thead>
-                    <tr className="bg-gray-50 dark:bg-neutral-800/50 border-b border-gray-200 dark:border-neutral-700">
-                      {['Nom', 'Marque', 'Chrono', 'Segment', 'Prix fort', 'Prix exclu team'].map(h => (
-                        <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.slice(0, 30).map((r, i) => (
-                      <tr key={i} className="border-b last:border-0 border-gray-100 dark:border-neutral-800">
-                        <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{r.nom || '—'}</td>
-                        <td className="px-3 py-2 text-gray-500 dark:text-neutral-400">{r.marque || '—'}</td>
-                        <td className="px-3 py-2 font-mono text-gray-700 dark:text-neutral-300">{r.chrono || '—'}</td>
-                        <td className="px-3 py-2 text-gray-500 dark:text-neutral-400">{r.segment || '—'}</td>
-                        <td className="px-3 py-2 text-gray-500 dark:text-neutral-400">{r.prixFort != null ? `${r.prixFort} €` : '—'}</td>
-                        <td className="px-3 py-2 font-semibold text-blue-600 dark:text-blue-400">{r.prixExcluTeam != null ? `${r.prixExcluTeam} €` : '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {rows.length > 30 && (
-                  <div className="px-3 py-2 text-[11px] text-gray-400 bg-gray-50 dark:bg-neutral-800/30 border-t border-gray-100 dark:border-neutral-800">… et {rows.length - 30} autres</div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-gray-100 dark:border-neutral-800 shrink-0">
-          <button onClick={onClose} className="h-8 px-3 rounded-lg text-xs border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800">Annuler</button>
-          <button onClick={handleImport} disabled={!rows?.length || importing}
-            className="h-8 px-4 rounded-lg text-xs font-semibold disabled:opacity-50 bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
-            {importing ? 'Import…' : `Importer ${rows?.length || 0} références`}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ── Modal ajout manuel catalogue ──────────────────────────────────────────────
 function AddCatalogueModal({ onClose }) {
   const empty = { chrono: '', reference: '', nom: '', couleur: '', famille: '', marque: '', univers: '', segment: '' }
@@ -571,80 +438,6 @@ function AddCatalogueModal({ onClose }) {
           <div className="flex justify-end gap-2 pt-1">
             <button type="button" onClick={onClose} className="h-8 px-3 rounded-lg text-xs border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800">Annuler</button>
             <button type="submit" disabled={saving || (!form.nom.trim() && !form.reference.trim())}
-              className="h-8 px-4 rounded-lg text-xs font-semibold disabled:opacity-50 bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
-              {saving ? 'Ajout…' : 'Ajouter'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-// ── Modal ajout manuel prix exclu team ────────────────────────────────────────
-function AddPrixExcluModal({ onClose }) {
-  const empty = { nom: '', marque: '', chrono: '', segment: '', prixFort: '', prixExcluTeam: '' }
-  const [form, setForm] = useState(empty)
-  const [saving, setSaving] = useState(false)
-  function set(k, v) { setForm(f => ({ ...f, [k]: v })) }
-
-  async function handleSave(e) {
-    e.preventDefault()
-    if (!form.chrono.trim()) return
-    setSaving(true)
-    try {
-      const data = {}
-      Object.entries(form).forEach(([k, v]) => {
-        if (!v.toString().trim()) return
-        if (k === 'prixFort' || k === 'prixExcluTeam') {
-          const n = parseFloat(v.replace(',', '.').replace(/\s/g, ''))
-          if (!isNaN(n)) data[k] = n
-        } else { data[k] = v.trim() }
-      })
-      await addDoc(collection(db, 'prix_exclu_team'), { ...data, importedAt: serverTimestamp() })
-      onClose()
-    } finally { setSaving(false) }
-  }
-
-  return (
-    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
-          <span className="text-sm font-semibold text-gray-900 dark:text-white">Ajouter un prix exclu team</span>
-          <button onClick={onClose} className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
-        </div>
-        <form onSubmit={handleSave} className="p-5 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <label className="col-span-2 space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Nom</span>
-              <input className="Input" value={form.nom} onChange={e => set('nom', e.target.value)} autoFocus />
-            </label>
-            <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Marque</span>
-              <input className="Input" value={form.marque} onChange={e => set('marque', e.target.value)} />
-            </label>
-            <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Chrono *</span>
-              <input className="Input" value={form.chrono} onChange={e => set('chrono', e.target.value)} />
-            </label>
-            <label className="col-span-2 space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Segment</span>
-              <input className="Input" value={form.segment} onChange={e => set('segment', e.target.value)} />
-            </label>
-            <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Prix fort (€)</span>
-              <input className="Input" inputMode="decimal" value={form.prixFort} onChange={e => set('prixFort', e.target.value)} placeholder="0.00" />
-            </label>
-            <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Prix exclu team (€)</span>
-              <input className="Input" inputMode="decimal" value={form.prixExcluTeam} onChange={e => set('prixExcluTeam', e.target.value)} placeholder="0.00" />
-            </label>
-          </div>
-          <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="h-8 px-3 rounded-lg text-xs border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800">Annuler</button>
-            <button type="submit" disabled={saving || !form.chrono.trim()}
               className="h-8 px-4 rounded-lg text-xs font-semibold disabled:opacity-50 bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
               {saving ? 'Ajout…' : 'Ajouter'}
             </button>
@@ -767,10 +560,252 @@ function CatalogueSection({ canCreate }) {
   )
 }
 
-// ── Section prix exclu team ───────────────────────────────────────────────────
-function PrixExcluSection({ canCreate }) {
+// ── Prix bon plan (carte fidélité) ────────────────────────────────────────────
+
+const BP_STATE = {
+  create: { label: 'Nouveau',     cls: 'text-emerald-600 dark:text-emerald-400 font-semibold' },
+  update: { label: 'Mis à jour',  cls: 'text-blue-600 dark:text-blue-400 font-semibold' },
+  same:   { label: 'Inchangé',    cls: 'text-gray-400' },
+}
+
+// Import Excel : un prix par chrono, les prix déjà présents sont remplacés (pas de doublon)
+function BonPlanImportModal({ items, onClose }) {
+  const fileRef = useRef(null)
+  const [parsed, setParsed] = useState(null) // { rows, skipped }
+  const [fileName, setFileName] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [error, setError] = useState('')
+
+  const existing = useMemo(() => new Map(items.map(i => [i.id, i])), [items])
+  const plan = useMemo(() => (parsed?.rows || []).map(r => {
+    const id = bonPlanDocId(r)
+    const prev = existing.get(id)
+    const action = !prev ? 'create' : prev.prixBonPlan === r.prixBonPlan && (prev.prixFort ?? null) === (r.prixFort ?? null) ? 'same' : 'update'
+    return { id, row: r, prev, action }
+  }), [parsed, existing])
+  const writes = plan.filter(p => p.action !== 'same')
+
+  function reset() {
+    setParsed(null); setFileName(''); setError('')
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
+  async function handleFile(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    reset()
+    setFileName(file.name)
+    try {
+      const res = parseBonPlanSheet(await readSheetRows(file))
+      if (res.error) setError(res.error)
+      else setParsed(res)
+    } catch {
+      setError('Impossible de lire le fichier.')
+    }
+  }
+
+  async function handleImport() {
+    if (!writes.length) { onClose(); return }
+    setImporting(true)
+    setError('')
+    try {
+      for (let i = 0; i < writes.length; i += 450) {
+        const batch = writeBatch(db)
+        writes.slice(i, i + 450).forEach(({ id, row }) =>
+          batch.set(doc(db, BON_PLAN_COLLECTION, id), { ...row, updatedAt: serverTimestamp() }, { merge: true }))
+        await batch.commit()
+      }
+      onClose()
+    } catch {
+      setError("L'import a échoué en cours de route. Relance-le : il reprendra sans créer de doublon.")
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  const count = a => plan.filter(p => p.action === a).length
+
+  return (
+    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="w-full max-w-3xl rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800 shrink-0">
+          <span className="text-sm font-semibold text-gray-900 dark:text-white">Importer les prix bon plan</span>
+          <button onClick={onClose} aria-label="Fermer" className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <div className="p-5 space-y-4 overflow-y-auto flex-1">
+          {!parsed ? (
+            <div className="space-y-3">
+              <div className="text-xs text-gray-500 dark:text-neutral-400 space-y-1">
+                <p>Colonnes lues : <span className="font-mono text-[11px] text-gray-600 dark:text-neutral-300">Chrono, Prix bon plan</span> (obligatoires), <span className="font-mono text-[11px] text-gray-600 dark:text-neutral-300">Nom, Marque, Segment, Prix fort</span>.</p>
+                <p>Un seul prix par chrono : si un chrono a déjà un prix bon plan, il est remplacé.</p>
+              </div>
+              <label className="flex flex-col items-center gap-3 border-2 border-dashed border-gray-200 dark:border-neutral-700 rounded-xl p-8 cursor-pointer hover:border-gray-400 transition-colors">
+                <svg className="h-8 w-8 text-gray-300 dark:text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+                <span className="text-xs text-gray-400 dark:text-neutral-500">Cliquez pour choisir un fichier (.xlsx, .xls, .csv)</span>
+                <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
+              </label>
+              {error && <p className="text-xs text-red-500">{error}</p>}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="text-xs text-gray-500 dark:text-neutral-400">
+                  <strong className="text-gray-700 dark:text-neutral-300">{plan.length} prix</strong> dans <span className="font-mono">{fileName}</span>
+                  {' '}· {count('create')} nouveau{count('create') > 1 ? 'x' : ''} · {count('update')} mis à jour · {count('same')} inchangé{count('same') > 1 ? 's' : ''}
+                </span>
+                <button onClick={reset} className="text-xs text-gray-400 hover:text-gray-600 underline">Changer de fichier</button>
+              </div>
+              {parsed.skipped > 0 && (
+                <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                  {parsed.skipped} ligne{parsed.skipped > 1 ? 's' : ''} sans chrono ou sans prix bon plan ignorée{parsed.skipped > 1 ? 's' : ''}.
+                </p>
+              )}
+              <div className="rounded-xl border border-gray-200 dark:border-neutral-700 overflow-x-auto">
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr className="bg-gray-50 dark:bg-neutral-800/50 border-b border-gray-200 dark:border-neutral-700">
+                      {['Nom', 'Marque', 'Chrono', 'Prix fort', 'Prix bon plan', 'Remise', ''].map(h => (
+                        <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {plan.map(({ id, row, prev, action }) => {
+                      const rem = remiseBonPlan(row)
+                      return (
+                        <tr key={id} className="border-b last:border-0 border-gray-100 dark:border-neutral-800">
+                          <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{row.nom || '—'}</td>
+                          <td className="px-3 py-2 text-gray-500 dark:text-neutral-400">{row.marque || '—'}</td>
+                          <td className="px-3 py-2 font-mono text-gray-700 dark:text-neutral-300">{row.chrono}</td>
+                          <td className="px-3 py-2 text-gray-500 dark:text-neutral-400 whitespace-nowrap">{formatEuro(row.prixFort)}</td>
+                          <td className="px-3 py-2 font-semibold text-blue-600 dark:text-blue-400 whitespace-nowrap">{formatEuro(row.prixBonPlan)}</td>
+                          <td className="px-3 py-2 text-emerald-600 dark:text-emerald-400">{rem != null ? `-${rem}%` : '—'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <span className={BP_STATE[action].cls}>{BP_STATE[action].label}</span>
+                            {action === 'update' && prev.prixBonPlan !== row.prixBonPlan && (
+                              <span className="block text-[10px] text-gray-500 dark:text-neutral-400">{formatEuro(prev.prixBonPlan)} → {formatEuro(row.prixBonPlan)}</span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {error && <p className="text-xs text-red-500">{error}</p>}
+            </div>
+          )}
+        </div>
+        <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-gray-100 dark:border-neutral-800 shrink-0">
+          <button onClick={onClose} className="h-8 px-3 rounded-lg text-xs border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800">Annuler</button>
+          <button onClick={handleImport} disabled={!parsed || importing}
+            className="h-8 px-4 rounded-lg text-xs font-semibold disabled:opacity-50 bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
+            {importing ? 'Import…' : !parsed ? 'Importer' : writes.length ? `Enregistrer ${writes.length} prix` : 'Rien à changer'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Ajout manuel : remplace le prix bon plan du chrono s'il en a déjà un
+function AddBonPlanModal({ items, onClose }) {
+  const [form, setForm] = useState({ nom: '', marque: '', chrono: '', segment: '', prixFort: '', prixBonPlan: '' })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })) }
+
+  const id = bonPlanDocId({ chrono: form.chrono })
+  const prev = id && items.find(i => i.id === id)
+  const valid = id && parsePrice(form.prixBonPlan) != null
+
+  async function handleSave(e) {
+    e.preventDefault()
+    if (!valid) return
+    setSaving(true)
+    setError('')
+    try {
+      await setDoc(doc(db, BON_PLAN_COLLECTION, id), {
+        chrono:      cleanRef(form.chrono),
+        nom:         form.nom.trim(),
+        marque:      form.marque.trim() || null,
+        segment:     form.segment.trim() || null,
+        prixFort:    parsePrice(form.prixFort),
+        prixBonPlan: parsePrice(form.prixBonPlan),
+        updatedAt:   serverTimestamp(),
+      }, { merge: true })
+      onClose()
+    } catch {
+      setError("L'enregistrement a échoué. Réessaie.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const label = 'text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide'
+  return (
+    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
+          <span className="text-sm font-semibold text-gray-900 dark:text-white">Ajouter un prix bon plan</span>
+          <button onClick={onClose} aria-label="Fermer" className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <form onSubmit={handleSave} className="p-5 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="col-span-2 space-y-1">
+              <span className={label}>Nom</span>
+              <input className="Input" value={form.nom} onChange={e => set('nom', e.target.value)} autoFocus />
+            </label>
+            <label className="space-y-1">
+              <span className={label}>Marque</span>
+              <input className="Input" value={form.marque} onChange={e => set('marque', e.target.value)} />
+            </label>
+            <label className="space-y-1">
+              <span className={label}>Chrono *</span>
+              <input className="Input" value={form.chrono} onChange={e => set('chrono', e.target.value)} />
+            </label>
+            <label className="col-span-2 space-y-1">
+              <span className={label}>Segment</span>
+              <input className="Input" value={form.segment} onChange={e => set('segment', e.target.value)} />
+            </label>
+            <label className="space-y-1">
+              <span className={label}>Prix fort (€)</span>
+              <input className="Input" inputMode="decimal" value={form.prixFort} onChange={e => set('prixFort', e.target.value)} placeholder="0,00" />
+            </label>
+            <label className="space-y-1">
+              <span className={label}>Prix bon plan (€) *</span>
+              <input className="Input" inputMode="decimal" value={form.prixBonPlan} onChange={e => set('prixBonPlan', e.target.value)} placeholder="0,00" />
+            </label>
+          </div>
+          {prev && (
+            <p className="text-[11px] text-amber-700 dark:text-amber-400">
+              Ce chrono a déjà un prix bon plan ({formatEuro(prev.prixBonPlan)}) : il sera remplacé.
+            </p>
+          )}
+          {error && <p className="text-xs text-red-500">{error}</p>}
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" onClick={onClose} className="h-8 px-3 rounded-lg text-xs border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800">Annuler</button>
+            <button type="submit" disabled={saving || !valid}
+              className="h-8 px-4 rounded-lg text-xs font-semibold disabled:opacity-50 bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
+              {saving ? 'Enregistrement…' : prev ? 'Remplacer' : 'Ajouter'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+const segmentLabel = s => SEGMENT_LABELS[s] || s
+
+function BonPlanSection({ canCreate }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const [search, setSearch] = useState('')
   const [segmentFilter, setSegmentFilter] = useState('')
   const [showImport, setShowImport] = useState(false)
@@ -778,60 +813,56 @@ function PrixExcluSection({ canCreate }) {
 
   useEffect(() => {
     return onSnapshot(
-      collection(db, 'prix_exclu_team'),
+      collection(db, BON_PLAN_COLLECTION),
       snap => {
         const data = snap.docs.map(d => ({ id: d.id, ...d.data() }))
         data.sort((a, b) => (a.nom || '').localeCompare(b.nom || '', 'fr'))
         setItems(data)
         setLoading(false)
       },
-      err => { console.error('prix_exclu_team:', err); setLoading(false) }
+      () => { setError(true); setLoading(false) },
     )
   }, [])
 
   const segments = useMemo(() => {
-    const s = new Set(items.map(p => p.segment).filter(Boolean))
-    return [...s].sort((a, b) => a.localeCompare(b, 'fr'))
+    const s = new Set(items.map(p => normSegment(p.segment)).filter(Boolean))
+    return [...s].sort((a, b) => segmentLabel(a).localeCompare(segmentLabel(b), 'fr'))
   }, [items])
 
   const filtered = useMemo(() => {
-    const t = search.trim().toLowerCase()
+    const words = normName(search).split(' ').filter(Boolean)
     return items.filter(p => {
-      if (segmentFilter && p.segment !== segmentFilter) return false
-      if (!t) return true
-      return (
-        (p.nom || '').toLowerCase().includes(t) ||
-        (p.marque || '').toLowerCase().includes(t) ||
-        (p.chrono || '').toLowerCase().includes(t)
-      )
+      if (segmentFilter && normSegment(p.segment) !== segmentFilter) return false
+      const text = normName([p.nom, p.marque, p.chrono, p.refFournisseur].join(' '))
+      return words.every(w => text.includes(w))
     })
   }, [items, search, segmentFilter])
 
   async function handleDelete(item) {
-    if (!confirm(`Supprimer "${item.nom}" ?`)) return
-    await deleteDoc(doc(db, 'prix_exclu_team', item.id))
+    if (!confirm(`Supprimer le prix bon plan de « ${item.nom || item.chrono} » ?`)) return
+    await deleteDoc(doc(db, BON_PLAN_COLLECTION, item.id))
   }
 
   async function handleClear() {
-    if (!confirm(`Vider tous les prix exclu team (${items.length} entrées) ?`)) return
-    for (let i = 0; i < items.length; i += 400) {
+    if (!confirm(`Supprimer tous les prix bon plan (${items.length}) ? Cette action est irréversible.`)) return
+    for (let i = 0; i < items.length; i += 450) {
       const batch = writeBatch(db)
-      items.slice(i, i + 400).forEach(p => batch.delete(doc(db, 'prix_exclu_team', p.id)))
+      items.slice(i, i + 450).forEach(p => batch.delete(doc(db, BON_PLAN_COLLECTION, p.id)))
       await batch.commit()
     }
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white">Prix promo exclu team</h2>
-          <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">Tarifs préférentiels équipe ({items.length} références)</p>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-white">Prix bon plan</h2>
+          <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">Prix réservés aux porteurs de la carte fidélité ({items.length} référence{items.length > 1 ? 's' : ''})</p>
         </div>
         {canCreate && (
           <div className="flex items-center gap-2">
             {items.length > 0 && (
-              <button onClick={handleClear} className="h-8 px-3 rounded-lg text-xs border border-red-200 text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10">Vider</button>
+              <button onClick={handleClear} className="h-8 px-3 rounded-lg text-xs border border-red-200 text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10">Tout supprimer</button>
             )}
             <button onClick={() => setShowAdd(true)}
               className="h-8 px-3 rounded-lg text-xs font-medium border border-gray-200 dark:border-neutral-700 text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors">
@@ -862,22 +893,24 @@ function PrixExcluSection({ canCreate }) {
             ].join(' ')}
           >
             <option value="">Tous les segments</option>
-            {segments.map(s => <option key={s} value={s}>{s}</option>)}
+            {segments.map(s => <option key={s} value={s}>{segmentLabel(s)}</option>)}
           </select>
         )}
       </div>
       {loading ? (
         <div className="text-center py-12 text-sm text-gray-400">Chargement…</div>
+      ) : error ? (
+        <div className="text-center py-12 text-sm text-red-500">Impossible de charger les prix bon plan. Recharge la page.</div>
       ) : items.length === 0 ? (
         <div className="text-center py-12 text-sm text-gray-400 dark:text-neutral-500">
-          Aucun prix exclu team.{canCreate && ' Importez un fichier Excel pour démarrer.'}
+          Aucun prix bon plan.{canCreate && ' Importez un fichier Excel pour démarrer.'}
         </div>
       ) : (
-        <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 overflow-hidden">
+        <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-gray-100 dark:border-neutral-800 bg-gray-50/50 dark:bg-neutral-800/30">
-                {['Nom', 'Marque', 'Chrono', 'Segment', 'Prix fort', 'Prix exclu team', 'Remise'].map(h => (
+                {['Nom', 'Marque', 'Chrono', 'Segment', 'Prix fort', 'Prix bon plan', 'Remise'].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{h}</th>
                 ))}
                 {canCreate && <th className="px-4 py-3" />}
@@ -885,19 +918,20 @@ function PrixExcluSection({ canCreate }) {
             </thead>
             <tbody>
               {filtered.map(p => {
-                const rem = p.prixFort && p.prixExcluTeam ? Math.round((1 - p.prixExcluTeam / p.prixFort) * 100) : null
+                const rem = remiseBonPlan(p)
                 return (
                   <tr key={p.id} className="border-b last:border-0 border-gray-100 dark:border-neutral-800 hover:bg-gray-50 dark:hover:bg-neutral-800/50">
                     <td className="px-4 py-2.5 font-medium text-gray-900 dark:text-white">{p.nom || '—'}</td>
                     <td className="px-4 py-2.5 text-gray-500 dark:text-neutral-400">{p.marque || '—'}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-700 dark:text-neutral-300">{p.chrono || '—'}</td>
-                    <td className="px-4 py-2.5 text-gray-500 dark:text-neutral-400">{p.segment || '—'}</td>
-                    <td className="px-4 py-2.5 text-gray-500 dark:text-neutral-400">{p.prixFort != null ? `${Number(p.prixFort).toFixed(2)} €` : '—'}</td>
-                    <td className="px-4 py-2.5 font-semibold text-blue-600 dark:text-blue-400">{p.prixExcluTeam != null ? `${Number(p.prixExcluTeam).toFixed(2)} €` : '—'}</td>
+                    <td className="px-4 py-2.5 font-mono text-gray-700 dark:text-neutral-300">{p.chrono || p.refFournisseur || '—'}</td>
+                    <td className="px-4 py-2.5 text-gray-500 dark:text-neutral-400">{p.segment ? segmentLabel(normSegment(p.segment)) : '—'}</td>
+                    <td className="px-4 py-2.5 text-gray-500 dark:text-neutral-400 whitespace-nowrap">{formatEuro(p.prixFort)}</td>
+                    <td className="px-4 py-2.5 font-semibold text-blue-600 dark:text-blue-400 whitespace-nowrap">{formatEuro(p.prixBonPlan)}</td>
                     <td className="px-4 py-2.5 font-semibold text-emerald-600 dark:text-emerald-400">{rem != null ? `-${rem}%` : '—'}</td>
                     {canCreate && (
                       <td className="px-4 py-2.5">
-                        <button onClick={() => handleDelete(p)} className="h-6 w-6 grid place-items-center rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 dark:text-neutral-700 dark:hover:text-red-400 dark:hover:bg-red-500/10">
+                        <button onClick={() => handleDelete(p)} aria-label={`Supprimer ${p.nom || p.chrono}`}
+                          className="h-6 w-6 grid place-items-center rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 dark:text-neutral-700 dark:hover:text-red-400 dark:hover:bg-red-500/10">
                           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M8 6V4.8A1.8 1.8 0 019.8 3h4.4A1.8 1.8 0 0116 4.8V6m3 0l-1 13a2 2 0 01-2 1.8H8A2 2 0 016 19L5 6M10 10v7M14 10v7" /></svg>
                         </button>
                       </td>
@@ -909,8 +943,8 @@ function PrixExcluSection({ canCreate }) {
           </table>
         </div>
       )}
-      {showImport && <PrixExcluImportModal onClose={() => setShowImport(false)} />}
-      {showAdd && <AddPrixExcluModal onClose={() => setShowAdd(false)} />}
+      {showImport && <BonPlanImportModal items={items} onClose={() => setShowImport(false)} />}
+      {showAdd && <AddBonPlanModal items={items} onClose={() => setShowAdd(false)} />}
     </div>
   )
 }
@@ -1100,7 +1134,7 @@ export default function Operations() {
 
   useEffect(() => {
     if (!searchUsed) return
-    return onSnapshot(collection(db, 'prix_exclu_team'),
+    return onSnapshot(collection(db, BON_PLAN_COLLECTION),
       snap => setBonPlanList(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
       () => setBonPlanError(true))
   }, [searchUsed])
@@ -1147,7 +1181,7 @@ export default function Operations() {
     { key: 'en_cours', label: 'En cours', count: grouped.en_cours.length },
     { key: 'a_venir', label: 'À venir', count: grouped.a_venir.length },
     { key: 'terminee', label: 'Terminées', count: grouped.terminee.length },
-    { key: 'prix_exclu', label: 'Prix exclu team', count: null },
+    { key: 'bon_plan', label: 'Prix bon plan', count: null },
     { key: 'catalogue', label: 'Base de données', count: null },
   ]
 
@@ -1255,7 +1289,7 @@ export default function Operations() {
                   en_cours: 'border-amber-500 text-amber-700 dark:border-amber-400 dark:text-amber-300',
                   a_venir: 'border-green-600 text-green-700 dark:border-green-500 dark:text-green-300',
                   terminee: 'border-violet-500 text-violet-600 dark:border-violet-400 dark:text-violet-300',
-                  prix_exclu: 'border-blue-500 text-blue-600 dark:border-blue-400 dark:text-blue-300',
+                  bon_plan: 'border-blue-500 text-blue-600 dark:border-blue-400 dark:text-blue-300',
                   catalogue: 'border-gray-900 text-gray-900 dark:border-white dark:text-white',
                 }
                 return (
@@ -1277,7 +1311,7 @@ export default function Operations() {
             </div>
 
             {/* Sections spéciales */}
-            {section === 'prix_exclu' && <PrixExcluSection canCreate={canCreate} />}
+            {section === 'bon_plan' && <BonPlanSection canCreate={canCreate} />}
             {section === 'catalogue' && <CatalogueSection canCreate={canCreate} />}
 
             {/* Liste des OPs (sections standard) */}

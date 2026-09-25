@@ -32,7 +32,7 @@ describe('visibilité des OP', () => {
 describe('recherche des remises', () => {
   const produits = [
     // CROSSOVER XV : 2 couleurs en OP en cours, dont une qui passera en bon plan
-    { opId: 'rentree', nom: 'CROSSOVER XV', marque: 'NAKAMURA', refFournisseur: 'YH60WY', chrono: '0-264046', couleur: 'BLEU ACIER', prixFort: 2099.99, prixOp: 1799.99, passExcluTeam: true },
+    { opId: 'rentree', nom: 'CROSSOVER XV', marque: 'NAKAMURA', refFournisseur: 'YH60WY', chrono: '0-264046', couleur: 'BLEU ACIER', prixFort: 2099.99, prixOp: 1799.99, passeBonPlan: true },
     { opId: 'rentree', nom: 'CROSSOVER XV', marque: 'NAKAMURA', refFournisseur: 'YH60WY', chrono: '0-254888', couleur: 'THULIUM', prixFort: 2099.99, prixOp: 1799.99 },
     // … et à venir à la Toussaint
     { opId: 'toussaint', nom: 'CROSSOVER XV', marque: 'NAKAMURA', refFournisseur: 'YH60WY', chrono: '0-264046', couleur: 'BLEU ACIER', prixFort: 2099.99, prixOp: 1699.99 },
@@ -42,8 +42,8 @@ describe('recherche des remises', () => {
     { opId: 'ete', nom: 'CLIFF EVO MAX', marque: 'NAKAMURA', chrono: '0-252525', prixFort: 229.99, prixOp: 189.99 },
   ]
   const bonPlanList = [
-    { nom: 'E-SUMMIT 730', marque: 'NAKAMURA', chrono: '0-242846', prixFort: 1599.99, prixExcluTeam: 1399.99 },
-    { nom: 'ATOM CITY WAVE', marque: 'BH', chrono: '1-17587', prixFort: 2049.9, prixExcluTeam: 1415 },
+    { nom: 'E-SUMMIT 730', marque: 'NAKAMURA', chrono: '0-242846', prixFort: 1599.99, prixBonPlan: 1399.99 },
+    { nom: 'ATOM CITY WAVE', marque: 'BH', chrono: '1-17587', prixFort: 2049.9, prixBonPlan: 1415 },
   ]
   const index = buildPromoIndex({ ops: OPS, produits, bonPlanList, today: TODAY })
 
@@ -82,9 +82,9 @@ describe('recherche des remises', () => {
 describe('prix bon plan en double', () => {
   it('un seul prix par chrono (le plus récent), le chrono distingue les déclinaisons', () => {
     const [g] = buildPromoIndex({ ops: [], produits: [], bonPlanList: [
-      { nom: 'ATOM CITY WAVE', marque: 'BH', chrono: '1-17587', prixExcluTeam: 1499.99, importedAt: new Date('2026-01-01') },
-      { nom: 'ATOM CITY WAVE', marque: 'BH', chrono: '1-17587', prixExcluTeam: 1415, importedAt: new Date('2026-06-01') },
-      { nom: 'ATOM CITY WAVE', marque: 'BH', chrono: '1-17588', prixExcluTeam: 1249.99 },
+      { nom: 'ATOM CITY WAVE', marque: 'BH', chrono: '1-17587', prixBonPlan: 1499.99, updatedAt: new Date('2026-01-01') },
+      { nom: 'ATOM CITY WAVE', marque: 'BH', chrono: '1-17587', prixBonPlan: 1415, updatedAt: new Date('2026-06-01') },
+      { nom: 'ATOM CITY WAVE', marque: 'BH', chrono: '1-17588', prixBonPlan: 1249.99 },
     ] })
     assert.deepEqual(g.bonPlans.map(b => [b.prix, b.chronos]), [[1415, ['1-17587']], [1249.99, ['1-17588']]])
   })

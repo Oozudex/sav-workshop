@@ -289,8 +289,8 @@ service cloud.firestore {
       allow create, update, delete: if isSignedIn() && isGlobal();
     }
 
-    /* ── Prix promo exclu team ───────────────────────────────────────────── */
-    match /prix_exclu_team/{docId} {
+    /* ── Prix bon plan (carte fidélité) : un document par chrono ─────────── */
+    match /prix_bon_plan/{docId} {
       allow read: if isSignedIn();
       allow create, update, delete: if isSignedIn() && isGlobal();
     }

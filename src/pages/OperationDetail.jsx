@@ -11,8 +11,9 @@ import {
 import { GLOBAL_ROLES, RAYON_TYPE_LABELS } from '../lib/constants'
 import { OpModal } from './Operations'
 import { readSheetWithFills } from '../lib/excel'
+import { BON_PLAN_COLLECTION, bonPlanTransfer } from '../lib/bonPlan'
 import {
-  SEGMENT_LABELS, bonPlanByChrono, isBonPlanBetter, parseOpSheet, planImport, prixReference, remisePct, resolveLines,
+  SEGMENT_LABELS, bonPlanPrices, isBonPlanBetter, parseOpSheet, planImport, prixReference, remisePct, resolveLines,
 } from '../lib/opImport'
 
 const SEGMENTS = ['velo', 'trottinette', 'roller', 'accessoires', 'textile']
@@ -204,10 +205,10 @@ function ImportModal({ opId, produits, onClose }) {
 
   // La base est chargée avant de pouvoir choisir le fichier : sinon tout serait « pas en stock »
   useEffect(() => {
-    Promise.all([getDocs(collection(db, 'catalogue_produits')), getDocs(collection(db, 'prix_exclu_team'))])
+    Promise.all([getDocs(collection(db, 'catalogue_produits')), getDocs(collection(db, BON_PLAN_COLLECTION))])
       .then(([cat, bp]) => setBase({
         catalogue: cat.docs.map(d => ({ id: d.id, ...d.data() })),
-        bonPlans:  bonPlanByChrono(bp.docs.map(d => d.data())),
+        bonPlans:  bonPlanPrices(bp.docs.map(d => d.data())),
       }))
       .catch(() => setBaseError('Impossible de charger la base des vélos. Vérifie la connexion puis rouvre la fenêtre.'))
   }, [])
@@ -230,7 +231,7 @@ function ImportModal({ opId, produits, onClose }) {
       // Case bon plan : ligne en bleu dans l'Excel, ou produit déjà coché dans l'OP
       const already = planImport(resolved, { existing: produits })
       setBonPlan(Object.fromEntries(resolved.map((l, i) => [i,
-        l.highlighted || already.some(a => a.line === l.line && a.existing?.passExcluTeam)])))
+        l.highlighted || already.some(a => a.line === l.line && a.existing?.passeBonPlan)])))
       setLines(resolved)
     } catch {
       setError('Impossible de lire le fichier.')
@@ -251,7 +252,7 @@ function ImportModal({ opId, produits, onClose }) {
   const count    = action => plan.filter(a => a.action === action).length
   const countSt  = status => (lines || []).filter(l => l.status === status).length
   const toCheck  = (lines || []).filter((l, i) => l.status === 'check' && !selected[i]?.length).length
-  const nbBonPlan = plan.filter(a => a.data.passExcluTeam).length
+  const nbBonPlan = plan.filter(a => a.data.passeBonPlan).length
 
   function toggleVariant(i, id) {
     setSelected(s => {
@@ -471,6 +472,7 @@ export default function OperationDetail() {
   const [sortBy,     setSortBy]   = useState(null)
   const [sortDir,    setSortDir]  = useState('asc')
   const [showImport, setShowImport] = useState(false)
+  const [transfer,   setTransfer]   = useState({ busy: false, error: '' })
 
   function handleSort(col) {
     if (sortBy === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -510,33 +512,36 @@ export default function OperationDetail() {
     await deleteDoc(doc(db, 'op_commerciales', id, 'produits', p.id))
   }
 
-  async function toggleGroupExcluTeam(group) {
-    const allChecked = group.every(p => !!p.passExcluTeam)
+  async function toggleGroupBonPlan(group) {
+    const allChecked = group.every(p => !!p.passeBonPlan)
     const newValue = !allChecked
     const batch = writeBatch(db)
-    group.forEach(p => batch.update(doc(db, 'op_commerciales', id, 'produits', p.id), { passExcluTeam: newValue }))
+    group.forEach(p => batch.update(doc(db, 'op_commerciales', id, 'produits', p.id), { passeBonPlan: newValue }))
     await batch.commit()
   }
 
-  async function handleTransferExcluTeam() {
-    const toTransfer = produits.filter(p => p.passExcluTeam && !p.excluTeamTransferred)
-    if (!toTransfer.length) return
-    const batch = writeBatch(db)
-    for (const p of toTransfer) {
-      const excluRef = doc(collection(db, 'prix_exclu_team'))
-      batch.set(excluRef, {
-        chrono:        p.chrono || null,
-        nom:           p.nom,
-        marque:        p.marque || null,
-        segment:       p.segment || null,
-        prixFort:      p.prixFort || null,
-        prixExcluTeam: p.prixOp,
-        sourceOpId:    id,
-        importedAt:    serverTimestamp(),
-      })
-      batch.update(doc(db, 'op_commerciales', id, 'produits', p.id), { excluTeamTransferred: true })
+  // Fin d'OP : les prix OP cochés deviennent les prix bon plan (un document par chrono : pas de doublon)
+  async function handleTransferBonPlan() {
+    const { docs, produitIds, skipped } = bonPlanTransfer(produits, id)
+    if (!docs.length) return
+    setTransfer({ busy: true, error: '' })
+    try {
+      const writes = [
+        ...docs.map(d => b => b.set(doc(db, BON_PLAN_COLLECTION, d.id), { ...d.data, updatedAt: serverTimestamp() })),
+        ...produitIds.map(pid => b => b.update(doc(db, 'op_commerciales', id, 'produits', pid), { bonPlanTransfere: true })),
+      ]
+      // Un batch Firestore est limité à 500 écritures ; relancer après un échec ne crée pas de doublon
+      for (let i = 0; i < writes.length; i += 450) {
+        const batch = writeBatch(db)
+        writes.slice(i, i + 450).forEach(w => w(batch))
+        await batch.commit()
+      }
+      setTransfer({ busy: false, error: skipped.length
+        ? `${skipped.length} produit${skipped.length > 1 ? 's' : ''} sans chrono ni réf. fournisseur non transféré${skipped.length > 1 ? 's' : ''} : ${skipped.map(p => p.nom).join(', ')}`
+        : '' })
+    } catch {
+      setTransfer({ busy: false, error: 'Le transfert a échoué. Relance-le : il reprendra sans créer de doublon.' })
     }
-    await batch.commit()
   }
 
   async function handleDeleteOp() {
@@ -663,22 +668,25 @@ export default function OperationDetail() {
             </div>
           </div>
 
-          {/* Bannière transfert exclu team (OP terminée) */}
+          {/* Bannière transfert en bon plan (OP terminée) */}
           {status.key === 'terminee' && (() => {
-            const toTransfer = produits.filter(p => p.passExcluTeam && !p.excluTeamTransferred)
+            const toTransfer = produits.filter(p => p.passeBonPlan && !p.bonPlanTransfere)
             if (!toTransfer.length) return null
             return (
               <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-xl border border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10">
                 <div className="flex items-center gap-2.5">
                   <svg className="h-4 w-4 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" /></svg>
-                  <p className="text-xs text-blue-700 dark:text-blue-300">
-                    <strong>{toTransfer.length} produit{toTransfer.length > 1 ? 's' : ''}</strong> marqué{toTransfer.length > 1 ? 's' : ''} pour transfert en prix exclu team.
-                  </p>
+                  <div>
+                    <p className="text-xs text-blue-700 dark:text-blue-300">
+                      <strong>{toTransfer.length} produit{toTransfer.length > 1 ? 's' : ''}</strong> marqué{toTransfer.length > 1 ? 's' : ''} pour passer en prix bon plan : {toTransfer.length > 1 ? 'leur prix OP deviendra leur' : 'son prix OP deviendra son'} prix bon plan.
+                    </p>
+                    {transfer.error && <p className="text-xs text-red-600 dark:text-red-400 mt-1">{transfer.error}</p>}
+                  </div>
                 </div>
                 {canCreate && (
-                  <button onClick={handleTransferExcluTeam}
-                    className="shrink-0 h-7 px-3 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400 transition-colors">
-                    Transférer vers exclu team
+                  <button onClick={handleTransferBonPlan} disabled={transfer.busy}
+                    className="shrink-0 h-7 px-3 rounded-lg disabled:opacity-60 text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400 transition-colors">
+                    {transfer.busy ? 'Transfert…' : 'Passer en bon plan'}
                   </button>
                 )}
               </div>
@@ -733,7 +741,7 @@ export default function OperationDetail() {
                     {['Produit', 'Déclinaisons', 'Marque', 'Segment', 'Prix fort', 'Prix OP', 'Remise'].map(h => (
                       <th key={h} className="px-4 py-3 text-left font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide text-[10px]">{h}</th>
                     ))}
-                    {canCreate && <th className="px-4 py-3 text-center text-[10px] font-semibold text-blue-500 uppercase tracking-wide">Exclu team fin OP</th>}
+                    {canCreate && <th className="px-4 py-3 text-center text-[10px] font-semibold text-blue-500 uppercase tracking-wide">Bon plan fin d'OP</th>}
                     {canCreate && <th className="px-4 py-3 w-10" />}
                   </tr>
                 </thead>
@@ -743,14 +751,14 @@ export default function OperationDetail() {
                     const rem         = remisePct(first)
                     const isCheap     = isBonPlanBetter(first)
                     const ref         = prixReference(first)
-                    const allExclu    = group.every(p => !!p.passExcluTeam)
-                    const someExclu   = group.some(p => !!p.passExcluTeam)
-                    const allDone     = group.every(p => !!p.excluTeamTransferred)
+                    const allBonPlan    = group.every(p => !!p.passeBonPlan)
+                    const someBonPlan   = group.some(p => !!p.passeBonPlan)
+                    const allDone     = group.every(p => !!p.bonPlanTransfere)
                     return (
                       <tr key={group.map(p => p.id).join('-')}
                         style={{position: 'relative'}}
                         className={['border-b last:border-0 border-gray-100 dark:border-neutral-800 hover:bg-gray-50 dark:hover:bg-neutral-800/50 transition-colors',
-                          allExclu ? 'bg-blue-50/40 dark:bg-blue-500/5' : '',
+                          allBonPlan ? 'bg-blue-50/40 dark:bg-blue-500/5' : '',
                         ].join(' ')}>
 
                         {/* Nom */}
@@ -799,7 +807,7 @@ export default function OperationDetail() {
 
                         {/* Prix OP */}
                         <td className="px-4 py-3 align-top">
-                          {allExclu ? (
+                          {allBonPlan ? (
                             <div className="flex items-center gap-1.5">
                               <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 font-bold text-xs border border-blue-200 dark:border-blue-500/30 shadow-sm shadow-blue-100 dark:shadow-none">
                                 {fmtPrice(first.prixOp)}
@@ -807,7 +815,7 @@ export default function OperationDetail() {
                               <span className="relative group">
                                 <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 text-white text-[9px] font-bold cursor-default select-none">i</span>
                                 <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 w-44 rounded-lg bg-gray-900 dark:bg-neutral-700 text-white text-[10px] leading-tight px-2.5 py-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-lg text-center">
-                                  Ce prix passera en prix exclu team à la fin de l'OP
+                                  Ce prix passera en prix bon plan à la fin de l'OP
                                   <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-neutral-700" />
                                 </span>
                               </span>
@@ -816,7 +824,7 @@ export default function OperationDetail() {
                           ) : (
                             <span className="font-semibold text-gray-900 dark:text-white">{fmtPrice(first.prixOp)}</span>
                           )}
-                          {allDone && !allExclu && <span className="block text-[10px] font-normal text-green-500 mt-0.5">✓ transféré</span>}
+                          {allDone && !allBonPlan && <span className="block text-[10px] font-normal text-green-500 mt-0.5">✓ transféré</span>}
                         </td>
 
                         {/* Remise */}
@@ -824,22 +832,22 @@ export default function OperationDetail() {
                           {rem != null && <span className="text-emerald-600 dark:text-emerald-400 font-semibold">-{rem}%</span>}
                         </td>
 
-                        {/* Exclu team — acheteur/directeur uniquement */}
+                        {/* Bon plan — acheteur/directeur uniquement */}
                         {canCreate && (
                           <td className="px-4 py-3 text-center align-top">
                             <label className="inline-flex items-center justify-center cursor-pointer">
                               <input type="checkbox" className="sr-only"
-                                checked={allExclu}
-                                onChange={() => toggleGroupExcluTeam(group)}
+                                checked={allBonPlan}
+                                onChange={() => toggleGroupBonPlan(group)}
                                 disabled={allDone} />
                               <span className={['h-4 w-4 rounded border-2 flex items-center justify-center transition-colors',
                                 allDone ? 'bg-green-500 border-green-500' :
-                                allExclu ? 'bg-blue-500 border-blue-500' :
-                                someExclu ? 'bg-blue-200 border-blue-300 dark:bg-blue-500/30 dark:border-blue-500/50' :
+                                allBonPlan ? 'bg-blue-500 border-blue-500' :
+                                someBonPlan ? 'bg-blue-200 border-blue-300 dark:bg-blue-500/30 dark:border-blue-500/50' :
                                 'border-gray-300 dark:border-neutral-600 hover:border-blue-400',
                               ].join(' ')}>
-                                {(allExclu || allDone) && <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
-                                {someExclu && !allExclu && !allDone && <span className="block h-0.5 w-2 bg-blue-600 dark:bg-blue-400 rounded" />}
+                                {(allBonPlan || allDone) && <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                                {someBonPlan && !allBonPlan && !allDone && <span className="block h-0.5 w-2 bg-blue-600 dark:bg-blue-400 rounded" />}
                               </span>
                             </label>
                           </td>
@@ -857,7 +865,7 @@ export default function OperationDetail() {
                           </td>
                         )}
 
-                        {/* Overlay "exclu team moins cher" — grise la ligne + message centré */}
+                        {/* Overlay "bon plan moins cher" — grise la ligne + message centré */}
                         {isCheap && (
                           <td style={{position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, padding: 0, border: 'none', zIndex: 5}}>
                             <div className="absolute inset-0 bg-white/75 dark:bg-neutral-900/80" />
@@ -865,7 +873,7 @@ export default function OperationDetail() {
                               <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-orange-50 dark:bg-orange-500/20 border border-orange-300 dark:border-orange-500/40 shadow-md shadow-orange-100/60 dark:shadow-none">
                                 <svg className="h-3.5 w-3.5 text-orange-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
                                 <span className="text-xs font-semibold text-orange-600 dark:text-orange-400 whitespace-nowrap">
-                                  Exclu team moins cher — déjà disponible à meilleur prix
+                                  Bon plan moins cher — déjà disponible à meilleur prix
                                 </span>
                               </div>
                             </div>

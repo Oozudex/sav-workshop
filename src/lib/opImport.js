@@ -171,24 +171,32 @@ function millis(t) {
   return (t.seconds ?? 0) * 1000
 }
 
-// Prix bon plan en vigueur : le plus récent quand un chrono en a plusieurs (les autres sont gardés)
-export function latestBonPlans(list) {
-  const byChrono = new Map(), others = []
-  for (const p of list) {
-    const key = cleanRef(p.chrono)
-    if (!key) { others.push(p); continue }
-    const cur = byChrono.get(key)
-    if (!cur || millis(p.importedAt) >= millis(cur.importedAt)) byChrono.set(key, p)
-  }
-  return [...byChrono.values(), ...others]
+// Clé d'un prix bon plan : le chrono, sinon la réf. fournisseur (articles hors base vélos)
+export function bonPlanKey(p) {
+  const chrono = cleanRef(p.chrono)
+  if (chrono) return chrono
+  const ref = cleanRef(p.refFournisseur).replace(/\s/g, '')
+  return ref ? `ref-${ref}` : null
 }
 
-// Prix bon plan en vigueur par chrono
-export function bonPlanByChrono(list) {
+// Prix bon plan en vigueur : le plus récent quand un produit en a plusieurs
+export function latestBonPlans(list) {
+  const byKey = new Map(), others = []
+  for (const p of list) {
+    const key = bonPlanKey(p)
+    if (!key) { others.push(p); continue }
+    const cur = byKey.get(key)
+    if (!cur || millis(p.updatedAt) >= millis(cur.updatedAt)) byKey.set(key, p)
+  }
+  return [...byKey.values(), ...others]
+}
+
+// Prix bon plan en vigueur par clé (chrono ou « ref-<réf. fournisseur> »)
+export function bonPlanPrices(list) {
   const map = new Map()
   for (const p of latestBonPlans(list)) {
-    const key = cleanRef(p.chrono)
-    const prix = parsePrice(p.prixExcluTeam)
+    const key = bonPlanKey(p)
+    const prix = parsePrice(p.prixBonPlan)
     if (key && prix != null) map.set(key, prix)
   }
   return map
@@ -237,7 +245,7 @@ export function productKey(p) {
   return `r:${cleanRef(p.refFournisseur || p.reference).replace(/\s/g, '')}|${normName(p.nom)}`
 }
 
-const COMPARED = ['nom', 'marque', 'segment', 'reference', 'refFournisseur', 'couleur', 'prixFort', 'prixOp', 'prixBonPlan', 'passExcluTeam']
+const COMPARED = ['nom', 'marque', 'segment', 'reference', 'refFournisseur', 'couleur', 'prixFort', 'prixOp', 'prixBonPlan', 'passeBonPlan']
 
 /**
  * Écritures à faire. `selected[i]` : ids des déclinaisons cochées pour une ligne `check` ;
@@ -267,8 +275,8 @@ export function planImport(resolved, { selected = {}, bonPlan = {}, bonPlans = n
         couleur:        m?.couleur || line.couleur || null,
         prixFort:       line.prixFort ?? null,
         prixOp:         line.prixOp ?? null,
-        prixBonPlan:    (chrono && bonPlans.get(chrono)) ?? null,
-        passExcluTeam:  !!bonPlan[i],
+        prixBonPlan:    bonPlans.get(bonPlanKey({ chrono, refFournisseur: line.refFournisseur })) ?? null,
+        passeBonPlan:  !!bonPlan[i],
         horsCatalogue:  !m,
       }
       byKey.set(productKey(data), { data, line: line.line }) // même déclinaison deux fois : la dernière ligne l'emporte
