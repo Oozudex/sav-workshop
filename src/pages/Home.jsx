@@ -11,6 +11,7 @@ import { collection, getCountFromServer, onSnapshot, query, where } from 'fireba
 import { GLOBAL_ROLES, ORDER_CLOSED_STATUTS } from '../lib/constants'
 import { runCleanup } from '../lib/cleanup'
 import { isOpVisibleFor, opStatus, todayStr } from '../lib/opSearch'
+import { TRANSFER_ACTIVE_STATUSES, readField, transferNeedsAction } from '../lib/transferts'
 
 const SECTIONS = [
   {
@@ -328,24 +329,18 @@ export default function Home() {
     })
   }, [profile, effectiveMagasinId])
 
-  // Badge transferts : demandes reçues en attente + réponses non lues sur demandes envoyées
+  // Badge transferts : ce que le magasin doit faire (répondre, envoyer, confirmer, classer) + nouveautés non lues
   useEffect(() => {
     if (!profile || !effectiveMagasinId || profile.role !== 'velo') return
-    const qIncoming = query(
-      collection(db, 'transferts'),
-      where('toMagasinId', '==', effectiveMagasinId),
-      where('status', '==', 'pending'),
-    )
-    const qUnread = query(
-      collection(db, 'transferts'),
-      where('fromMagasinId', '==', effectiveMagasinId),
-      where('readByFrom', '==', false),
-    )
-    let incoming = 0, unread = 0
-    const update = () => setTransfertCount(incoming + unread)
-    const u1 = onSnapshot(qIncoming, snap => { incoming = snap.size; update() })
-    const u2 = onSnapshot(qUnread, snap => { unread = snap.size; update() })
-    return () => { u1(); u2() }
+    const q = query(collection(db, 'transferts'), where('status', 'in', TRANSFER_ACTIVE_STATUSES))
+    return onSnapshot(q, snap => {
+      const n = snap.docs.filter(d => {
+        const t = d.data()
+        const f = readField(t, effectiveMagasinId)
+        return transferNeedsAction(t, effectiveMagasinId) || (f && t[f] === false)
+      }).length
+      setTransfertCount(n)
+    })
   }, [profile, effectiveMagasinId])
 
   const counts = { '/tickets': ticketCount, '/orders': orderCount, '/operations': opCount, '/transfert': transfertCount }

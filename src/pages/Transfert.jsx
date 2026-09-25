@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import Navbar from '../components/Navbar'
 import { useAuth } from '../store/useAuth'
 import { useShallow } from 'zustand/react/shallow'
@@ -9,16 +9,15 @@ import {
   doc, serverTimestamp, getDocs,
 } from 'firebase/firestore'
 import { GLOBAL_ROLES } from '../lib/constants'
-
-const STATUS = {
-  pending:   { label: 'En attente', bg: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' },
-  accepted:  { label: 'Accepté',    bg: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' },
-  refused:   { label: 'Refusé',     bg: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300' },
-  completed: { label: 'Réalisé',    bg: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300' },
-}
+import {
+  TRANSFER_STATUS, TRANSFER_STEPS, myTransferRole, otherReadField, readField,
+  transferNextStep, transferProgress, transferSides, transferStatus,
+} from '../lib/transferts'
 
 const MOIS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']
 const MOIS_COURTS = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc']
+const LABEL = 'text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide'
+const HELP_KEY = 'transferts.aideMasquee'
 
 function getTs(ts) {
   if (!ts) return null
@@ -33,6 +32,124 @@ function fmtDate(ts) {
   return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+function fmtShort(ts) {
+  const d = getTs(ts)
+  return d ? d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : null
+}
+
+const details = t => [t.taille, t.couleur, t.codeChrono].filter(Boolean).join(' · ')
+
+/* ── Petits éléments communs ─────────────────────────────────────────────────── */
+function BikeIcon({ className = 'h-5 w-5' }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="5.5" cy="16" r="3.5" /><circle cx="18.5" cy="16" r="3.5" />
+      <path d="M5.5 16l4-8h6l3 8M9.5 8L12 16h-6.5M15.5 8l-1.5-3h-2.5" />
+    </svg>
+  )
+}
+
+function StatusPill({ t }) {
+  const s = TRANSFER_STATUS[transferStatus(t)]
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-medium whitespace-nowrap ${s.pill}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />{s.label}
+    </span>
+  )
+}
+
+function CloseBtn({ onClick }) {
+  return (
+    <button type="button" onClick={onClick} aria-label="Fermer" className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+    </button>
+  )
+}
+
+function Modal({ title, onClose, children, size = 'max-w-md' }) {
+  return (
+    <div className="fixed inset-0 z-[400] flex items-start sm:items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
+      <div className={`w-full ${size} rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl`}>
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
+          <span className="text-sm font-semibold text-gray-900 dark:text-white">{title}</span>
+          <CloseBtn onClick={onClose} />
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// Trajet du vélo : magasin qui envoie → magasin qui reçoit (« vous » mis en avant)
+function Route({ senderNom, receiverNom, me }) {
+  const side = (label, nom, isMe, right) => (
+    <div className={`min-w-0 ${right ? 'text-right' : ''}`}>
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-neutral-500">{label}</p>
+      <p className={`text-sm font-semibold truncate ${nom ? 'text-gray-900 dark:text-white' : 'text-gray-300 dark:text-neutral-600'}`}>
+        {nom || 'À choisir'}
+      </p>
+      {isMe && <span className="inline-block mt-0.5 text-[10px] font-bold px-1.5 py-px rounded bg-gray-900 text-white dark:bg-white dark:text-black">VOUS</span>}
+    </div>
+  )
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 rounded-xl bg-gray-50 dark:bg-neutral-800/50 px-3 py-2.5">
+      {side('Envoie le vélo', senderNom, me === 'sender', false)}
+      <div className="flex items-center gap-1 text-gray-400 dark:text-neutral-500" aria-hidden>
+        <BikeIcon className="h-5 w-5" />
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
+      </div>
+      {side('Reçoit le vélo', receiverNom, me === 'receiver', true)}
+    </div>
+  )
+}
+
+// Frise des 4 étapes avec leur date
+function Steps({ t }) {
+  const done = transferProgress(t)
+  const refused = transferStatus(t) === 'refused'
+  const dates = [t.createdAt, t.respondedAt, t.shippedAt, t.completedAt]
+  return (
+    <ol className="grid grid-cols-4 gap-1.5" aria-label="Avancement du transfert">
+      {TRANSFER_STEPS.map((st, i) => {
+        const failed = refused && i === 1
+        const ok = i < done && !failed
+        return (
+          <li key={st.key} className="min-w-0 space-y-1" aria-current={i === done ? 'step' : undefined}>
+            <span className={`block h-1 rounded-full ${failed ? 'bg-red-500' : ok ? 'bg-gray-900 dark:bg-white' : 'bg-gray-200 dark:bg-neutral-700'}`} />
+            <p className={`text-[10px] font-semibold truncate ${failed ? 'text-red-600 dark:text-red-400' : ok ? 'text-gray-700 dark:text-neutral-200' : 'text-gray-400 dark:text-neutral-500'}`}>
+              {failed ? 'Refusé' : st.label}
+            </p>
+            {(ok || failed) && fmtShort(dates[i]) && <p className="text-[10px] text-gray-400 dark:text-neutral-500 -mt-0.5">{fmtShort(dates[i])}</p>}
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+/* ── Comment ça marche ───────────────────────────────────────────────────────── */
+function HowItWorks({ onHide }) {
+  return (
+    <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-gray-900 dark:text-white">Comment se passe un transfert ?</p>
+        <button onClick={onHide} className="text-[11px] font-medium text-gray-400 hover:text-gray-700 dark:hover:text-neutral-200">Masquer</button>
+      </div>
+      <ol className="grid grid-cols-1 sm:grid-cols-4 gap-2 sm:gap-3">
+        {TRANSFER_STEPS.map((st, i) => (
+          <li key={st.key} className="flex sm:flex-col gap-2.5 sm:gap-1.5">
+            <span className="h-6 w-6 shrink-0 grid place-items-center rounded-full bg-gray-900 text-white dark:bg-white dark:text-black text-[11px] font-bold">{i + 1}</span>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-gray-900 dark:text-white">{st.label}</p>
+              <p className="text-[11px] leading-snug text-gray-500 dark:text-neutral-400">{st.help}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
+
 /* ── TransfertForm ────────────────────────────────────────────────────────── */
 function TransfertForm({ onSubmit, onClose, fromMagasinId, fromMagasinNom, magasins, acheteurMode }) {
   const [form, setForm] = useState({
@@ -41,22 +158,20 @@ function TransfertForm({ onSubmit, onClose, fromMagasinId, fromMagasinNom, magas
   })
   const [saving, setSaving] = useState(false)
 
-  const toMagasins = acheteurMode
-    ? magasins.filter(m => m.id !== form.fromMagasinIdAcheteur)
-    : magasins.filter(m => m.id !== fromMagasinId)
+  // Vendeur : il choisit le magasin qui a le vélo (to) ; acheteur : envoyeur (from) et receveur (to)
+  const senderChoices = acheteurMode ? magasins : magasins.filter(m => m.id !== fromMagasinId)
+  const receiverChoices = magasins.filter(m => m.id !== form.fromMagasinIdAcheteur)
+  const nom = id => magasins.find(m => m.id === id)?.nom || ''
 
   function setF(k, v) { setForm(f => ({ ...f, [k]: v })) }
 
   async function handleSubmit(e) {
     e.preventDefault()
     const effectiveFromId = acheteurMode ? form.fromMagasinIdAcheteur : fromMagasinId
-    const effectiveFromNom = acheteurMode
-      ? magasins.find(m => m.id === form.fromMagasinIdAcheteur)?.nom || ''
-      : fromMagasinNom
-    if (!form.modele.trim() || !form.toMagasinId || !effectiveFromId) return
+    const effectiveFromNom = acheteurMode ? nom(form.fromMagasinIdAcheteur) : fromMagasinNom
+    if (!canSubmit) return
     setSaving(true)
     try {
-      const toMagasin = magasins.find(m => m.id === form.toMagasinId)
       await onSubmit({
         modele: form.modele.trim(),
         taille: form.taille.trim() || null,
@@ -65,7 +180,7 @@ function TransfertForm({ onSubmit, onClose, fromMagasinId, fromMagasinNom, magas
         quantite: parseInt(form.quantite) || 1,
         commentaire: form.commentaire.trim() || null,
         toMagasinId: form.toMagasinId,
-        toMagasinNom: toMagasin?.nom || '',
+        toMagasinNom: nom(form.toMagasinId),
         fromMagasinId: effectiveFromId,
         fromMagasinNom: effectiveFromNom,
       })
@@ -73,247 +188,241 @@ function TransfertForm({ onSubmit, onClose, fromMagasinId, fromMagasinNom, magas
     } finally { setSaving(false) }
   }
 
-  const canSubmit = form.modele.trim() && form.toMagasinId && (acheteurMode ? form.fromMagasinIdAcheteur : true)
+  const canSubmit = form.modele.trim() && form.taille.trim() && form.couleur.trim() && form.codeChrono.trim()
+    && form.toMagasinId && (acheteurMode ? form.fromMagasinIdAcheteur : true)
 
   return (
-    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
-          <span className="text-sm font-semibold text-gray-900 dark:text-white">
-            {acheteurMode ? 'Créer un transfert' : 'Nouvelle demande de transfert'}
-          </span>
-          <button onClick={onClose} className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          {acheteurMode && (
+    <Modal title={acheteurMode ? 'Organiser un transfert' : 'Demander un vélo à un autre magasin'} onClose={onClose} size="max-w-lg">
+      <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-4">
+        {/* Trajet */}
+        <div className="space-y-3">
+          {acheteurMode ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="block space-y-1.5">
+                <span className={LABEL}>Magasin qui envoie *</span>
+                <select className="Input h-11 text-sm" value={form.fromMagasinIdAcheteur} onChange={e => setF('fromMagasinIdAcheteur', e.target.value)} required>
+                  <option value="">— Choisir</option>
+                  {senderChoices.map(m => <option key={m.id} value={m.id}>{m.nom}</option>)}
+                </select>
+              </label>
+              <label className="block space-y-1.5">
+                <span className={LABEL}>Magasin qui reçoit *</span>
+                <select className="Input h-11 text-sm" value={form.toMagasinId} onChange={e => setF('toMagasinId', e.target.value)} required>
+                  <option value="">— Choisir</option>
+                  {receiverChoices.map(m => <option key={m.id} value={m.id}>{m.nom}</option>)}
+                </select>
+              </label>
+            </div>
+          ) : (
             <label className="block space-y-1.5">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Magasin envoyeur *</span>
-              <select className="Input h-11 text-sm" value={form.fromMagasinIdAcheteur} onChange={e => setF('fromMagasinIdAcheteur', e.target.value)} required>
-                <option value="">— Sélectionner le magasin qui envoie</option>
-                {magasins.map(m => <option key={m.id} value={m.id}>{m.nom}</option>)}
+              <span className={LABEL}>Magasin qui a le vélo *</span>
+              <select className="Input h-11 text-sm" value={form.toMagasinId} onChange={e => setF('toMagasinId', e.target.value)} required>
+                <option value="">— Choisir le magasin à qui le demander</option>
+                {senderChoices.map(m => <option key={m.id} value={m.id}>{m.nom}</option>)}
               </select>
             </label>
           )}
-          <label className="block space-y-1.5">
-            <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">
-              {acheteurMode ? 'Magasin receveur *' : 'Magasin demandé *'}
-            </span>
-            <select className="Input h-11 text-sm" value={form.toMagasinId} onChange={e => setF('toMagasinId', e.target.value)} required>
-              <option value="">— Sélectionner {acheteurMode ? 'le magasin qui reçoit' : 'un magasin'}</option>
-              {toMagasins.map(m => <option key={m.id} value={m.id}>{m.nom}</option>)}
-            </select>
+          <Route
+            senderNom={acheteurMode ? nom(form.fromMagasinIdAcheteur) : nom(form.toMagasinId)}
+            receiverNom={acheteurMode ? nom(form.toMagasinId) : fromMagasinNom}
+            me={acheteurMode ? null : 'receiver'} />
+        </div>
+
+        <label className="block space-y-1.5">
+          <span className={LABEL}>Modèle *</span>
+          <input className="Input h-11 text-sm" value={form.modele} onChange={e => setF('modele', e.target.value)} placeholder="Ex. SUMMIT 700" required autoFocus />
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="space-y-1.5">
+            <span className={LABEL}>Taille *</span>
+            <input className="Input h-11 text-sm" value={form.taille} onChange={e => setF('taille', e.target.value)} placeholder="Ex. L, 54 cm" required />
           </label>
-          <label className="block space-y-1.5">
-            <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Modèle *</span>
-            <input className="Input h-11 text-sm" value={form.modele} onChange={e => setF('modele', e.target.value)} placeholder="Ex : SUMMIT 700" required autoFocus />
+          <label className="space-y-1.5">
+            <span className={LABEL}>Couleur *</span>
+            <input className="Input h-11 text-sm" value={form.couleur} onChange={e => setF('couleur', e.target.value)} placeholder="Ex. Noir / Bleu" required />
           </label>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="space-y-1.5">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Taille *</span>
-              <input className="Input h-11 text-sm" value={form.taille} onChange={e => setF('taille', e.target.value)} placeholder="Ex : L, XL, 54 cm…" required />
-            </label>
-            <label className="space-y-1.5">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Couleur *</span>
-              <input className="Input h-11 text-sm" value={form.couleur} onChange={e => setF('couleur', e.target.value)} placeholder="Ex : Noir / Bleu" required />
-            </label>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="space-y-1.5">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Code chrono *</span>
-              <input className="Input h-11 text-sm font-mono tracking-wide" value={form.codeChrono} onChange={e => setF('codeChrono', e.target.value)} placeholder="0-284803" required />
-            </label>
-            <label className="space-y-1.5">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Quantité</span>
-              <input type="number" min="1" max="99" className="Input h-11 text-sm" value={form.quantite} onChange={e => setF('quantite', e.target.value)} />
-            </label>
-          </div>
-          <label className="block space-y-1.5">
-            <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Commentaire</span>
-            <textarea className="Input resize-none h-20 text-sm leading-relaxed" placeholder="Informations supplémentaires, urgence, client en attente…" value={form.commentaire} onChange={e => setF('commentaire', e.target.value)} />
+          <label className="space-y-1.5">
+            <span className={LABEL}>Code chrono *</span>
+            <input className="Input h-11 text-sm font-mono tracking-wide" value={form.codeChrono} onChange={e => setF('codeChrono', e.target.value)} placeholder="0-284803" required />
           </label>
-          {acheteurMode && (
-            <div className="rounded-xl bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/30 px-4 py-3">
-              <p className="text-xs text-violet-700 dark:text-violet-300">
-                Les deux magasins recevront une notification pour ce transfert.
-              </p>
-            </div>
-          )}
-          <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="h-9 px-4 rounded-lg text-xs border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800">Annuler</button>
-            <button type="submit" disabled={saving || !canSubmit}
-              className="h-9 px-5 rounded-lg text-xs font-semibold disabled:opacity-50 bg-teal-600 text-white hover:bg-teal-700 transition-colors">
-              {saving ? 'Envoi…' : acheteurMode ? 'Créer le transfert' : 'Envoyer la demande'}
-            </button>
-          </div>
-        </form>
-      </div>
+          <label className="space-y-1.5">
+            <span className={LABEL}>Quantité</span>
+            <input type="number" min="1" max="99" className="Input h-11 text-sm" value={form.quantite} onChange={e => setF('quantite', e.target.value)} />
+          </label>
+        </div>
+        <label className="block space-y-1.5">
+          <span className={LABEL}>Commentaire</span>
+          <textarea className="Input resize-none h-20 text-sm leading-relaxed" placeholder="Client en attente, urgence, précisions…" value={form.commentaire} onChange={e => setF('commentaire', e.target.value)} />
+        </label>
+        <p className="text-[11px] text-gray-500 dark:text-neutral-400">
+          {acheteurMode
+            ? 'Les deux magasins sont prévenus. Le magasin qui envoie confirme d’abord qu’il a bien le vélo.'
+            : 'Le magasin choisi est prévenu et vous répond. S’il accepte, il vous envoie le vélo.'}
+        </p>
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" onClick={onClose} className="h-9 px-4 rounded-lg text-xs border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800">Annuler</button>
+          <button type="submit" disabled={saving || !canSubmit}
+            className="h-9 px-5 rounded-lg text-xs font-semibold disabled:opacity-50 bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100 transition-colors">
+            {saving ? 'Envoi…' : acheteurMode ? 'Créer le transfert' : 'Envoyer la demande'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function Recap({ t }) {
+  const s = transferSides(t)
+  return (
+    <div className="rounded-xl bg-gray-50 dark:bg-neutral-800 p-3.5 space-y-1">
+      <p className="text-sm font-semibold text-gray-900 dark:text-white">{t.modele}{t.quantite > 1 && ` ×${t.quantite}`}</p>
+      {details(t) && <p className="text-xs text-gray-500 dark:text-neutral-400">{details(t)}</p>}
+      <p className="text-xs text-gray-500 dark:text-neutral-400">
+        {s.senderNom} → <span className="font-semibold text-gray-700 dark:text-neutral-200">{s.receiverNom}</span>
+        {s.byAcheteur && ' · demandé par l’acheteur'}
+      </p>
+      {t.commentaire && <p className="text-xs text-gray-500 dark:text-neutral-400 italic border-l-2 border-gray-200 dark:border-neutral-700 pl-2 mt-1">{t.commentaire}</p>}
     </div>
   )
 }
 
-/* ── ReponseModal ─────────────────────────────────────────────────────────── */
+/* ── Réponse du magasin qui a le vélo ─────────────────────────────────────── */
 function ReponseModal({ transfert: t, onClose, onReponse }) {
   const [commentaire, setCommentaire] = useState('')
   const [saving, setSaving] = useState(false)
-  const [conformiteAccepted, setConformiteAccepted] = useState(false)
 
   async function submit(status) {
+    if (status === 'refused' && !commentaire.trim()) return
     setSaving(true)
-    try { await onReponse(t.id, status, commentaire.trim() || null); onClose() }
+    try { await onReponse(t, status, commentaire.trim() || null); onClose() }
     finally { setSaving(false) }
   }
 
   return (
-    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
-          <span className="text-sm font-semibold text-gray-900 dark:text-white">Répondre à la demande</span>
-          <button onClick={onClose} className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+    <Modal title="Avez-vous ce vélo ?" onClose={onClose}>
+      <div className="p-4 sm:p-5 space-y-4">
+        <Recap t={t} />
+        <label className="block space-y-1.5">
+          <span className={LABEL}>Message pour {transferSides(t).receiverNom}</span>
+          <textarea className="Input resize-none h-20 text-sm leading-relaxed"
+            placeholder="Ex. Disponible, envoi lundi · ou : vendu ce matin, désolé"
+            value={commentaire} onChange={e => setCommentaire(e.target.value)} />
+          <span className="block text-[11px] text-gray-400 dark:text-neutral-500">Obligatoire pour un refus : expliquez pourquoi.</span>
+        </label>
+        <div className="flex gap-2">
+          <button onClick={() => submit('refused')} disabled={saving || !commentaire.trim()}
+            title={commentaire.trim() ? '' : 'Écrivez la raison du refus'}
+            className="flex-1 h-10 rounded-xl text-sm font-semibold border border-red-200 text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10 disabled:opacity-50 transition-colors">
+            Refuser
+          </button>
+          <button onClick={() => submit('accepted')} disabled={saving}
+            className="flex-1 h-10 rounded-xl text-sm font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100 disabled:opacity-50 transition-colors">
+            Accepter
           </button>
         </div>
-        <div className="p-5 space-y-4">
-          <div className="rounded-xl bg-gray-50 dark:bg-neutral-800 p-4 space-y-1.5">
-            <p className="text-sm font-semibold text-gray-900 dark:text-white">{t.modele}</p>
-            {(t.taille || t.couleur || t.codeChrono) && (
-              <p className="text-xs text-gray-500 dark:text-neutral-400">
-                {[t.taille, t.couleur, t.codeChrono].filter(Boolean).join(' · ')}
-                {t.quantite > 1 && ` · ×${t.quantite}`}
-              </p>
-            )}
-            <p className="text-xs text-gray-400 dark:text-neutral-500">
-              Demandé par <span className="font-semibold text-gray-700 dark:text-neutral-300">{t.fromMagasinNom}</span>
-            </p>
-            {t.commentaire && (
-              <p className="text-xs text-gray-400 dark:text-neutral-500 italic border-l-2 border-gray-200 dark:border-neutral-700 pl-2 mt-1">{t.commentaire}</p>
-            )}
-          </div>
-          <label className="block space-y-1.5">
-            <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Commentaire</span>
-            <textarea className="Input resize-none h-20 text-sm leading-relaxed"
-              placeholder="Ex : Le vélo est disponible, il sera envoyé lundi…"
-              value={commentaire} onChange={e => setCommentaire(e.target.value)} />
-          </label>
-          <label className="flex items-start gap-3 cursor-pointer select-none rounded-xl border border-gray-200 dark:border-neutral-700 p-3 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors">
-            <input
-              type="checkbox"
-              checked={conformiteAccepted}
-              onChange={e => setConformiteAccepted(e.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-teal-600"
-            />
-            <span className="text-xs text-gray-600 dark:text-neutral-400 leading-relaxed">
-              Je m'engage à la conformité du transfert : le vélo est correctement protégé et tous les accessoires sont inclus dans l'envoi.
-            </span>
-          </label>
-          {!conformiteAccepted && (
-            <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center -mt-2">
-              Cochez la case ci-dessus pour pouvoir accepter le transfert.
-            </p>
-          )}
-          <div className="flex gap-2">
-            <button onClick={() => submit('refused')} disabled={saving}
-              className="flex-1 h-10 rounded-xl text-sm font-semibold border-2 border-red-200 text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10 disabled:opacity-50 transition-colors">
-              ✕ Refuser
-            </button>
-            <button onClick={() => submit('accepted')} disabled={saving || !conformiteAccepted}
-              className="flex-1 h-10 rounded-xl text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-              ✓ Accepter
-            </button>
-          </div>
+        <p className="text-[11px] text-center text-gray-400 dark:text-neutral-500">En acceptant, vous vous engagez à envoyer le vélo.</p>
+      </div>
+    </Modal>
+  )
+}
+
+/* ── Envoi du vélo ────────────────────────────────────────────────────────── */
+function ShipModal({ transfert: t, onClose, onShip }) {
+  const [conforme, setConforme] = useState(false)
+  const [saving, setSaving] = useState(false)
+  async function submit() {
+    setSaving(true)
+    try { await onShip(t); onClose() } finally { setSaving(false) }
+  }
+  return (
+    <Modal title="Marquer le vélo comme envoyé" onClose={onClose}>
+      <div className="p-4 sm:p-5 space-y-4">
+        <Recap t={t} />
+        <label className="flex items-start gap-3 cursor-pointer select-none rounded-xl border border-gray-200 dark:border-neutral-700 p-3 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors">
+          <input type="checkbox" checked={conforme} onChange={e => setConforme(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-gray-900 dark:accent-white" />
+          <span className="text-xs text-gray-600 dark:text-neutral-300 leading-relaxed">
+            Je m’engage à la conformité du transfert : le vélo est correctement protégé et tous les accessoires sont inclus dans l’envoi.
+          </span>
+        </label>
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="h-9 px-4 rounded-lg text-xs border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800">Annuler</button>
+          <button onClick={submit} disabled={saving || !conforme}
+            className="h-9 px-5 rounded-lg text-xs font-semibold disabled:opacity-50 bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
+            {saving ? 'Enregistrement…' : 'Vélo envoyé'}
+          </button>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }
 
 /* ── TransfertCard ────────────────────────────────────────────────────────── */
-function TransfertCard({ t, canRespond, canVeloArrive, canValidateRefus, isUnread, onReponse, onVeloArrive, onValidateRefus }) {
-  const s = STATUS[t.status] || STATUS.pending
+const ACTION_LABELS = { respond: 'Répondre', ship: 'Vélo envoyé', receive: 'Vélo reçu', close: 'Classer la demande' }
+
+function TransfertCard({ t, magasinId, canAct, isAcheteur, isUnread, onAction }) {
+  const s = transferSides(t)
+  const next = transferNextStep(t, { magasinId, canAct, isAcheteur })
+  const showButton = next.action && (next.mine || next.action === 'receive')
 
   return (
     <div className={[
-      'bg-white dark:bg-neutral-900 rounded-xl border p-4 space-y-3 transition-all',
-      isUnread
-        ? 'border-teal-300 dark:border-teal-500/50 shadow-sm shadow-teal-100 dark:shadow-teal-500/10'
-        : 'border-gray-200 dark:border-neutral-800',
+      'bg-white dark:bg-neutral-900 rounded-2xl border p-4 space-y-3 transition-all',
+      next.mine ? 'border-gray-900 dark:border-white/70' : isUnread ? 'border-blue-300 dark:border-blue-500/50' : 'border-gray-200 dark:border-neutral-800',
     ].join(' ')}>
       <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            {isUnread && <span className="h-2 w-2 rounded-full bg-teal-500 shrink-0" />}
-            <p className="text-sm font-semibold text-gray-900 dark:text-white">{t.modele}</p>
+            {isUnread && <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" title="Nouveau" />}
+            <p className="text-sm font-semibold text-gray-900 dark:text-white break-words">{t.modele}</p>
             {t.quantite > 1 && (
               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">×{t.quantite}</span>
             )}
-            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${s.bg}`}>{s.label}</span>
-            {t.createdByAcheteur && (
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300">
-                Acheteur
-              </span>
-            )}
           </div>
-          {(t.taille || t.couleur || t.codeChrono) && (
-            <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
-              {[t.taille, t.couleur, t.codeChrono].filter(Boolean).join(' · ')}
-            </p>
-          )}
+          {details(t) && <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">{details(t)}</p>}
         </div>
-        <p className="text-[11px] text-gray-400 dark:text-neutral-500 shrink-0">{fmtDate(t.createdAt)}</p>
+        <div className="shrink-0 flex flex-col items-end gap-1">
+          <StatusPill t={t} />
+          <span className="text-[10px] text-gray-400 dark:text-neutral-500">
+            {s.byAcheteur ? 'Demandé par l’acheteur' : myTransferRole(t, magasinId) === 'receiver' ? 'Votre demande' : `Demandé par ${s.receiverNom}`}
+          </span>
+        </div>
       </div>
 
-      {t.createdByAcheteur && (
-        <div className="rounded-lg bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/30 px-3 py-2">
-          <p className="text-xs text-violet-700 dark:text-violet-300 font-medium">Transfert initié par l'acheteur</p>
-        </div>
-      )}
-
-      <div className="flex items-center gap-2 text-xs">
-        <span className="font-medium text-gray-700 dark:text-neutral-200">{t.fromMagasinNom}</span>
-        <svg className="h-3.5 w-3.5 text-teal-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-        </svg>
-        <span className="font-medium text-gray-700 dark:text-neutral-200">{t.toMagasinNom}</span>
-      </div>
+      <Route senderNom={s.senderNom} receiverNom={s.receiverNom} me={myTransferRole(t, magasinId)} />
+      <Steps t={t} />
 
       {t.commentaire && (
-        <p className="text-xs text-gray-400 dark:text-neutral-500 italic border-l-2 border-gray-200 dark:border-neutral-700 pl-2">{t.commentaire}</p>
+        <p className="text-xs text-gray-500 dark:text-neutral-400 italic border-l-2 border-gray-200 dark:border-neutral-700 pl-2">{t.commentaire}</p>
       )}
-
       {t.reponseCommentaire && (
         <div className="rounded-lg bg-gray-50 dark:bg-neutral-800 px-3 py-2 space-y-0.5">
-          <p className="text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Réponse</p>
-          <p className="text-xs text-gray-600 dark:text-neutral-300">{t.reponseCommentaire}</p>
+          <p className="text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Réponse de {s.senderNom}</p>
+          <p className="text-xs text-gray-700 dark:text-neutral-300">{t.reponseCommentaire}</p>
         </div>
       )}
 
-      {canRespond && t.status === 'pending' && (
-        <button onClick={() => onReponse(t)}
-          className="w-full h-8 rounded-lg text-xs font-semibold border border-teal-200 text-teal-700 hover:bg-teal-50 dark:border-teal-500/30 dark:text-teal-400 dark:hover:bg-teal-500/10 transition-colors">
-          Répondre à cette demande
-        </button>
-      )}
-
-      {canVeloArrive && (
-        <button onClick={() => onVeloArrive(t)}
-          className="w-full h-8 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">
-          ✓ Vélo arrivé — clôturer le transfert
-        </button>
-      )}
-
-      {canValidateRefus && t.status === 'refused' && (
-        <button onClick={() => onValidateRefus(t)}
-          className="w-full h-8 rounded-lg text-xs font-semibold border border-red-200 text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10 transition-colors">
-          ✓ Valider le refus — supprimer la demande
-        </button>
-      )}
+      {/* Prochaine étape : à qui c'est le tour, et le bouton qui va avec */}
+      <div className={['flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 rounded-xl px-3 py-2.5',
+        next.mine ? 'bg-gray-900 text-white dark:bg-white dark:text-black' : 'bg-gray-50 text-gray-600 dark:bg-neutral-800/60 dark:text-neutral-300'].join(' ')}>
+        <p className="flex-1 text-xs font-medium leading-snug">{next.text}</p>
+        {showButton && (
+          <button onClick={() => onAction(next.action, t)}
+            className={['shrink-0 h-8 px-3 rounded-lg text-xs font-semibold transition-colors',
+              next.mine
+                ? 'bg-white text-gray-900 hover:bg-gray-100 dark:bg-neutral-900 dark:text-white dark:hover:bg-neutral-800'
+                : 'border border-gray-300 text-gray-700 hover:bg-white dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-900'].join(' ')}>
+            {ACTION_LABELS[next.action]}
+          </button>
+        )}
+      </div>
     </div>
   )
 }
 
 /* ── CompletedTransfertRow ────────────────────────────────────────────────── */
 function CompletedTransfertRow({ t }) {
+  const s = transferSides(t)
   return (
     <div className="bg-white dark:bg-neutral-900 rounded-xl border border-gray-200 dark:border-neutral-800 p-3.5 flex items-center gap-3">
       <div className="flex-1 min-w-0">
@@ -322,26 +431,16 @@ function CompletedTransfertRow({ t }) {
           {t.quantite > 1 && (
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">×{t.quantite}</span>
           )}
-          {t.createdByAcheteur && (
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300">Acheteur</span>
-          )}
+          {s.byAcheteur && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 dark:bg-neutral-800 dark:text-neutral-400">Acheteur</span>}
         </div>
-        {(t.taille || t.couleur || t.codeChrono) && (
-          <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">
-            {[t.taille, t.couleur, t.codeChrono].filter(Boolean).join(' · ')}
-          </p>
-        )}
-        <div className="flex items-center gap-1.5 mt-1 text-xs text-gray-500 dark:text-neutral-400">
-          <span>{t.fromMagasinNom}</span>
-          <svg className="h-3 w-3 text-teal-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-          </svg>
-          <span>{t.toMagasinNom}</span>
-        </div>
+        {details(t) && <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">{details(t)}</p>}
+        <p className="mt-1 text-xs text-gray-500 dark:text-neutral-400 truncate">
+          {s.senderNom} <span className="text-gray-300 dark:text-neutral-600">→</span> {s.receiverNom}
+        </p>
       </div>
       <div className="text-right shrink-0 space-y-1">
         <p className="text-[11px] text-gray-400 dark:text-neutral-500">{fmtDate(t.completedAt || t.createdAt)}</p>
-        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">Réalisé</span>
+        <StatusPill t={t} />
       </div>
     </div>
   )
@@ -391,7 +490,7 @@ function RealisesTab({ completed }) {
           onChange={e => setSearch(e.target.value)}
         />
         <select
-          className="Input h-8 text-xs"
+          className="Input h-8 text-xs sm:!w-48"
           value={filterMonth}
           onChange={e => setFilterMonth(e.target.value)}
         >
@@ -421,7 +520,7 @@ function RealisesTab({ completed }) {
           Aucun transfert réalisé trouvé.
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
           {filtered.map(t => <CompletedTransfertRow key={t.id} t={t} />)}
         </div>
       )}
@@ -571,7 +670,8 @@ function StatistiquesTab({ completed }) {
   const storeStats = useMemo(() => {
     const map = {}
     filtered.forEach(t => {
-      if (t.fromMagasinNom) map[t.fromMagasinNom] = (map[t.fromMagasinNom] || 0) + 1
+      const { senderNom } = transferSides(t)
+      if (senderNom) map[senderNom] = (map[senderNom] || 0) + 1
     })
     return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 8)
   }, [filtered])
@@ -598,12 +698,12 @@ function StatistiquesTab({ completed }) {
     <div className="space-y-5">
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard label="Total réalisés" value={completed.length} sub="Depuis le début" color="blue" />
         <StatCard label="Cette année" value={totalThisYear} sub={String(thisYear)} color="teal" trend={yoyGrowth} />
         <StatCard label="Ce mois" value={totalThisMonth} sub={`${MOIS[thisMonth]} ${thisYear}`} color="violet" />
         <StatCard label="Moy. / mois" value={avgPerMonth} sub={`Sur ${thisYear}`} color="amber" />
-        <div className="col-span-2 rounded-2xl bg-gradient-to-br from-gray-50 to-gray-100/50 dark:from-neutral-800/60 dark:to-neutral-800/30 border border-gray-200 dark:border-neutral-700 p-4 flex items-center justify-between gap-4">
+        <div className="col-span-2 lg:col-span-4 rounded-2xl bg-gradient-to-br from-gray-50 to-gray-100/50 dark:from-neutral-800/60 dark:to-neutral-800/30 border border-gray-200 dark:border-neutral-700 p-4 flex items-center justify-between gap-4">
           <div className="space-y-0.5">
             <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Délai moyen de livraison</p>
             <p className="text-xs text-gray-400 dark:text-neutral-500">Entre la demande et la réception du vélo — tous transferts</p>
@@ -629,19 +729,19 @@ function StatistiquesTab({ completed }) {
         <div className="flex items-center justify-between flex-wrap gap-2">
           <p className="text-sm font-semibold text-gray-900 dark:text-white">Analyse par période</p>
           <div className="flex items-center gap-2 flex-wrap">
-            <select className="Input h-8 text-xs px-2" value={periode} onChange={e => setPeriode(e.target.value)}>
+            <select className="Input h-8 text-xs px-2 !w-auto" value={periode} onChange={e => setPeriode(e.target.value)}>
               <option value="mois">Ce mois</option>
               <option value="annee">Par année</option>
               <option value="ytd">Depuis début d'année</option>
               <option value="tout">Tout</option>
             </select>
             {(periode === 'mois' || periode === 'annee') && (
-              <select className="Input h-8 text-xs px-2" value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))}>
+              <select className="Input h-8 text-xs px-2 !w-auto" value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))}>
                 {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
             )}
             {periode === 'mois' && (
-              <select className="Input h-8 text-xs px-2" value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))}>
+              <select className="Input h-8 text-xs px-2 !w-auto" value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))}>
                 {MOIS.map((m, i) => <option key={i} value={i}>{m}</option>)}
               </select>
             )}
@@ -737,32 +837,25 @@ export default function Transfert() {
   const effectiveMagasinId = isGlobal ? selectedId : profile?.magasinId
   const isAcheteur = profile?.role === 'acheteur'
   const isDirecteurMag = profile?.role === 'directeurmag'
+  const canAct = profile?.role === 'velo' // les règles Firestore réservent les réponses au rayon vélo
 
   const canCreate = profile?.role === 'velo' || isAcheteur
   const canSeeRealises = isAcheteur || isDirecteurMag
   const canSeeStats = isAcheteur
 
-  const defaultTab = isGlobal ? 'toutes' : 'recues'
-  const [tab, setTab] = useState(defaultTab)
+  const [tab, setTab] = useState(null) // null : premier onglet où il y a quelque chose à faire
   const [transferts, setTransferts] = useState([])
   const [magasins, setMagasins] = useState([])
   const [showForm, setShowForm] = useState(false)
-  const [activeReponse, setActiveReponse] = useState(null)
-
-  const prevTab = useRef(tab)
-  useEffect(() => {
-    if (tab === 'envoyees' && prevTab.current !== 'envoyees') {
-      const unread = envoyees.filter(t => t.readByFrom === false)
-      if (unread.length > 0)
-        Promise.all(unread.map(t => updateDoc(doc(db, 'transferts', t.id), { readByFrom: true })))
-    }
-    if (tab === 'recues' && prevTab.current !== 'recues') {
-      const unread = recues.filter(t => t.readByTo === false)
-      if (unread.length > 0)
-        Promise.all(unread.map(t => updateDoc(doc(db, 'transferts', t.id), { readByTo: true })))
-    }
-    prevTab.current = tab
+  const [modal, setModal] = useState(null) // { kind: 'respond' | 'ship', t }
+  const [helpHidden, setHelpHidden] = useState(() => {
+    try { return localStorage.getItem(HELP_KEY) === '1' } catch { return false }
   })
+
+  function toggleHelp(hidden) {
+    setHelpHidden(hidden)
+    try { localStorage.setItem(HELP_KEY, hidden ? '1' : '0') } catch { /* stockage indisponible */ }
+  }
 
   useEffect(() => {
     getDocs(collection(db, 'magasins')).then(snap => {
@@ -776,27 +869,57 @@ export default function Transfert() {
     return onSnapshot(q, snap => setTransferts(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [profile])
 
-  // Completed = archived transfers (vélo arrivé)
   const completed = useMemo(() => transferts.filter(t => t.status === 'completed'), [transferts])
-  // Active = all non-completed
   const active = useMemo(() => transferts.filter(t => t.status !== 'completed'), [transferts])
 
-  const recues = useMemo(() => active.filter(t => t.toMagasinId === effectiveMagasinId), [active, effectiveMagasinId])
-  const envoyees = useMemo(() => active.filter(t => t.fromMagasinId === effectiveMagasinId), [active, effectiveMagasinId])
+  const actOpts = { magasinId: effectiveMagasinId, canAct, isAcheteur }
+  const needs = t => transferNextStep(t, actOpts).mine
+  // Ce qui demande une action passe en premier
+  const byUrgency = list => [...list].sort((a, b) => needs(b) - needs(a))
 
-  // Completed visible by directeurmag = their store only; acheteur = all
+  const aEnvoyer = byUrgency(active.filter(t => myTransferRole(t, effectiveMagasinId) === 'sender'))
+  const aRecevoir = byUrgency(active.filter(t => myTransferRole(t, effectiveMagasinId) === 'receiver'))
+  const tous = byUrgency(active)
+
   const completedForUser = useMemo(() =>
     isAcheteur
       ? completed
       : completed.filter(t => t.fromMagasinId === effectiveMagasinId || t.toMagasinId === effectiveMagasinId)
   , [completed, isAcheteur, effectiveMagasinId])
 
-  const pendingRecues = recues.filter(t => t.status === 'pending').length
-  const unreadRecues = recues.filter(t => t.readByTo === false).length
-  const unreadResponses = envoyees.filter(t => t.readByFrom === false && t.status !== 'pending').length
-  const unreadAcheteurEnvoyees = envoyees.filter(t => t.readByFrom === false && t.createdByAcheteur === true && t.status === 'pending').length
+  const count = list => list.filter(needs).length
+  const tabs = [
+    ...(isGlobal ? [{ key: 'tous', label: 'Tous les transferts', badge: count(tous),
+      hint: 'Tous les transferts en cours entre magasins.' }] : []),
+    ...(effectiveMagasinId ? [
+      { key: 'envoyer', label: 'Vélos à envoyer', badge: count(aEnvoyer), list: aEnvoyer,
+        hint: 'Les vélos que d’autres magasins vous demandent : répondez, puis envoyez-les.' },
+      { key: 'recevoir', label: 'Vélos à recevoir', badge: count(aRecevoir), list: aRecevoir,
+        hint: 'Vos demandes et les transferts de l’acheteur : confirmez la réception quand le vélo arrive.' },
+    ] : []),
+    ...(canSeeRealises ? [{ key: 'realises', label: 'Historique', badge: 0, hint: 'Transferts terminés (vélo reçu).' }] : []),
+    ...(canSeeStats ? [{ key: 'stats', label: 'Statistiques', badge: 0 }] : []),
+  ]
+  const firstWithAction = tabs.find(t => t.badge > 0)?.key
+  const currentTab = tabs.some(t => t.key === tab) ? tab : (firstWithAction || tabs[0]?.key)
+  const current = tabs.find(t => t.key === currentTab)
+  const displayed = currentTab === 'tous' ? tous : current?.list || []
+  const isListTab = ['tous', 'envoyer', 'recevoir'].includes(currentTab)
+
+  /* Marque comme lus les transferts affichés du magasin */
+  const unreadIds = displayed.filter(t => { const f = readField(t, effectiveMagasinId); return f && t[f] === false }).map(t => t.id).join(',')
+  useEffect(() => {
+    if (!unreadIds || !canAct) return
+    const timer = setTimeout(() => {
+      displayed.filter(t => unreadIds.split(',').includes(t.id))
+        .forEach(t => updateDoc(doc(db, 'transferts', t.id), { [readField(t, effectiveMagasinId)]: true }).catch(() => {}))
+    }, 1500)
+    return () => clearTimeout(timer)
+  }, [unreadIds]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const magasinNom = magasins.find(m => m.id === effectiveMagasinId)?.nom || ''
+  // L'autre magasin voit la nouveauté (pastille « non lu »)
+  const notifyOther = t => { const f = otherReadField(t, effectiveMagasinId); return f ? { [f]: false } : { readByFrom: false, readByTo: false } }
 
   async function handleCreate(data) {
     const docData = {
@@ -813,166 +936,121 @@ export default function Transfert() {
       docData.readByTo = false
     } else {
       docData.readByFrom = true
+      docData.readByTo = false
     }
     await addDoc(collection(db, 'transferts'), docData)
   }
 
-  async function handleReponse(id, status, commentaire) {
-    await updateDoc(doc(db, 'transferts', id), {
+  async function handleReponse(t, status, commentaire) {
+    await updateDoc(doc(db, 'transferts', t.id), {
       status,
       reponseCommentaire: commentaire ?? null,
       respondedBy: user.uid,
       respondedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-      readByFrom: false,
+      ...notifyOther(t),
     })
   }
 
-  async function handleVeloArrive(t) {
-    if (!confirm(`Confirmer la réception du "${t.modele}" ? Le transfert sera archivé comme réalisé.`)) return
+  async function handleShip(t) {
+    await updateDoc(doc(db, 'transferts', t.id), {
+      status: 'shipped',
+      conformite: true,
+      shippedBy: user.uid,
+      shippedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      ...notifyOther(t),
+    })
+  }
+
+  async function handleReceive(t) {
+    if (!confirm(`Confirmer la réception de « ${t.modele} » ? Le transfert sera terminé.`)) return
     await updateDoc(doc(db, 'transferts', t.id), {
       status: 'completed',
       completedAt: serverTimestamp(),
+      ...(t.respondedAt ? {} : { respondedAt: serverTimestamp() }),
       updatedAt: serverTimestamp(),
       readByFrom: true,
       readByTo: true,
     })
   }
 
-  async function handleValidateRefus(t) {
-    if (!confirm(`Valider le refus et supprimer la demande pour "${t.modele}" ?`)) return
+  async function handleClose(t) {
+    if (!confirm(`Classer la demande refusée pour « ${t.modele} » ? Elle sera supprimée.`)) return
     await deleteDoc(doc(db, 'transferts', t.id))
   }
 
-  function canRespondToTransfert(t) {
-    return profile?.role === 'velo' && t.toMagasinId === effectiveMagasinId
+  function onAction(action, t) {
+    if (action === 'respond' || action === 'ship') setModal({ kind: action, t })
+    else if (action === 'receive') handleReceive(t)
+    else if (action === 'close') handleClose(t)
   }
 
-  function canVeloArrive(t) {
-    return profile?.role === 'velo' && t.fromMagasinId === effectiveMagasinId && t.status === 'accepted'
-  }
-
-  function canValidateRefus(t) {
-    return t.fromMagasinId === effectiveMagasinId && t.status === 'refused'
-  }
-
-  const tabs = [
-    ...(isGlobal ? [{ key: 'toutes', label: 'Tous les transferts', badge: 0 }] : []),
-    { key: 'recues', label: 'Reçues', badge: pendingRecues },
-    { key: 'envoyees', label: 'Envoyées', badge: unreadResponses + unreadAcheteurEnvoyees },
-    ...(canSeeRealises ? [{ key: 'realises', label: 'Réalisés', badge: 0 }] : []),
-    ...(canSeeStats ? [{ key: 'stats', label: 'Statistiques', badge: 0 }] : []),
-  ]
-
-  const displayed = tab === 'toutes' ? active : tab === 'recues' ? recues : envoyees
+  const isUnread = t => { const f = readField(t, effectiveMagasinId); return !!f && t[f] === false }
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
       <Navbar />
-      <main className="flex-1 p-6">
-        <div className="max-w-3xl mx-auto space-y-5">
+      <main className="flex-1 p-4 sm:p-6">
+        <div className="max-w-7xl mx-auto space-y-4 sm:space-y-5">
 
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h1 className="text-lg font-bold text-gray-900 dark:text-white">Transferts vélo</h1>
-              <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">Demandes de transfert de vélos entre magasins</p>
+              <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">
+                Faire venir un vélo d’un autre magasin{magasinNom ? ` · ${magasinNom}` : ''}
+                {helpHidden && <> · <button onClick={() => toggleHelp(false)} className="underline underline-offset-2 hover:text-gray-700 dark:hover:text-neutral-300">Comment ça marche ?</button></>}
+              </p>
             </div>
             {canCreate && (isAcheteur || effectiveMagasinId) && (
               <button onClick={() => setShowForm(true)}
-                className="h-8 px-4 rounded-lg text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700 transition-colors">
-                + {isAcheteur ? 'Créer un transfert' : 'Nouvelle demande'}
+                className="h-9 sm:h-8 px-4 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100 transition-colors">
+                + {isAcheteur ? 'Organiser un transfert' : 'Demander un vélo'}
               </button>
             )}
           </div>
 
-          {/* Tabs */}
+          {!helpHidden && <HowItWorks onHide={() => toggleHelp(true)} />}
+
+          {/* Onglets */}
           <div className="flex items-center gap-1 border-b border-gray-200 dark:border-neutral-800 overflow-x-auto">
             {tabs.map(t => (
               <button key={t.key} onClick={() => setTab(t.key)}
-                className={['h-9 px-4 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap shrink-0',
-                  tab === t.key
-                    ? 'border-teal-600 text-teal-600 dark:border-teal-400 dark:text-teal-400'
+                className={['h-9 px-3 sm:px-4 -mb-px text-xs font-semibold border-b-2 transition-colors whitespace-nowrap shrink-0',
+                  currentTab === t.key
+                    ? 'border-gray-900 text-gray-900 dark:border-white dark:text-white'
                     : 'border-transparent text-gray-400 dark:text-neutral-500 hover:text-gray-700 dark:hover:text-neutral-300',
                 ].join(' ')}>
                 {t.label}
                 {t.badge > 0 && (
-                  <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] bg-red-500 text-white font-bold">{t.badge}</span>
+                  <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] bg-red-500 text-white font-bold" title="À traiter">{t.badge}</span>
                 )}
               </button>
             ))}
           </div>
+          {current?.hint && <p className="text-[11px] text-gray-500 dark:text-neutral-400 -mt-1">{current.hint}</p>}
 
-          {/* ── Stats tab ── */}
-          {tab === 'stats' && canSeeStats && (
-            <StatistiquesTab completed={completed} />
-          )}
+          {currentTab === 'stats' && canSeeStats && <StatistiquesTab completed={completed} />}
+          {currentTab === 'realises' && canSeeRealises && <RealisesTab completed={completedForUser} />}
 
-          {/* ── Réalisés tab ── */}
-          {tab === 'realises' && canSeeRealises && (
-            <RealisesTab completed={completedForUser} />
-          )}
-
-          {/* ── Active tabs (toutes / recues / envoyees) ── */}
-          {(tab === 'toutes' || tab === 'recues' || tab === 'envoyees') && (
-            <>
-              {isGlobal && tab === 'toutes' && active.length > 0 && (
-                <p className="text-[11px] text-gray-400 dark:text-neutral-500">
-                  {active.length} transfert{active.length > 1 ? 's' : ''} actif{active.length > 1 ? 's' : ''} — lecture seule
+          {isListTab && (
+            displayed.length === 0 ? (
+              <div className="text-center py-14 px-4 rounded-2xl border border-dashed border-gray-300 dark:border-neutral-700 space-y-1">
+                <p className="text-sm font-semibold text-gray-700 dark:text-neutral-300">
+                  {currentTab === 'envoyer' ? 'Aucun vélo à envoyer' : currentTab === 'recevoir' ? 'Aucun vélo attendu' : 'Aucun transfert en cours'}
                 </p>
-              )}
-
-              {tab === 'envoyees' && unreadResponses > 0 && (
-                <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-teal-50 dark:bg-teal-500/10 border border-teal-200 dark:border-teal-500/30">
-                  <span className="h-2 w-2 rounded-full bg-teal-500 shrink-0" />
-                  <p className="text-xs font-medium text-teal-700 dark:text-teal-300">
-                    {unreadResponses} réponse{unreadResponses > 1 ? 's' : ''} à consulter
-                  </p>
-                </div>
-              )}
-
-              {tab === 'envoyees' && unreadAcheteurEnvoyees > 0 && (
-                <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/30">
-                  <span className="h-2 w-2 rounded-full bg-violet-500 shrink-0" />
-                  <p className="text-xs font-medium text-violet-700 dark:text-violet-300">
-                    {unreadAcheteurEnvoyees} transfert{unreadAcheteurEnvoyees > 1 ? 's' : ''} initié{unreadAcheteurEnvoyees > 1 ? 's' : ''} par l'acheteur — des vélos sont à envoyer
-                  </p>
-                </div>
-              )}
-
-              {tab === 'recues' && unreadRecues > 0 && (
-                <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/30">
-                  <span className="h-2 w-2 rounded-full bg-violet-500 shrink-0" />
-                  <p className="text-xs font-medium text-violet-700 dark:text-violet-300">
-                    {unreadRecues} transfert{unreadRecues > 1 ? 's' : ''} initié{unreadRecues > 1 ? 's' : ''} par l'acheteur — des vélos sont attendus
-                  </p>
-                </div>
-              )}
-
-              {displayed.length === 0 ? (
-                <div className="text-center py-16 text-sm text-gray-400 dark:text-neutral-500">
-                  {tab === 'recues' ? 'Aucune demande reçue.' : tab === 'envoyees' ? 'Aucune demande envoyée.' : 'Aucun transfert actif.'}
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {displayed.map(t => (
-                    <TransfertCard
-                      key={t.id}
-                      t={t}
-                      canRespond={canRespondToTransfert(t)}
-                      canVeloArrive={canVeloArrive(t)}
-                      canValidateRefus={canValidateRefus(t)}
-                      isUnread={
-                        (t.fromMagasinId === effectiveMagasinId && t.readByFrom === false) ||
-                        (t.toMagasinId === effectiveMagasinId && t.readByTo === false)
-                      }
-                      onReponse={setActiveReponse}
-                      onVeloArrive={handleVeloArrive}
-                      onValidateRefus={handleValidateRefus}
-                    />
-                  ))}
-                </div>
-              )}
-            </>
+                <p className="text-xs text-gray-400 dark:text-neutral-500">
+                  {currentTab === 'recevoir' && canCreate ? 'Il vous manque un vélo ? Demandez-le à un autre magasin.' : 'Rien à faire pour le moment.'}
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
+                {displayed.map(t => (
+                  <TransfertCard key={t.id} t={t} magasinId={effectiveMagasinId} canAct={canAct} isAcheteur={isAcheteur}
+                    isUnread={isUnread(t)} onAction={onAction} />
+                ))}
+              </div>
+            )
           )}
         </div>
       </main>
@@ -988,13 +1066,8 @@ export default function Transfert() {
         />
       )}
 
-      {activeReponse && (
-        <ReponseModal
-          transfert={activeReponse}
-          onClose={() => setActiveReponse(null)}
-          onReponse={handleReponse}
-        />
-      )}
+      {modal?.kind === 'respond' && <ReponseModal transfert={modal.t} onClose={() => setModal(null)} onReponse={handleReponse} />}
+      {modal?.kind === 'ship' && <ShipModal transfert={modal.t} onClose={() => setModal(null)} onShip={handleShip} />}
     </div>
   )
 }
