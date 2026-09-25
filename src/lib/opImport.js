@@ -34,7 +34,7 @@ export function parsePrice(v) {
 }
 
 export const SEGMENT_LABELS = {
-  velo: 'Vélo', trottinette: 'Trottinette', roller: 'Roller', accessoires: 'Accessoires', textile: 'Textile',
+  velo_pp: 'Vélos PP', velo: 'Vélo', trottinette: 'Trottinette', roller: 'Roller', accessoires: 'Accessoires', textile: 'Textile',
 }
 
 // « ACCESSOIRE DU VELO » → accessoires (à tester avant « vélo »), « HABILLEMENT » → textile…
@@ -42,6 +42,7 @@ export function normSegment(v) {
   const s = normName(v)
   if (!s) return null
   if (/accessoire/.test(s)) return 'accessoires'
+  if (/velos?[ _-]?pp\b/.test(s)) return 'velo_pp'
   if (/habillement|textile|vetement/.test(s)) return 'textile'
   if (/trottinette|scooter/.test(s)) return 'trottinette'
   if (/roller/.test(s)) return 'roller'

@@ -444,6 +444,11 @@ function CatalogueSection({ canCreate, engagesOnly = false }) {
   const [showImport, setShowImport] = useState(false)
   const [edit, setEdit] = useState(null) // null | {} (ajout) | produit
   const [ilv, setIlv] = useState(null)
+  const [bonPlans, setBonPlans] = useState(new Map()) // id (chrono) → prix bon plan
+
+  useEffect(() => onSnapshot(collection(db, BON_PLAN_COLLECTION),
+    snap => setBonPlans(new Map(snap.docs.map(d => [d.id, d.get('prixBonPlan')]))),
+    () => {}), [])
 
   useEffect(() => {
     const q = engagesOnly
@@ -549,9 +554,12 @@ function CatalogueSection({ canCreate, engagesOnly = false }) {
                   <td className="px-4 py-2.5 text-gray-500 dark:text-neutral-400">{p.marque || '—'}</td>
                   <td className="px-4 py-2.5 whitespace-nowrap">{p.prixFort != null ? formatEuro(p.prixFort) : <span className="text-amber-600 dark:text-amber-400">à saisir</span>}</td>
                   <td className="px-4 py-2.5 whitespace-nowrap">{p.pack ? PACK_COURT[p.pack] : <span className="text-amber-600 dark:text-amber-400">à choisir</span>}</td>
-                  <td className="px-4 py-2.5 whitespace-nowrap">
+                  <td className="px-4 py-2.5 whitespace-nowrap space-x-1">
                     {p.prixEngage != null && (
                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-700 text-white">Prix engagé {formatEuro(p.prixEngage)}</span>
+                    )}
+                    {bonPlans.get(bonPlanDocId({ chrono: p.chrono })) != null && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-600 text-white">Bon plan {formatEuro(bonPlans.get(bonPlanDocId({ chrono: p.chrono })))}</span>
                     )}
                   </td>
                   <td className="px-4 py-2.5 text-right" onClick={e => e.stopPropagation()}>
