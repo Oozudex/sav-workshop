@@ -83,11 +83,17 @@ function SpecialPrice({ checked, onToggle, title, description, color, price, onP
  * Prix fort et pack servent aux ILV. Prix engagé : l'ILV sort toujours en prix engagé.
  * Prix bon plan : le vélo est ajouté (ou retiré) de la liste des prix bon plan.
  * produits : base actuelle, pour refuser un chrono déjà utilisé.
+ * Sans `produit.id`, c'est un ajout : `produit` peut pré-remplir la fiche (vélo de la liste des prix bon plan
+ * pas encore dans la base) ; `start` : 'engage' ou 'bonPlan' pour démarrer avec ce prix spécial activé.
  */
-export default function CatalogueProductModal({ produit, produits, onClose }) {
+export default function CatalogueProductModal({ produit, produits, start, onClose }) {
   const edit = !!produit?.id
-  const oldBonPlanId = edit ? bonPlanDocId({ chrono: produit.chrono }) : null
-  const [form, setForm] = useState(() => catalogueFormValues(produit))
+  // Prix bon plan déjà enregistré pour ce chrono (fiche existante, ou vélo venu de la liste des prix bon plan)
+  const oldBonPlanId = produit?.chrono ? bonPlanDocId({ chrono: produit.chrono }) : null
+  const [form, setForm] = useState(() => ({
+    ...catalogueFormValues(produit),
+    ...(start === 'engage' ? { engage: true } : start === 'bonPlan' ? { bonPlan: true } : {}),
+  }))
   const [bonPlanLoaded, setBonPlanLoaded] = useState(!oldBonPlanId)
   const [hadBonPlan, setHadBonPlan] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -161,7 +167,11 @@ export default function CatalogueProductModal({ produit, produits, onClose }) {
         <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-100 dark:border-neutral-800 shrink-0">
           <div>
             <h2 id="produit-title" className="text-sm font-semibold text-gray-900 dark:text-white">{edit ? 'Modifier le produit' : 'Ajouter un produit'}</h2>
-            <p className="text-[11px] text-gray-400 dark:text-neutral-500">{edit ? `${produit.nom} · ${produit.chrono || 'sans chrono'}` : 'Nouveau vélo dans la base de données'}</p>
+            <p className="text-[11px] text-gray-400 dark:text-neutral-500">
+              {edit ? `${produit.nom} · ${produit.chrono || 'sans chrono'}`
+                : produit?.chrono ? 'Ce vélo n’est pas encore dans la base de données : l’enregistrer l’y ajoute.'
+                : 'Nouveau vélo dans la base de données'}
+            </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Fermer" className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>

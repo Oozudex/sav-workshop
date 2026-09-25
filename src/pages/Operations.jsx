@@ -6,7 +6,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { db } from '../lib/firebase'
 import {
   collection, onSnapshot, query, orderBy, where,
-  addDoc, updateDoc, deleteDoc, doc, serverTimestamp,
+  addDoc, updateDoc, doc, serverTimestamp,
   writeBatch, getDocs, getCountFromServer,
 } from 'firebase/firestore'
 import { GLOBAL_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
@@ -432,98 +432,160 @@ function IlvButton({ onClick, title = 'Télécharger l’ILV', disabled }) {
   )
 }
 
-function CatalogueSection({ canCreate, engagesOnly = false }) {
+const segmentLabel = s => SEGMENT_LABELS[s] || s
+
+// Prix bon plan vu comme un produit (vélo de la liste des prix bon plan absent de la base de données)
+const bonPlanAsProduit = b => ({
+  nom: b.nom, marque: b.marque, chrono: b.chrono, couleur: b.couleur, segment: b.segment,
+  reference: b.refFournisseur || null, prixFort: b.prixFort ?? null, pack: null, prixEngage: null,
+})
+
+const SECTION_TEXTS = {
+  catalogue: {
+    titre: canCreate => (canCreate ? 'Base de données' : 'Tous les vélos'),
+    sousTitre: (n, canCreate) => `${n} vélo${n > 1 ? 's' : ''} en stock dans le groupe${canCreate ? ' : prix fort, pack optionnel et prix spéciaux' : ''}`,
+    vide: canCreate => `Base de données vide.${canCreate ? ' Importez le listing stock ou ajoutez un produit.' : ''}`,
+  },
+  engages: {
+    titre: () => 'Prix engagés',
+    sousTitre: n => `Vélos dont l’ILV sort toujours en prix engagé (${n})`,
+    vide: () => 'Aucun vélo en prix engagé. Active « Prix engagé » dans la fiche d’un vélo.',
+  },
+  bonplan: {
+    titre: () => 'Prix bon plan',
+    sousTitre: n => `Prix réservés aux porteurs de la carte fidélité (${n})`,
+    vide: canCreate => `Aucun prix bon plan.${canCreate ? ' Active « Prix bon plan » dans la fiche d’un vélo, ou importez un fichier Excel.' : ''}`,
+  },
+}
+
+/**
+ * Liste commune aux onglets « Base de données », « Prix engagés » et « Prix bon plan » :
+ * mêmes colonnes, même fiche de modification (CatalogueProductModal), même affichage sur téléphone.
+ * mode : 'catalogue' | 'engages' | 'bonplan'.
+ */
+function ProduitsSection({ canCreate, mode }) {
   const [produits, setProduits] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [bonPlanDocs, setBonPlanDocs] = useState([])
+  const [loaded, setLoaded] = useState({ produits: false, bonPlans: false })
   const [error, setError] = useState(false)
   const [search, setSearch] = useState('')
-  const [showImport, setShowImport] = useState(false)
-  const [edit, setEdit] = useState(null) // null | {} (ajout) | produit
-  const [ilv, setIlv] = useState(null)
-  const [bonPlans, setBonPlans] = useState(new Map()) // id (chrono) → prix bon plan
-
-  useEffect(() => onSnapshot(collection(db, BON_PLAN_COLLECTION),
-    snap => setBonPlans(new Map(snap.docs.map(d => [d.id, d.get('prixBonPlan')]))),
-    () => {}), [])
-
-  useEffect(() => {
-    const q = engagesOnly
-      ? query(collection(db, 'catalogue_produits'), where('prixEngage', '!=', null))
-      : collection(db, 'catalogue_produits')
-    return onSnapshot(q,
-      snap => {
-        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-        data.sort((a, b) => (a.nom || '').localeCompare(b.nom || '', 'fr'))
-        setProduits(data)
-        setLoading(false)
-      },
-      () => { setError(true); setLoading(false) },
-    )
-  }, [engagesOnly])
-
   const [filtre, setFiltre] = useState('') // '' | 'incomplets' | 'engages' | 'bonplan'
   const [marque, setMarque] = useState('')
-  const bonPlanOf = p => bonPlans.get(bonPlanDocId({ chrono: p.chrono }))
-  const incomplet = p => p.prixFort == null || !p.pack
+  const [segment, setSegment] = useState('')
+  const [showImport, setShowImport] = useState(false)
+  const [edit, setEdit] = useState(null) // null | { produit, start } (fiche produit) | { bonPlan } (prix sans chrono)
+  const [ilv, setIlv] = useState(null)
+  const texts = SECTION_TEXTS[mode]
+
+  useEffect(() => onSnapshot(collection(db, BON_PLAN_COLLECTION),
+    snap => { setBonPlanDocs(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setLoaded(l => ({ ...l, bonPlans: true })) },
+    () => { setError(true); setLoaded(l => ({ ...l, bonPlans: true })) }), [])
+
+  // Toute la base, même pour les prix engagés : la fiche vérifie qu'un chrono n'existe pas déjà
+  useEffect(() => onSnapshot(collection(db, 'catalogue_produits'),
+    snap => { setProduits(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setLoaded(l => ({ ...l, produits: true })) },
+    () => { setError(true); setLoaded(l => ({ ...l, produits: true })) }), [])
+  const loading = !loaded.produits || !loaded.bonPlans
+
+  // Une ligne = un produit (v : ce qu'on affiche) et son prix bon plan éventuel
+  const rows = useMemo(() => {
+    const bonPlanById = new Map(bonPlanDocs.map(b => [b.id, b]))
+    const list = mode === 'bonplan'
+      ? (() => {
+          const byChrono = new Map(produits.map(p => [bonPlanDocId({ chrono: p.chrono }), p]))
+          return bonPlanDocs.map(b => {
+            const p = byChrono.get(b.id) || null
+            return { key: b.id, p, bp: b, v: p || bonPlanAsProduit(b) }
+          })
+        })()
+      : produits.filter(p => mode !== 'engages' || p.prixEngage != null)
+        .map(p => ({ key: p.id, p, bp: bonPlanById.get(bonPlanDocId({ chrono: p.chrono })) || null, v: p }))
+    return list.sort((a, b) => (a.v.nom || '').localeCompare(b.v.nom || '', 'fr'))
+  }, [mode, produits, bonPlanDocs])
+
+  const incomplet = r => !r.p || r.p.prixFort == null || !r.p.pack
   const FILTRES = {
     incomplets: incomplet,
-    engages: p => p.prixEngage != null,
-    bonplan: p => bonPlanOf(p) != null,
+    engages: r => r.v.prixEngage != null,
+    bonplan: r => r.bp?.prixBonPlan != null,
   }
-  const marques = useMemo(() => [...new Set(produits.map(p => p.marque).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr')), [produits])
+  const marques = useMemo(() => [...new Set(rows.map(r => r.v.marque).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr')), [rows])
+  const segments = useMemo(() => [...new Set(rows.map(r => normSegment(r.v.segment)).filter(Boolean))]
+    .sort((a, b) => segmentLabel(a).localeCompare(segmentLabel(b), 'fr')), [rows])
 
   const filtered = useMemo(() => {
     const words = normName(search).split(' ').filter(Boolean)
-    return produits.filter(p => {
-      if (filtre && !FILTRES[filtre](p)) return false
-      if (marque && p.marque !== marque) return false
+    return rows.filter(r => {
+      if (filtre && !FILTRES[filtre](r)) return false
+      if (marque && r.v.marque !== marque) return false
+      if (segment && normSegment(r.v.segment) !== segment) return false
       if (!words.length) return true
-      const text = normName([p.nom, p.marque, p.reference, p.chrono, p.couleur].join(' '))
+      const text = normName([r.v.nom, r.v.marque, r.v.reference, r.v.chrono, r.v.couleur, r.bp?.refFournisseur].join(' '))
       return words.every(w => text.includes(w))
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [produits, search, filtre, marque, bonPlans])
+  }, [rows, search, filtre, marque, segment])
 
-  const count = f => produits.filter(FILTRES[f]).length
-  const chips = engagesOnly ? [] : [
-    ['', `Tous (${produits.length})`],
+  const count = f => rows.filter(FILTRES[f]).length
+  const chips = mode !== 'catalogue' ? [] : [
+    ['', `Tous (${rows.length})`],
     ...(canCreate ? [['incomplets', `À compléter (${count('incomplets')})`]] : []),
     ['engages', `Prix engagé (${count('engages')})`],
     ['bonplan', `Bon plan (${count('bonplan')})`],
   ]
 
-  async function handleClear() {
-    if (!confirm(`Supprimer toute la base de données (${produits.length} produits), y compris les prix et packs saisis ? Cette action est irréversible.`)) return
-    for (let i = 0; i < produits.length; i += 450) {
+  // Clic sur une ligne : fiche du produit ; vélo seulement dans la liste des prix bon plan : fiche pré-remplie
+  function open(r) {
+    if (r.p) setEdit({ produit: r.p })
+    else if (r.bp?.chrono) setEdit({ produit: bonPlanAsProduit(r.bp), start: 'bonPlan' })
+    else setEdit({ bonPlan: r.bp })
+  }
+  function ilvFor(r) {
+    const preferredType = r.v.prixEngage != null ? 'engage' : mode === 'bonplan' ? 'bonplan' : 'normal'
+    setIlv({ sources: [r.p ? catalogueSource(r.p) : bonPlanSource(r.bp)], initialKey: r.p ? r.p.id : r.bp.id, preferredType })
+  }
+
+  async function clearAll() {
+    const bonPlan = mode === 'bonplan'
+    const list = bonPlan ? bonPlanDocs : produits
+    const what = bonPlan ? `tous les prix bon plan (${list.length})` : `toute la base de données (${list.length} produits), y compris les prix et packs saisis`
+    if (!confirm(`Supprimer ${what} ? Cette action est irréversible.`)) return
+    const col = bonPlan ? BON_PLAN_COLLECTION : 'catalogue_produits'
+    for (let i = 0; i < list.length; i += 450) {
       const batch = writeBatch(db)
-      produits.slice(i, i + 450).forEach(p => batch.delete(doc(db, 'catalogue_produits', p.id)))
+      list.slice(i, i + 450).forEach(x => batch.delete(doc(db, col, x.id)))
       await batch.commit()
     }
   }
 
-  const titre = engagesOnly ? 'Prix engagés' : canCreate ? 'Base de données' : 'Tous les vélos'
+  const badges = r => (
+    <>
+      {r.v.prixEngage != null && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-700 text-white whitespace-nowrap">Engagé {formatEuro(r.v.prixEngage)}</span>}
+      {r.bp?.prixBonPlan != null && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-600 text-white whitespace-nowrap">Bon plan {formatEuro(r.bp.prixBonPlan)}</span>}
+      {!r.p && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border border-gray-200 text-gray-500 dark:border-neutral-700 dark:text-neutral-400 whitespace-nowrap">Hors base</span>}
+    </>
+  )
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white">{titre}</h2>
-          <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">
-            {loading ? 'Chargement…' : engagesOnly
-              ? `Vélos dont l’ILV sort toujours en prix engagé (${produits.length})`
-              : `${produits.length} vélo${produits.length > 1 ? 's' : ''} en stock dans le groupe${canCreate ? ' : prix fort, pack optionnel et prix spéciaux' : ''}`}
-          </p>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-white">{texts.titre(canCreate)}</h2>
+          <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">{loading ? 'Chargement…' : texts.sousTitre(rows.length, canCreate)}</p>
         </div>
-        {canCreate && !engagesOnly && (
+        {canCreate && (
           <div className="flex items-center gap-2">
-            <button onClick={() => setEdit({})}
+            <button onClick={() => setEdit({ produit: null, start: mode === 'engages' ? 'engage' : mode === 'bonplan' ? 'bonPlan' : undefined })}
               className="h-9 px-3 rounded-lg text-xs font-medium border border-gray-200 dark:border-neutral-700 text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors">
               + Ajouter
             </button>
-            <button onClick={() => setShowImport(true)}
-              className="h-9 px-4 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
-              Importer Excel
-            </button>
-            {produits.length > 0 && <ActionsMenu items={[{ label: 'Tout supprimer…', onClick: handleClear, danger: true }]} />}
+            {mode !== 'engages' && (
+              <button onClick={() => setShowImport(true)}
+                className="h-9 px-4 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
+                Importer Excel
+              </button>
+            )}
+            {mode !== 'engages' && rows.length > 0 && <ActionsMenu items={[{ label: 'Tout supprimer…', onClick: clearAll, danger: true }]} />}
           </div>
         )}
       </div>
@@ -533,14 +595,16 @@ function CatalogueSection({ canCreate, engagesOnly = false }) {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher par nom, référence, chrono, couleur…"
             className="w-full h-9 pl-9 pr-4 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-white/10" />
         </div>
-        {marques.length > 1 && (
-          <select value={marque} onChange={e => setMarque(e.target.value)} aria-label="Marque"
-            className={['h-9 pl-3 pr-7 rounded-xl border text-xs outline-none cursor-pointer',
-              marque ? 'border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-black' : 'border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-gray-700 dark:text-neutral-300'].join(' ')}>
-            <option value="">Toutes les marques</option>
-            {marques.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-        )}
+        {[[segments, segment, setSegment, 'Tous les segments', segmentLabel, 'Segment'], [marques, marque, setMarque, 'Toutes les marques', m => m, 'Marque']]
+          .filter(([list]) => list.length > 1)
+          .map(([list, value, setValue, all, label, aria]) => (
+            <select key={aria} value={value} onChange={e => setValue(e.target.value)} aria-label={aria}
+              className={['h-9 pl-3 pr-7 rounded-xl border text-xs outline-none cursor-pointer',
+                value ? 'border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-black' : 'border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-gray-700 dark:text-neutral-300'].join(' ')}>
+              <option value="">{all}</option>
+              {list.map(x => <option key={x} value={x}>{label(x)}</option>)}
+            </select>
+          ))}
       </div>
       {chips.length > 0 && !loading && (
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -559,10 +623,8 @@ function CatalogueSection({ canCreate, engagesOnly = false }) {
         <div className="text-center py-12 text-sm text-gray-400">Chargement…</div>
       ) : error ? (
         <div className="text-center py-12 text-sm text-red-500">Impossible de charger la liste. Recharge la page.</div>
-      ) : produits.length === 0 ? (
-        <div className="text-center py-12 text-sm text-gray-400 dark:text-neutral-500">
-          {engagesOnly ? 'Aucun vélo en prix engagé. L’acheteur le coche dans la fiche du produit (Base de données).' : `Base de données vide.${canCreate ? ' Importez le listing stock ou ajoutez un produit.' : ''}`}
-        </div>
+      ) : rows.length === 0 ? (
+        <div className="text-center py-12 text-sm text-gray-400 dark:text-neutral-500">{texts.vide(canCreate)}</div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-12 text-sm text-gray-400 dark:text-neutral-500">Aucun vélo ne correspond.</div>
       ) : (
@@ -570,71 +632,66 @@ function CatalogueSection({ canCreate, engagesOnly = false }) {
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-gray-100 dark:border-neutral-800 bg-gray-50/50 dark:bg-neutral-800/30 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
-                <th className="px-4 py-3 text-left">Produit</th>
-                <th className="px-4 py-3 text-left hidden sm:table-cell">Réf. / chrono</th>
-                <th className="px-4 py-3 text-left hidden md:table-cell">Marque</th>
-                <th className="px-4 py-3 text-left whitespace-nowrap">Prix fort</th>
-                <th className="px-4 py-3 text-left hidden md:table-cell">Pack</th>
-                <th className="px-4 py-3 text-left whitespace-nowrap hidden sm:table-cell">Prix spéciaux</th>
-                <th className="px-4 py-3" />
+                <th className="px-3 sm:px-4 py-3 text-left">Produit</th>
+                <th className="px-3 sm:px-4 py-3 text-left hidden sm:table-cell">Réf. / chrono</th>
+                <th className="px-3 sm:px-4 py-3 text-left hidden md:table-cell">Marque</th>
+                <th className="px-3 sm:px-4 py-3 text-left whitespace-nowrap">Prix fort</th>
+                <th className="px-3 sm:px-4 py-3 text-left hidden md:table-cell">Pack</th>
+                <th className="px-3 sm:px-4 py-3 text-left whitespace-nowrap hidden sm:table-cell">Prix spéciaux</th>
+                <th className="px-3 sm:px-4 py-3" />
               </tr>
             </thead>
             <tbody>
-              {filtered.slice(0, 200).map(p => (
-                <tr key={p.id} onClick={canCreate ? () => setEdit(p) : undefined}
-                  className={['border-b last:border-0 border-gray-100 dark:border-neutral-800 align-top group', canCreate ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-neutral-800/50' : ''].join(' ')}>
-                  <td className="px-4 py-2.5">
-                    <p className="font-medium text-gray-900 dark:text-white">{p.nom || '—'}</p>
-                    <p className="text-[11px] text-gray-400 dark:text-neutral-500">{p.couleur || 'Sans couleur'}<span className="md:hidden">{p.marque ? ` · ${p.marque}` : ''}</span></p>
-                    {(p.prixEngage != null || bonPlanOf(p) != null) && (
-                      <div className="sm:hidden mt-1 flex flex-wrap gap-1">
-                        {p.prixEngage != null && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-700 text-white">Engagé {formatEuro(p.prixEngage)}</span>}
-                        {bonPlanOf(p) != null && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-600 text-white">Bon plan {formatEuro(bonPlanOf(p))}</span>}
+              {filtered.slice(0, 200).map(r => {
+                const { v } = r
+                // Prix fort de la fiche, sinon celui du prix bon plan ; le pack manquant se choisit dans la fenêtre ILV
+                const prixFort = v.prixFort ?? r.bp?.prixFort ?? null
+                const ilvOff = prixFort == null
+                return (
+                  <tr key={r.key} onClick={canCreate ? () => open(r) : undefined}
+                    className={['border-b last:border-0 border-gray-100 dark:border-neutral-800 align-top', canCreate ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-neutral-800/50' : ''].join(' ')}>
+                    <td className="px-3 sm:px-4 py-2.5">
+                      <p className="font-medium text-gray-900 dark:text-white">{v.nom || '—'}</p>
+                      <p className="text-[11px] text-gray-400 dark:text-neutral-500">{v.couleur || 'Sans couleur'}<span className="md:hidden">{v.marque ? ` · ${v.marque}` : ''}</span></p>
+                      <div className="sm:hidden mt-1 flex flex-wrap gap-1">{badges(r)}</div>
+                    </td>
+                    <td className="px-3 sm:px-4 py-2.5 hidden sm:table-cell font-mono">
+                      <p className="text-gray-700 dark:text-neutral-300 whitespace-nowrap">{v.reference || '—'}</p>
+                      <p className="text-[10px] text-gray-400 dark:text-neutral-500 max-w-[11rem] break-words">{v.chrono || '—'}</p>
+                    </td>
+                    <td className="px-3 sm:px-4 py-2.5 hidden md:table-cell text-gray-500 dark:text-neutral-400">{v.marque || '—'}</td>
+                    <td className="px-3 sm:px-4 py-2.5 whitespace-nowrap">{prixFort != null ? formatEuro(prixFort) : <span className="text-amber-600 dark:text-amber-400">à saisir</span>}</td>
+                    <td className="px-3 sm:px-4 py-2.5 hidden md:table-cell whitespace-nowrap">{v.pack ? PACK_COURT[v.pack] : <span className="text-amber-600 dark:text-amber-400">à choisir</span>}</td>
+                    <td className="px-3 sm:px-4 py-2.5 hidden sm:table-cell"><div className="flex flex-col items-start gap-1">{badges(r)}</div></td>
+                    <td className="pl-1 pr-3 sm:px-4 py-2.5" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1">
+                        {canCreate && (
+                          <button onClick={() => open(r)} aria-label={`Modifier ${v.nom}`} title="Modifier"
+                            className="h-7 w-7 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800">
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                          </button>
+                        )}
+                        <IlvButton disabled={ilvOff} title={ilvOff ? 'Prix fort à compléter par l’acheteur' : 'Télécharger l’ILV'} onClick={() => ilvFor(r)} />
                       </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-2.5 hidden sm:table-cell font-mono whitespace-nowrap">
-                    <p className="text-gray-700 dark:text-neutral-300">{p.reference || '—'}</p>
-                    <p className="text-[10px] text-gray-400 dark:text-neutral-500">{p.chrono || '—'}</p>
-                  </td>
-                  <td className="px-4 py-2.5 hidden md:table-cell text-gray-500 dark:text-neutral-400">{p.marque || '—'}</td>
-                  <td className="px-4 py-2.5 whitespace-nowrap">{p.prixFort != null ? formatEuro(p.prixFort) : <span className="text-amber-600 dark:text-amber-400">à saisir</span>}</td>
-                  <td className="px-4 py-2.5 hidden md:table-cell whitespace-nowrap">{p.pack ? PACK_COURT[p.pack] : <span className="text-amber-600 dark:text-amber-400">à choisir</span>}</td>
-                  <td className="px-4 py-2.5 hidden sm:table-cell">
-                    <div className="flex flex-col items-start gap-1">
-                      {p.prixEngage != null && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-700 text-white whitespace-nowrap">Engagé {formatEuro(p.prixEngage)}</span>
-                      )}
-                      {bonPlanOf(p) != null && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-600 text-white whitespace-nowrap">Bon plan {formatEuro(bonPlanOf(p))}</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
-                    <div className="flex items-center justify-end gap-1">
-                      {canCreate && (
-                        <button onClick={() => setEdit(p)} aria-label={`Modifier ${p.nom}`} title="Modifier"
-                          className="h-7 w-7 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800">
-                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                        </button>
-                      )}
-                      <IlvButton disabled={incomplet(p)} title={incomplet(p) ? 'Prix fort ou pack à compléter par l’acheteur' : 'Télécharger l’ILV'}
-                        onClick={() => setIlv({ sources: [catalogueSource(p)], initialKey: p.id, preferredType: p.prixEngage != null ? 'engage' : 'normal' })} />
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
           {filtered.length > 200 && (
-            <div className="px-4 py-2 text-[11px] text-gray-400 bg-gray-50 dark:bg-neutral-800/30 border-t border-gray-100 dark:border-neutral-800">
+            <div className="px-3 sm:px-4 py-2 text-[11px] text-gray-400 bg-gray-50 dark:bg-neutral-800/30 border-t border-gray-100 dark:border-neutral-800">
               200 premiers sur {filtered.length} : affinez la recherche ou les filtres
             </div>
           )}
         </div>
       )}
-      {showImport && <CatalogueImportModal catalogueCount={produits.length} onClose={() => setShowImport(false)} />}
-      {edit && <CatalogueProductModal produit={edit.id ? edit : null} produits={produits} onClose={() => setEdit(null)} />}
+      {showImport && mode === 'catalogue' && <CatalogueImportModal catalogueCount={produits.length} onClose={() => setShowImport(false)} />}
+      {showImport && mode === 'bonplan' && <BonPlanImportModal items={bonPlanDocs} onClose={() => setShowImport(false)} />}
+      {edit?.bonPlan && <AddBonPlanModal items={bonPlanDocs} initial={edit.bonPlan} onClose={() => setEdit(null)} />}
+      {edit && !edit.bonPlan && (
+        <CatalogueProductModal produit={edit.produit} start={edit.start} produits={produits} onClose={() => setEdit(null)} />
+      )}
       {ilv && <IlvDialog {...ilv} onClose={() => setIlv(null)} />}
     </div>
   )
@@ -884,162 +941,6 @@ function AddBonPlanModal({ items, initial, onClose }) {
           </div>
         </form>
       </div>
-    </div>
-  )
-}
-
-const segmentLabel = s => SEGMENT_LABELS[s] || s
-
-function BonPlanSection({ canCreate }) {
-  const [items, setItems] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
-  const [search, setSearch] = useState('')
-  const [segmentFilter, setSegmentFilter] = useState('')
-  const [showImport, setShowImport] = useState(false)
-  const [showAdd, setShowAdd] = useState(null) // null | {} (ajout) | prix bon plan à modifier
-  const [ilv, setIlv] = useState(null)
-
-  useEffect(() => {
-    return onSnapshot(
-      collection(db, BON_PLAN_COLLECTION),
-      snap => {
-        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-        data.sort((a, b) => (a.nom || '').localeCompare(b.nom || '', 'fr'))
-        setItems(data)
-        setLoading(false)
-      },
-      () => { setError(true); setLoading(false) },
-    )
-  }, [])
-
-  const segments = useMemo(() => {
-    const s = new Set(items.map(p => normSegment(p.segment)).filter(Boolean))
-    return [...s].sort((a, b) => segmentLabel(a).localeCompare(segmentLabel(b), 'fr'))
-  }, [items])
-
-  const filtered = useMemo(() => {
-    const words = normName(search).split(' ').filter(Boolean)
-    return items.filter(p => {
-      if (segmentFilter && normSegment(p.segment) !== segmentFilter) return false
-      const text = normName([p.nom, p.marque, p.chrono, p.refFournisseur].join(' '))
-      return words.every(w => text.includes(w))
-    })
-  }, [items, search, segmentFilter])
-
-  async function handleDelete(item) {
-    if (!confirm(`Supprimer le prix bon plan de « ${item.nom || item.chrono} » ?`)) return
-    await deleteDoc(doc(db, BON_PLAN_COLLECTION, item.id))
-  }
-
-  async function handleClear() {
-    if (!confirm(`Supprimer tous les prix bon plan (${items.length}) ? Cette action est irréversible.`)) return
-    for (let i = 0; i < items.length; i += 450) {
-      const batch = writeBatch(db)
-      items.slice(i, i + 450).forEach(p => batch.delete(doc(db, BON_PLAN_COLLECTION, p.id)))
-      await batch.commit()
-    }
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white">Prix bon plan</h2>
-          <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">
-            {loading ? 'Chargement…' : `Prix réservés aux porteurs de la carte fidélité (${items.length} référence${items.length > 1 ? 's' : ''})`}
-          </p>
-        </div>
-        {canCreate && (
-          <div className="flex items-center gap-2">
-            <button onClick={() => setShowAdd({})}
-              className="h-9 px-3 rounded-lg text-xs font-medium border border-gray-200 dark:border-neutral-700 text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors">
-              + Ajouter
-            </button>
-            <button onClick={() => setShowImport(true)}
-              className="h-9 px-4 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
-              Importer Excel
-            </button>
-            {items.length > 0 && <ActionsMenu items={[{ label: 'Tout supprimer…', onClick: handleClear, danger: true }]} />}
-          </div>
-        )}
-      </div>
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 104.5 4.5a7.5 7.5 0 0012.15 12.15z" /></svg>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher par nom, marque ou chrono…"
-            className="w-full h-9 pl-9 pr-4 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-white/10" />
-        </div>
-        {segments.length > 0 && (
-          <select
-            value={segmentFilter}
-            onChange={e => setSegmentFilter(e.target.value)}
-            className={[
-              'h-9 pl-3 pr-7 rounded-xl border text-xs outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-white/10 cursor-pointer transition-colors',
-              segmentFilter
-                ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-500/50 dark:bg-blue-500/10 dark:text-blue-300'
-                : 'border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-gray-700 dark:text-neutral-300',
-            ].join(' ')}
-          >
-            <option value="">Tous les segments</option>
-            {segments.map(s => <option key={s} value={s}>{segmentLabel(s)}</option>)}
-          </select>
-        )}
-      </div>
-      {loading ? (
-        <div className="text-center py-12 text-sm text-gray-400">Chargement…</div>
-      ) : error ? (
-        <div className="text-center py-12 text-sm text-red-500">Impossible de charger les prix bon plan. Recharge la page.</div>
-      ) : items.length === 0 ? (
-        <div className="text-center py-12 text-sm text-gray-400 dark:text-neutral-500">
-          Aucun prix bon plan.{canCreate && ' Importez un fichier Excel pour démarrer.'}
-        </div>
-      ) : (
-        <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-gray-100 dark:border-neutral-800 bg-gray-50/50 dark:bg-neutral-800/30">
-                {['Nom', 'Marque', 'Chrono', 'Segment', 'Prix fort', 'Prix bon plan', 'Remise'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{h}</th>
-                ))}
-                <th className="px-4 py-3" />
-                {canCreate && <th className="px-4 py-3" />}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(p => {
-                const rem = remiseBonPlan(p)
-                return (
-                  <tr key={p.id} onClick={canCreate ? () => setShowAdd(p) : undefined}
-                    className={['border-b last:border-0 border-gray-100 dark:border-neutral-800', canCreate ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-neutral-800/50' : ''].join(' ')}>
-                    <td className="px-4 py-2.5 font-medium text-gray-900 dark:text-white">{p.nom || '—'}</td>
-                    <td className="px-4 py-2.5 text-gray-500 dark:text-neutral-400">{p.marque || '—'}</td>
-                    <td className="px-4 py-2.5 font-mono text-gray-700 dark:text-neutral-300">{p.chrono || p.refFournisseur || '—'}</td>
-                    <td className="px-4 py-2.5 text-gray-500 dark:text-neutral-400">{p.segment ? segmentLabel(normSegment(p.segment)) : '—'}</td>
-                    <td className="px-4 py-2.5 text-gray-500 dark:text-neutral-400 whitespace-nowrap">{formatEuro(p.prixFort)}</td>
-                    <td className="px-4 py-2.5 font-semibold text-blue-600 dark:text-blue-400 whitespace-nowrap">{formatEuro(p.prixBonPlan)}</td>
-                    <td className="px-4 py-2.5 font-semibold text-emerald-600 dark:text-emerald-400">{rem != null ? `-${rem}%` : '—'}</td>
-                    <td className="px-4 py-2.5 text-right" onClick={e => e.stopPropagation()}>
-                      <IlvButton onClick={() => setIlv({ sources: [bonPlanSource(p)], initialKey: p.id, preferredType: 'bonplan' })} />
-                    </td>
-                    {canCreate && (
-                      <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
-                        <button onClick={() => handleDelete(p)} aria-label={`Supprimer ${p.nom || p.chrono}`} title="Retirer des prix bon plan"
-                          className="h-7 w-7 grid place-items-center rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:text-neutral-500 dark:hover:text-red-400 dark:hover:bg-red-500/10">
-                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M8 6V4.8A1.8 1.8 0 019.8 3h4.4A1.8 1.8 0 0116 4.8V6m3 0l-1 13a2 2 0 01-2 1.8H8A2 2 0 016 19L5 6M10 10v7M14 10v7" /></svg>
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {showImport && <BonPlanImportModal items={items} onClose={() => setShowImport(false)} />}
-      {showAdd && <AddBonPlanModal items={items} initial={showAdd.id ? showAdd : null} onClose={() => setShowAdd(null)} />}
-      {ilv && <IlvDialog {...ilv} onClose={() => setIlv(null)} />}
     </div>
   )
 }
@@ -1523,9 +1424,9 @@ export default function Operations() {
             </div>
 
             {/* Sections spéciales */}
-            {section === 'bon_plan' && <BonPlanSection canCreate={canCreate} />}
-            {section === 'catalogue' && <CatalogueSection canCreate={canCreate} />}
-            {section === 'engages' && <CatalogueSection canCreate={canCreate} engagesOnly />}
+            {section === 'bon_plan' && <ProduitsSection key="bonplan" canCreate={canCreate} mode="bonplan" />}
+            {section === 'catalogue' && <ProduitsSection key="catalogue" canCreate={canCreate} mode="catalogue" />}
+            {section === 'engages' && <ProduitsSection key="engages" canCreate={canCreate} mode="engages" />}
 
             {/* Liste des OPs (sections standard) */}
             {['en_cours', 'a_venir', 'terminee'].includes(section) && (
