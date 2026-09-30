@@ -57,7 +57,7 @@ for (let i = 0; i < previous.docs.length; i += 450) {
 
 let n = 900
 for (const magasinId of ['mag-1-nord', 'mag-2-sud']) {
-  for (const [i, [statut, age, inStatus, reception]] of SCENARIOS.entries()) {
+  for (const [i, [statut, age, inStatus]] of SCENARIOS.entries()) {
     const [type, produit, ref, prix] = PRODUITS[i % PRODUITS.length]
     const [client, tel] = CLIENTS[i % CLIENTS.length]
     const closed = ['retiree', 'annulee'].includes(statut)
@@ -68,7 +68,6 @@ for (const magasinId of ['mag-1-nord', 'mag-2-sud']) {
       acompte: type === 'velo' ? Math.round(prix * 0.3) : null,
       fournisseur: FOURNISSEURS[i % FOURNISSEURS.length],
       refFournisseur: statut === 'a-commander' ? null : `FRN-${80000 + n}`,
-      dateReceptionPrevue: reception == null ? null : ymd(reception),
       createur: VENDEURS[i % VENDEURS.length],
       statut, statutAt: ago(inStatus), closedAt: closed ? ago(inStatus) : null,
       notes: i % 3 === 0 ? [{ at: new Date(NOW - age * DAY).toISOString(), author: VENDEURS[i % 3], text: 'Taille à confirmer avec le client' }] : [],

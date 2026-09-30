@@ -15,7 +15,7 @@ import { getNextOrderNumber } from '../lib/counters'
 import { GLOBAL_ROLES, CAN_DELETE_ROLES, ORDER_CLOSED_STATUTS } from '../lib/constants'
 import {
   ORDER_ALERTS, ORDER_OPEN_STATUSES, ORDER_STATUSES, ORDER_STATUS_META, ORDER_TYPES, ORDER_VISIBLE_DAYS,
-  formatEuro, formatOrderNumber, isLateDelivery, isOrderListed, isOrderOpen, orderMatches, orderStatus,
+  formatEuro, formatOrderNumber, isOrderListed, isWaitingReception, isOrderOpen, orderMatches, orderStatus,
   orderFormErrors, orderStatusSince, orderTotal, parseEuro, remainingToPay,
 } from '../lib/orders'
 import { toDate } from '../lib/ticketStats'
@@ -26,10 +26,6 @@ import { useStaff } from '../lib/useStaff'
 function fmtDate(value) {
   const d = toDate(value)
   return d ? d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'
-}
-
-function fmtYmd(ymd) {
-  return ymd ? fmtDate(`${ymd}T12:00:00`) : '—'
 }
 
 function sinceLabel(date) {
@@ -50,12 +46,12 @@ const NEXT_STEP = {
 // Champs modifiables, partagés par le formulaire de création et la modification
 const EMPTY_FIELDS = {
   client: '', tel: '', type: 'piece', ref_produit: '', produit: '',
-  fournisseur: '', refFournisseur: '', dateReceptionPrevue: '',
+  fournisseur: '', refFournisseur: '',
   prix: '', fraisPort: '', acompte: '', createur: '',
 }
 const FIELD_LABELS = {
   client: 'client', tel: 'téléphone', type: 'type', ref_produit: 'référence', produit: 'désignation',
-  fournisseur: 'fournisseur', refFournisseur: 'n° commande fournisseur', dateReceptionPrevue: 'réception prévue',
+  fournisseur: 'fournisseur', refFournisseur: 'n° commande fournisseur',
   prix: 'prix de vente', fraisPort: 'frais de port', acompte: 'acompte', createur: 'créé par',
 }
 
@@ -77,7 +73,6 @@ function cleanFields(f) {
     client: text(f.client), tel: text(f.tel), type: f.type || null,
     ref_produit: text(f.ref_produit), produit: text(f.produit),
     fournisseur: text(f.fournisseur), refFournisseur: text(f.refFournisseur),
-    dateReceptionPrevue: f.dateReceptionPrevue || null,
     prix: parseEuro(f.prix), fraisPort: parseEuro(f.fraisPort), acompte: parseEuro(f.acompte), createur: text(f.createur),
   }
 }
@@ -396,7 +391,7 @@ export default function Orders() {
                 <tbody>
                   {filtered.map(o => {
                     const status = orderStatus(o)
-                    const late = isLateDelivery(o)
+                    const late = isWaitingReception(o)
                     const reste = remainingToPay(o)
                     return (
                       <tr key={o.id} onClick={() => setActiveId(o.id)}
@@ -432,7 +427,7 @@ export default function Orders() {
                         <td className="px-3 py-2.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                           <StatusSelect value={status} onChange={s => changeStatut(o, s)} />
                           <p className={`mt-0.5 text-[11px] ${late ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-neutral-500'}`}>
-                            {late ? `⚠ réception prévue le ${fmtYmd(o.dateReceptionPrevue)}` : sinceLabel(orderStatusSince(o))}
+                            {late && '⚠ '}{sinceLabel(orderStatusSince(o))}
                           </p>
                         </td>
                         <td className="px-3 py-2.5 text-gray-500 dark:text-neutral-400 whitespace-nowrap">{o.createur || '—'}</td>
@@ -550,7 +545,6 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
       `Produit : ${[order.type && ORDER_TYPES[order.type], order.produit].filter(Boolean).join(' · ') || '—'}`,
       `Réf. produit : ${order.ref_produit || '—'}`,
       `Fournisseur : ${order.fournisseur || '—'}${order.refFournisseur ? ` (n° ${order.refFournisseur})` : ''}`,
-      `Réception prévue : ${fmtYmd(order.dateReceptionPrevue)}`,
       `Prix de vente TTC : ${formatEuro(parseEuro(order.prix))}`,
       port ? `Frais de port : ${formatEuro(port)}` : null,
       port ? `Total TTC : ${formatEuro(total)}` : null,
@@ -615,7 +609,7 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-3">
                 <p className="text-xs text-gray-500 dark:text-neutral-400">
                   {meta.hint} · {sinceLabel(orderStatusSince(order))}
-                  {isLateDelivery(order) && <span className="text-red-600 dark:text-red-400"> · ⚠ réception prévue le {fmtYmd(order.dateReceptionPrevue)}</span>}
+                  {isWaitingReception(order) && <span className="text-red-600 dark:text-red-400"> · ⚠ toujours pas reçue</span>}
                 </p>
                 {next && (
                   <button type="button" onClick={() => onChangeStatut(next.to)}
@@ -659,7 +653,6 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
                 <MGrid>
                   <MField label="Fournisseur"><MVal>{order.fournisseur}</MVal></MField>
                   <MField label="N° de commande"><MVal mono>{order.refFournisseur}</MVal></MField>
-                  <MField label="Réception prévue"><MVal>{order.dateReceptionPrevue ? fmtYmd(order.dateReceptionPrevue) : null}</MVal></MField>
                   <MField label="Vendeur"><MVal>{order.createur}</MVal></MField>
                 </MGrid>
               </MCard>
@@ -879,9 +872,6 @@ function OrderFields({ fields, setFields, staff, errors = {}, autoFocus = false 
           <FField label="N° de commande fournisseur" wide>
             <input className="Input font-mono" value={fields.refFournisseur} onChange={e => set('refFournisseur', e.target.value)} />
           </FField>
-          <FField label="Réception prévue" wide>
-            <input type="date" className="Input" value={fields.dateReceptionPrevue || ''} onChange={e => set('dateReceptionPrevue', e.target.value)} />
-          </FField>
           <FField label="Vendeur" required={staff.length > 0} wide error={errors.createur}>
             {staff.length > 0 ? (
               <select className={`Input ${bad('createur')}`} value={fields.createur || ''} onChange={e => set('createur', e.target.value)}>
@@ -904,7 +894,7 @@ const INVALID = '!border-red-400 dark:!border-red-500/70'
 
 // Téléphone : carte d'une commande (le statut se change directement)
 function OrderCard({ order: o, magasin, onOpen, onChangeStatut }) {
-  const late = isLateDelivery(o)
+  const late = isWaitingReception(o)
   const total = orderTotal(o)
   const reste = remainingToPay(o)
   const acompte = parseEuro(o.acompte)
@@ -931,7 +921,7 @@ function OrderCard({ order: o, magasin, onOpen, onChangeStatut }) {
       <div className="flex items-center justify-between gap-2 pt-1" onClick={e => e.stopPropagation()}>
         <StatusSelect value={orderStatus(o)} onChange={onChangeStatut} />
         <span className={`text-[11px] text-right ${late ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-neutral-500'}`}>
-          {late ? `⚠ réception prévue le ${fmtYmd(o.dateReceptionPrevue)}` : sinceLabel(orderStatusSince(o))}
+          {late && '⚠ '}{sinceLabel(orderStatusSince(o))}
           {magasin && <span className="block">{magasin}</span>}
         </span>
       </div>

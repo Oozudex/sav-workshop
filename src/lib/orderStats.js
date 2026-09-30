@@ -2,7 +2,7 @@
 // Les commandes anonymisées sont incluses : seules les données client ont été effacées.
 import { toDate } from './ticketStats.js'
 import {
-  ORDER_OPEN_STATUSES, ORDER_TYPES, isLateDelivery, isOrderOpen, orderClosedDate, orderStatus, orderStepDate,
+  ORDER_OPEN_STATUSES, ORDER_TYPES, isOrderOpen, isWaitingReception, orderClosedDate, orderStatus, orderStepDate,
   orderTotal, parseEuro, remainingToPay,
 } from './orders.js'
 
@@ -63,7 +63,7 @@ export function computeOrderSnapshot(orders, now = new Date()) {
   return {
     open: open.length,
     byStatus: ORDER_OPEN_STATUSES.map(s => [s, open.filter(o => orderStatus(o) === s).length]),
-    late: open.filter(o => isLateDelivery(o, now)).length,
+    late: open.filter(o => isWaitingReception(o, now)).length,
     outstanding: outstanding.length ? sum(outstanding) : 0,
   }
 }

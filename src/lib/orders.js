@@ -138,11 +138,11 @@ export function orderMatches(order, needle) {
   return hay.includes(q) || (compact.length > 0 && hay.replace(/[\s.-]/g, '').includes(compact))
 }
 
-// Réception attendue dépassée
-export function isLateDelivery(order, now = new Date()) {
-  if (orderStatus(order) !== 'commandee' || !order.dateReceptionPrevue) return false
-  const due = new Date(`${order.dateReceptionPrevue}T23:59:59.999`)
-  return !Number.isNaN(due.getTime()) && due < now
+// Commande passée chez le fournisseur depuis trop longtemps, toujours pas reçue
+export const RECEPTION_WAIT_DAYS = 7
+
+export function isWaitingReception(order, now = new Date(), limit = RECEPTION_WAIT_DAYS) {
+  return orderStatus(order) === 'commandee' && days(now - orderStatusSince(order)) > limit
 }
 
 // ── Seuils d'alerte (moteur : lib/alerts.js) ─────────────────────────────────
@@ -165,12 +165,11 @@ export const ORDER_ALERTS = {
       message: (n, s) => `${plural(n, 'commande')} pas encore ${n > 1 ? 'passées' : 'passée'} au fournisseur depuis plus de ${s} jours`,
     },
     {
-      key: 'orderLateDays', kind: 'duration', unit: 'jours', defaultThreshold: 3,
-      label: 'Réceptions en retard',
-      help: 'Date de réception prévue dépassée, commande toujours pas reçue.',
-      measure: (open, now) => open.filter(o => isLateDelivery(o, now)),
-      age: (o, now) => days(now - new Date(`${o.dateReceptionPrevue}T23:59:59.999`)),
-      message: (n, s) => `${plural(n, 'commande')} en retard de plus de ${s} jours chez le fournisseur`,
+      key: 'orderToReceiveDays', kind: 'duration', unit: 'jours', defaultThreshold: RECEPTION_WAIT_DAYS,
+      label: 'Commandes pas encore reçues',
+      help: 'Temps passé dans le statut « Commandée ».',
+      measure: inStatus('commandee'), age: sinceStatus,
+      message: (n, s) => `${plural(n, 'commande')} pas encore ${n > 1 ? 'reçues' : 'reçue'} du fournisseur depuis plus de ${s} jours`,
     },
     {
       key: 'orderToCallDays', kind: 'duration', unit: 'jours', defaultThreshold: 1,

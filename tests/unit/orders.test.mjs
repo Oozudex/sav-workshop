@@ -85,15 +85,15 @@ describe('recherche', () => {
 describe('alertes commandes', () => {
   const ORDERS = [
     { id: 'a', statut: 'a-commander', statutAt: daysAgo(3) },
-    { id: 'b', statut: 'commandee', statutAt: daysAgo(10), dateReceptionPrevue: '2026-09-15' },
-    { id: 'c', statut: 'commandee', statutAt: daysAgo(10), dateReceptionPrevue: '2026-09-30' },
+    { id: 'b', statut: 'commandee', statutAt: daysAgo(10) },
+    { id: 'c', statut: 'commandee', statutAt: daysAgo(4) },
     { id: 'd', statut: 'recue', statutAt: daysAgo(2) },
     { id: 'e', statut: 'client-prevenu', statutAt: daysAgo(15) },
     { id: 'f', statut: 'retiree', statutAt: daysAgo(40) },
   ]
   const all = {
     orderToPlaceDays: { enabled: true, threshold: 2 },
-    orderLateDays: { enabled: true, threshold: 3 },
+    orderToReceiveDays: { enabled: true, threshold: 7 },
     orderToCallDays: { enabled: true, threshold: 1 },
     orderPickupDays: { enabled: true, threshold: 10 },
   }
@@ -101,7 +101,7 @@ describe('alertes commandes', () => {
     const alerts = computeAlerts(ORDERS, all, ORDER_ALERTS, NOW)
     assert.deepEqual(alerts.map(a => [a.key, a.itemIds]), [
       ['orderToPlaceDays', ['a']],
-      ['orderLateDays', ['b']],
+      ['orderToReceiveDays', ['b']],
       ['orderToCallDays', ['d']],
       ['orderPickupDays', ['e']],
     ])

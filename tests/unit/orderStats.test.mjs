@@ -14,7 +14,7 @@ const retiree = {
   statusDates: { commandee: daysAgo(19), recue: daysAgo(12), 'client-prevenu': daysAgo(11), retiree: daysAgo(8) },
 }
 const annulee = { id: 'a', statut: 'annulee', type: 'piece', prix: 50, createdAt: daysAgo(10), closedAt: daysAgo(9) }
-const ouverte = { id: 'o', statut: 'commandee', type: 'piece', prix: 80, acompte: 20, createdAt: daysAgo(5), dateReceptionPrevue: '2026-09-20' }
+const ouverte = { id: 'o', statut: 'commandee', type: 'piece', prix: 80, acompte: 20, createdAt: daysAgo(10), statutAt: daysAgo(9) }
 // Ancien format : dates d'étapes seulement dans l'historique
 const ancienne = {
   id: 'h', statut: 'recue', createdAt: daysAgo(15),

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ORDER_STATUS_META, formatEuro } from '../lib/orders'
+import { ORDER_STATUS_META, RECEPTION_WAIT_DAYS, formatEuro } from '../lib/orders'
 import { computeOrderPeriodStats, computeOrderSnapshot } from '../lib/orderStats'
 import { PERIODS, monthlyCreated, periodRange, previousYear } from '../lib/ticketStats'
 import {
@@ -34,7 +34,7 @@ export default function OrderStatsModal({ orders, magasinNom, onClose }) {
       <Section title="En ce moment" subtitle="Commandes en cours">
         <div className="grid grid-cols-1 md:grid-cols-[repeat(3,minmax(0,10rem))_1fr] gap-3">
           <Tile label="Commandes en cours" value={snap.open} />
-          <Tile label="Réceptions en retard" value={snap.late} alert={snap.late > 0} />
+          <Tile label={`Commandées depuis + de ${RECEPTION_WAIT_DAYS} j`} value={snap.late} alert={snap.late > 0} />
           <Tile label="Reste à encaisser" value={formatEuro(snap.outstanding)} />
           <BarList rows={snap.byStatus.map(([s, n]) => [ORDER_STATUS_META[s].label, n])} />
         </div>
