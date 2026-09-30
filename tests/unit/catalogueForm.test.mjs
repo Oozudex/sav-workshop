@@ -65,3 +65,14 @@ describe('accessoires sans pack', () => {
     assert.equal(catalogueFormErrors({ ...valide, pack: '' }).pack, 'Choisis le pack de ce vélo')
   })
 })
+
+describe('vélos presque parfaits', () => {
+  it("prix bon plan activé d'office et obligatoire", () => {
+    const form = catalogueFormValues({ nom: 'CLIFF 700', chrono: '0-1', segment: 'velo_pp', prixFort: 259.99, pack: 'sport' })
+    assert.equal(form.bonPlan, true)
+    assert.equal(catalogueFormErrors({ ...form, prixBonPlan: '' }).prixBonPlan, 'Renseigne le prix bon plan')
+    assert.equal(catalogueFormErrors({ ...form, bonPlan: false }).prixBonPlan, 'Vélo presque parfait : le prix bon plan est obligatoire')
+    assert.deepEqual(catalogueFormErrors({ ...form, prixBonPlan: '229,99' }), {})
+    assert.equal(catalogueData({ ...form, prixBonPlan: '229,99' }).presqueParfait, true)
+  })
+})

@@ -21,7 +21,8 @@ export function catalogueFormValues(produit, bonPlan = null) {
     pack:        produit?.pack      || '',
     engage:      produit?.prixEngage != null,
     prixEngage:  euro(produit?.prixEngage),
-    bonPlan:     bonPlan != null,
+    // Vélo presque parfait : toujours en prix bon plan
+    bonPlan:     bonPlan != null || normSegment(produit?.segment) === 'velo_pp',
     prixBonPlan: euro(bonPlan),
   }
 }
@@ -39,6 +40,7 @@ export function catalogueFormErrors(form, { produits = [], id = null } = {}) {
   else if (produits.some(p => p.id !== id && cleanRef(p.chrono) === chrono)) errors.chrono = 'Ce chrono existe déjà'
   if (prixFort == null) errors.prixFort = 'Prix fort obligatoire'
   if (!form.pack && form.segment !== 'accessoires') errors.pack = 'Choisis le pack de ce vélo'
+  if (form.segment === 'velo_pp' && !form.bonPlan) errors.prixBonPlan = 'Vélo presque parfait : le prix bon plan est obligatoire'
   for (const [flag, field, name] of [['engage', 'prixEngage', 'prix engagé'], ['bonPlan', 'prixBonPlan', 'prix bon plan']]) {
     if (!form[flag]) continue
     const prix = parsePrice(form[field])
@@ -60,6 +62,7 @@ export function catalogueData(form) {
     segment:    form.segment || null,
     prixFort:   parsePrice(form.prixFort),
     pack:       form.segment === 'accessoires' ? null : form.pack || null, // pas de pack pour les accessoires
+    presqueParfait: form.segment === 'velo_pp',
     prixEngage: form.engage ? parsePrice(form.prixEngage) : null,
   }
 }

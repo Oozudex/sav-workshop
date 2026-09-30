@@ -21,36 +21,8 @@ import { useMagasin } from '../store/useMagasin'
 import { BON_PLAN_COLLECTION, bonPlanDocId, parseBonPlanSheet, remiseBonPlan } from '../lib/bonPlan'
 import { SEGMENT_LABELS, cleanRef, normName, normSegment, parsePrice } from '../lib/opImport'
 import { safeUrl } from '../lib/security'
-import { readSheetRows } from '../lib/excel'
-
-// ── Parseurs catalogue ────────────────────────────────────────────────────────
-const CAT_COLS = {
-  'univers': 'univers', 'segment': 'segment', 'famille': 'famille',
-  'us-fami': 'sousFamille', 'sous-famille': 'sousFamille', 'sous famille': 'sousFamille',
-  'chrono': 'chrono', 'r.n.': 'rn', 'rn': 'rn',
-  'marque': 'marque', 'référence': 'reference', 'reference': 'reference',
-  'article': 'nom', 'designation': 'nom', 'désignation': 'nom',
-  'couleur': 'couleur', 'coloris': 'couleur', 'color': 'couleur', 'colorway': 'couleur',
-  'stk': 'stock', 'val stk': 'valeurStock', 'val. stk': 'valeurStock',
-}
-function parseCatalogueRows(rows) {
-  if (!rows.length) return []
-  const headers = rows[0].map(h => String(h || '').toLowerCase().trim())
-  const fieldMap = headers.map(h => CAT_COLS[h] || null)
-  return rows.slice(1).map(row => {
-    const obj = {}
-    fieldMap.forEach((field, i) => {
-      if (!field) return
-      const val = row[i] != null ? String(row[i]).trim() : ''
-      if (!val) return
-      if (field === 'stock' || field === 'valeurStock') {
-        const n = parseFloat(val.replace(',', '.').replace(/\s/g, ''))
-        if (!isNaN(n)) obj[field] = n
-      } else { obj[field] = val }
-    })
-    return obj
-  }).filter(r => r.reference || r.nom)
-}
+import { downloadWorkbook, readSheetRows } from '../lib/excel'
+import { catalogueExportTable, parseStockSheet, stockImportData, stockSummary } from '../lib/stockImport'
 
 const getStatus = op => opStatus(op)
 
@@ -248,10 +220,41 @@ export function OpModal({ op, onClose, onSave }) {
   )
 }
 
+// Résumé de l'import : vélos, presque parfaits, packs déduits et vélos écartés
+function ImportSummary({ rows, report }) {
+  const s = stockSummary(rows)
+  const items = [
+    ['Vélos', s.total, s.sansPrix ? `${s.sansPrix} sans prix` : 'avec prix fort'],
+    ['Presque parfaits', s.presqueParfaits, 'prix bon plan à saisir'],
+    ['Pack enfant', s.packEnfant, 'Junior, Jouet'],
+    ['Pack électrique', s.packElectrique, 'gamme électrique'],
+    ['Pack à choisir', s.packARenseigner, 'dans la fiche du vélo'],
+  ]
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        {items.map(([label, n, hint]) => (
+          <div key={label} className="rounded-xl border border-gray-200 dark:border-neutral-700 px-3 py-2">
+            <p className="text-lg font-bold text-gray-900 dark:text-white tabular-nums">{n}</p>
+            <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 leading-tight">{label}</p>
+            <p className="text-[10px] text-gray-400 dark:text-neutral-500 leading-tight">{hint}</p>
+          </div>
+        ))}
+      </div>
+      {report?.ecartes?.length > 0 && (
+        <p className="text-[11px] text-gray-500 dark:text-neutral-400">
+          Écarté{report.ecartes.length > 1 ? 's' : ''} (pas en stock) : {report.ecartes.map(p => `${p.nom} (${p.chrono})`).join(', ')}.
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ── Modal import catalogue ────────────────────────────────────────────────────
 function CatalogueImportModal({ catalogueCount, onClose }) {
   const fileRef = useRef(null)
   const [rows, setRows] = useState(null)
+  const [report, setReport] = useState(null) // { ecartes }
   const [fileName, setFileName] = useState('')
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState('')
@@ -262,34 +265,33 @@ function CatalogueImportModal({ catalogueCount, onClose }) {
     setFileName(file.name); setError('')
     readSheetRows(file).then(raw => {
       try {
-        const parsed = parseCatalogueRows(raw)
-        if (!parsed.length) { setError('Aucune ligne valide. Vérifiez les en-têtes (Chrono, Référence, Article…)'); return }
-        setRows(parsed)
+        const parsed = parseStockSheet(raw)
+        if (parsed.error) { setError(parsed.error); return }
+        setRows(parsed.produits)
+        setReport({ ecartes: parsed.ecartes })
       } catch { setError('Impossible de lire le fichier.') }
     }).catch(() => setError('Impossible de lire le fichier.'))
   }
 
-  // Mise à jour par chrono : les champs du fichier sont rafraîchis, le prix fort, le pack et le prix
-  // engagé saisis par l'acheteur sont conservés. En mode « replace », les chronos absents du fichier sont retirés.
+  // Mise à jour par chrono : les champs et le prix fort du fichier sont rafraîchis ; le prix engagé et un pack
+  // déjà choisi par l'acheteur sont conservés. En mode « replace », les chronos absents du fichier sont retirés.
   async function handleImport(mode) {
     if (!rows?.length) return
     setImporting(true)
     setError('')
     try {
       const snap = await getDocs(collection(db, 'catalogue_produits'))
-      const byChrono = new Map(snap.docs.map(d => [cleanRef(d.get('chrono')), d.ref]))
+      const byChrono = new Map(snap.docs.map(d => [cleanRef(d.get('chrono')), d]))
       const inFile = new Set()
       const writes = []
       for (const r of rows) {
-        const { stock: _stock, valeurStock: _valeur, ...rest } = r
-        const chrono = cleanRef(rest.chrono)
-        const data = { ...rest, chrono: chrono || null, importedAt: serverTimestamp() }
-        const existing = chrono && byChrono.get(chrono)
-        if (chrono) inFile.add(chrono)
-        writes.push(b => existing ? b.set(existing, data, { merge: true }) : b.set(doc(collection(db, 'catalogue_produits')), data))
+        const existing = byChrono.get(r.chrono)
+        const data = { ...stockImportData(r, existing?.data()), importedAt: serverTimestamp() }
+        inFile.add(r.chrono)
+        writes.push(b => existing ? b.set(existing.ref, data, { merge: true }) : b.set(doc(collection(db, 'catalogue_produits')), data))
       }
       if (mode === 'replace') {
-        for (const [chrono, ref] of byChrono) if (!inFile.has(chrono)) writes.push(b => b.delete(ref))
+        for (const [chrono, d] of byChrono) if (!inFile.has(chrono)) writes.push(b => b.delete(d.ref))
       }
       for (let i = 0; i < writes.length; i += 450) {
         const batch = writeBatch(db)
@@ -306,7 +308,7 @@ function CatalogueImportModal({ catalogueCount, onClose }) {
     <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-2xl rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800 shrink-0">
-          <span className="text-sm font-semibold text-gray-900 dark:text-white">Importer le catalogue produits</span>
+          <span className="text-sm font-semibold text-gray-900 dark:text-white">Importer l’état de stock des vélos</span>
           <button onClick={onClose} className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
@@ -315,8 +317,8 @@ function CatalogueImportModal({ catalogueCount, onClose }) {
           {!rows ? (
             <div>
               <p className="text-xs text-gray-500 dark:text-neutral-400 mb-3">
-                Importez le listing stock Excel. En-têtes attendues :<br />
-                <span className="font-mono text-[11px] text-gray-400">Univers, Segment, Famille, Chrono, Marque, Référence, Article</span>
+                Importez l’état de stock Excel des vélos (une ligne par magasin). Un vélo par chrono ; les vélos sans stock sont écartés.<br />
+                <span className="font-mono text-[11px] text-gray-400">Famille, Sous-Famille, Modèle, Marque, Réf, Chrono, Couleur, QtStkFin, PV Mag</span>
               </p>
               <label className="flex flex-col items-center gap-3 border-2 border-dashed border-gray-200 dark:border-neutral-700 rounded-xl p-8 cursor-pointer hover:border-gray-400 dark:hover:border-neutral-500 transition-colors">
                 <svg className="h-8 w-8 text-gray-300 dark:text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
@@ -331,15 +333,16 @@ function CatalogueImportModal({ catalogueCount, onClose }) {
                 <span className="text-xs text-gray-500 dark:text-neutral-400">
                   <strong className="text-gray-700 dark:text-neutral-300">{rows.length} produits</strong> dans <span className="font-mono">{fileName}</span>
                 </span>
-                <button onClick={() => { setRows(null); setFileName(''); if (fileRef.current) fileRef.current.value = '' }}
+                <button onClick={() => { setRows(null); setReport(null); setFileName(''); if (fileRef.current) fileRef.current.value = '' }}
                   className="text-xs text-gray-400 hover:text-gray-600 underline">Changer</button>
               </div>
+              <ImportSummary rows={rows} report={report} />
               {catalogueCount > 0 && (
                 <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20">
                   <svg className="h-4 w-4 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
                   <p className="text-[11px] text-amber-700 dark:text-amber-300">
                     La base contient déjà <strong>{catalogueCount} références</strong>. Les produits déjà présents (même chrono) sont mis à jour
-                    sans perdre leur prix fort, leur pack ni leur prix engagé. « Remplacer » retire en plus les chronos absents du fichier.
+                    avec le prix fort du fichier, sans perdre leur prix engagé ni le pack déjà choisi. « Remplacer » retire en plus les chronos absents du fichier.
                   </p>
                 </div>
               )}
@@ -347,20 +350,24 @@ function CatalogueImportModal({ catalogueCount, onClose }) {
                 <table className="w-full text-[11px]">
                   <thead>
                     <tr className="bg-gray-50 dark:bg-neutral-800/50 border-b border-gray-200 dark:border-neutral-700">
-                      {['Chrono', 'Référence', 'Nom', 'Couleur', 'Famille', 'Marque'].map(h => (
-                        <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{h}</th>
+                      {['Chrono', 'Nom', 'Couleur', 'Famille', 'Prix fort', 'Pack', 'Stock'].map(h => (
+                        <th key={h} className={`px-3 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap ${['Prix fort', 'Stock'].includes(h) ? 'text-right' : 'text-left'}`}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {rows.slice(0, 30).map((r, i) => (
                       <tr key={i} className="border-b last:border-0 border-gray-100 dark:border-neutral-800">
-                        <td className="px-3 py-2 font-mono text-gray-500 dark:text-neutral-400">{r.chrono || '—'}</td>
-                        <td className="px-3 py-2 font-mono text-gray-700 dark:text-neutral-300">{r.reference || '—'}</td>
-                        <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{r.nom || '—'}</td>
-                        <td className="px-3 py-2 text-gray-500 dark:text-neutral-400">{r.couleur || <span className="text-gray-300 dark:text-neutral-600">N.B</span>}</td>
+                        <td className="px-3 py-2 font-mono text-gray-500 dark:text-neutral-400 whitespace-nowrap">{r.chrono}</td>
+                        <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">
+                          {r.nom || '—'}{r.marque && <span className="font-normal text-gray-400"> · {r.marque}</span>}
+                          {r.presqueParfait && <span className="ml-1.5 px-1 py-px rounded text-[9px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 whitespace-nowrap">PP</span>}
+                        </td>
+                        <td className="px-3 py-2 text-gray-500 dark:text-neutral-400 whitespace-nowrap">{r.couleur || '—'}</td>
                         <td className="px-3 py-2 text-gray-500 dark:text-neutral-400">{r.famille || '—'}</td>
-                        <td className="px-3 py-2 text-gray-500 dark:text-neutral-400">{r.marque || '—'}</td>
+                        <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-gray-700 dark:text-neutral-300">{r.prixFort != null ? `${r.prixFort.toFixed(2).replace('.', ',')} €` : '—'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{r.pack ? <span className="text-gray-700 dark:text-neutral-300">{PACK_COURT[r.pack]}</span> : <span className="text-amber-600 dark:text-amber-400">À choisir</span>}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-gray-500 dark:text-neutral-400">{r.stock}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -435,6 +442,43 @@ function IlvButton({ onClick, title = 'Télécharger l’ILV', disabled }) {
 
 const segmentLabel = s => SEGMENT_LABELS[s] || s
 
+const PAGE_SIZE = 50
+
+// Numéros de page affichés : 1 … 4 5 6 … 12
+function pageNumbers(page, count) {
+  const set = new Set([1, count, page - 1, page, page + 1].filter(p => p >= 1 && p <= count))
+  const list = [...set].sort((a, b) => a - b)
+  return list.flatMap((p, i) => (i > 0 && p - list[i - 1] > 1 ? ['…', p] : [p]))
+}
+
+function Pagination({ page, pageCount, total, onPage }) {
+  if (total === 0) return null
+  const from = (page - 1) * PAGE_SIZE + 1
+  const to = Math.min(total, page * PAGE_SIZE)
+  const btn = 'h-8 min-w-8 px-2 rounded-lg text-xs font-semibold tabular-nums transition-colors disabled:opacity-30'
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-3 sm:px-4 py-2.5 border-t border-gray-100 dark:border-neutral-800 bg-gray-50/50 dark:bg-neutral-800/20">
+      <span className="text-[11px] text-gray-500 dark:text-neutral-400 tabular-nums">{from}–{to} sur {total}</span>
+      {pageCount > 1 && (
+        <nav className="flex items-center gap-1" aria-label="Pages">
+          <button type="button" onClick={() => onPage(page - 1)} disabled={page === 1} aria-label="Page précédente"
+            className={`${btn} text-gray-600 hover:bg-gray-100 dark:text-neutral-300 dark:hover:bg-neutral-800`}>‹</button>
+          {pageNumbers(page, pageCount).map((p, i) => p === '…'
+            ? <span key={`e${i}`} className="px-1 text-xs text-gray-400">…</span>
+            : (
+              <button key={p} type="button" onClick={() => onPage(p)} aria-current={p === page ? 'page' : undefined}
+                className={`${btn} ${p === page ? 'bg-gray-900 text-white dark:bg-white dark:text-black' : 'text-gray-600 hover:bg-gray-100 dark:text-neutral-300 dark:hover:bg-neutral-800'}`}>
+                {p}
+              </button>
+            ))}
+          <button type="button" onClick={() => onPage(page + 1)} disabled={page === pageCount} aria-label="Page suivante"
+            className={`${btn} text-gray-600 hover:bg-gray-100 dark:text-neutral-300 dark:hover:bg-neutral-800`}>›</button>
+        </nav>
+      )}
+    </div>
+  )
+}
+
 // Prix bon plan vu comme un produit (vélo de la liste des prix bon plan absent de la base de données)
 const bonPlanAsProduit = b => ({
   nom: b.nom, marque: b.marque, chrono: b.chrono, couleur: b.couleur, segment: b.segment,
@@ -476,6 +520,8 @@ function ProduitsSection({ canCreate, mode }) {
   const [showImport, setShowImport] = useState(false)
   const [edit, setEdit] = useState(null) // null | { produit, start } (fiche produit) | { bonPlan } (prix sans chrono)
   const [ilv, setIlv] = useState(null)
+  const [page, setPage] = useState(1)
+  const listRef = useRef(null)
   const texts = SECTION_TEXTS[mode]
 
   useEffect(() => onSnapshot(collection(db, BON_PLAN_COLLECTION),
@@ -504,7 +550,9 @@ function ProduitsSection({ canCreate, mode }) {
     return list.sort((a, b) => (a.v.nom || '').localeCompare(b.v.nom || '', 'fr'))
   }, [mode, produits, bonPlanDocs])
 
-  const incomplet = r => !r.p || r.p.prixFort == null || (!r.p.pack && !sansPack(r.p.segment))
+  // À compléter : prix fort ou pack manquant, ou vélo presque parfait sans prix bon plan
+  const incomplet = r => !r.p || r.p.prixFort == null || (!r.p.pack && !sansPack(r.p.segment)) ||
+    (normSegment(r.p.segment) === 'velo_pp' && r.bp?.prixBonPlan == null)
   const FILTRES = {
     incomplets: incomplet,
     engages: r => r.v.prixEngage != null,
@@ -527,6 +575,17 @@ function ProduitsSection({ canCreate, mode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, search, filtre, marque, segment])
 
+  // Pagination : 50 vélos par page, retour à la première page quand la recherche ou un filtre change
+  useEffect(() => { setPage(1) }, [search, filtre, marque, segment])
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const currentPage = Math.min(page, pageCount)
+  const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+  function goToPage(p) {
+    setPage(p)
+    const top = listRef.current?.getBoundingClientRect().top
+    if (top != null && top < 0) listRef.current.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }
+
   const count = f => rows.filter(FILTRES[f]).length
   const chips = mode !== 'catalogue' ? [] : [
     ['', `Tous (${rows.length})`],
@@ -544,6 +603,17 @@ function ProduitsSection({ canCreate, mode }) {
   function ilvFor(r) {
     const preferredType = r.v.prixEngage != null ? 'engage' : mode === 'bonplan' ? 'bonplan' : 'normal'
     setIlv({ sources: [r.p ? catalogueSource(r.p) : bonPlanSource(r.bp)], initialKey: r.p ? r.p.id : r.bp.id, preferredType })
+  }
+
+  // Export Excel des vélos affichés (recherche et filtres compris)
+  const [exporting, setExporting] = useState(false)
+  async function exportExcel() {
+    setExporting(true)
+    try {
+      const name = { catalogue: 'base-velos', engages: 'prix-engages', bonplan: 'prix-bon-plan' }[mode]
+      await downloadWorkbook([{ name: texts.titre(true).slice(0, 31), table: catalogueExportTable(filtered) }],
+        `${name}-${new Date().toLocaleDateString('fr-CA')}`)
+    } finally { setExporting(false) }
   }
 
   async function clearAll() {
@@ -575,7 +645,15 @@ function ProduitsSection({ canCreate, mode }) {
           <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">{loading ? 'Chargement…' : texts.sousTitre(rows.length, canCreate)}</p>
         </div>
         {canCreate && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {rows.length > 0 && (
+              <button onClick={exportExcel} disabled={exporting || filtered.length === 0}
+                title={`Exporte ${filtered.length === rows.length ? 'toute la liste' : `les ${filtered.length} vélos affichés (filtres compris)`} au format Excel`}
+                className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg text-xs font-medium border border-gray-200 dark:border-neutral-700 text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors disabled:opacity-50">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+                {exporting ? 'Export…' : filtered.length === rows.length ? <>Exporter<span className="hidden sm:inline"> Excel</span></> : `Exporter (${filtered.length})`}
+              </button>
+            )}
             <button onClick={() => setEdit({ produit: null, start: mode === 'engages' ? 'engage' : mode === 'bonplan' ? 'bonPlan' : undefined })}
               className="h-9 px-3 rounded-lg text-xs font-medium border border-gray-200 dark:border-neutral-700 text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors">
               + Ajouter
@@ -583,7 +661,7 @@ function ProduitsSection({ canCreate, mode }) {
             {mode !== 'engages' && (
               <button onClick={() => setShowImport(true)}
                 className="h-9 px-4 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
-                Importer Excel
+                Importer<span className="hidden sm:inline"> Excel</span>
               </button>
             )}
             {mode !== 'engages' && rows.length > 0 && <ActionsMenu items={[{ label: 'Tout supprimer…', onClick: clearAll, danger: true }]} />}
@@ -629,7 +707,7 @@ function ProduitsSection({ canCreate, mode }) {
       ) : filtered.length === 0 ? (
         <div className="text-center py-12 text-sm text-gray-400 dark:text-neutral-500">Aucun vélo ne correspond.</div>
       ) : (
-        <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 overflow-x-auto">
+        <div ref={listRef} className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 overflow-x-auto scroll-mt-16">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-gray-100 dark:border-neutral-800 bg-gray-50/50 dark:bg-neutral-800/30 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
@@ -643,7 +721,7 @@ function ProduitsSection({ canCreate, mode }) {
               </tr>
             </thead>
             <tbody>
-              {filtered.slice(0, 200).map(r => {
+              {pageRows.map(r => {
                 const { v } = r
                 // Prix fort de la fiche, sinon celui du prix bon plan ; le pack manquant se choisit dans la fenêtre ILV
                 const prixFort = v.prixFort ?? r.bp?.prixFort ?? null
@@ -652,7 +730,13 @@ function ProduitsSection({ canCreate, mode }) {
                   <tr key={r.key} onClick={canCreate ? () => open(r) : undefined}
                     className={['border-b last:border-0 border-gray-100 dark:border-neutral-800 align-top', canCreate ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-neutral-800/50' : ''].join(' ')}>
                     <td className="px-3 sm:px-4 py-2.5">
-                      <p className="font-medium text-gray-900 dark:text-white">{v.nom || '—'}</p>
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        {v.nom || '—'}
+                        {normSegment(v.segment) === 'velo_pp' && (
+                          <span title="Vélo presque parfait : vendu en prix bon plan"
+                            className="ml-1.5 align-middle px-1 py-px rounded text-[9px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">PP</span>
+                        )}
+                      </p>
                       <p className="text-[11px] text-gray-400 dark:text-neutral-500">{v.couleur || 'Sans couleur'}<span className="md:hidden">{v.marque ? ` · ${v.marque}` : ''}</span></p>
                       <div className="sm:hidden mt-1 flex flex-wrap gap-1">{badges(r)}</div>
                     </td>
@@ -680,11 +764,7 @@ function ProduitsSection({ canCreate, mode }) {
               })}
             </tbody>
           </table>
-          {filtered.length > 200 && (
-            <div className="px-3 sm:px-4 py-2 text-[11px] text-gray-400 bg-gray-50 dark:bg-neutral-800/30 border-t border-gray-100 dark:border-neutral-800">
-              200 premiers sur {filtered.length} : affinez la recherche ou les filtres
-            </div>
-          )}
+          <Pagination page={currentPage} pageCount={pageCount} total={filtered.length} onPage={goToPage} />
         </div>
       )}
       {showImport && mode === 'catalogue' && <CatalogueImportModal catalogueCount={produits.length} onClose={() => setShowImport(false)} />}

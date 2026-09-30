@@ -122,6 +122,9 @@ export default function CatalogueProductModal({ produit, produits, start, onClos
 
   const errors = catalogueFormErrors(form, { produits, id: produit?.id })
   const accessoire = form.segment === 'accessoires'
+  const presqueParfait = form.segment === 'velo_pp'
+  // Passage en « Vélos PP » : le prix bon plan devient obligatoire
+  useEffect(() => { if (presqueParfait && !form.bonPlan) setForm(f => ({ ...f, bonPlan: true })) }, [presqueParfait, form.bonPlan])
   const shown = submitted ? errors : {}
 
   async function handleSave(e) {
@@ -230,8 +233,11 @@ export default function CatalogueProductModal({ produit, produits, start, onClos
                 title="Prix engagé" description="L’ILV de ce vélo sort toujours en « Prix engagé »."
                 price={form.prixEngage} onPrice={v => set('prixEngage', v)} error={shown.prixEngage}
                 remise={remiseSur(form.prixFort, form.prixEngage)} />
-              <SpecialPrice color="red" checked={form.bonPlan} onToggle={() => set('bonPlan', !form.bonPlan)} disabled={!bonPlanLoaded}
-                title="Prix bon plan" description="Réservé aux porteurs de la carte fidélité : le vélo est ajouté à la liste des prix bon plan."
+              <SpecialPrice color="red" checked={form.bonPlan || presqueParfait} onToggle={() => { if (!presqueParfait) set('bonPlan', !form.bonPlan) }} disabled={!bonPlanLoaded}
+                title="Prix bon plan"
+                description={presqueParfait
+                  ? 'Vélo presque parfait : toujours vendu en prix bon plan. Renseigne son prix.'
+                  : 'Réservé aux porteurs de la carte fidélité : le vélo est ajouté à la liste des prix bon plan.'}
                 price={form.prixBonPlan} onPrice={v => set('prixBonPlan', v)} error={shown.prixBonPlan}
                 remise={remiseSur(form.prixFort, form.prixBonPlan)} />
               {hadBonPlan && !form.bonPlan && (
