@@ -449,16 +449,26 @@ function EventChip({ ev, onClick }) {
   )
 }
 
+// « BAUDOIN Marie » → « Baudoin »
+function shortName(name) {
+  const first = (name || '').split(' ')[0]
+  return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase()
+}
+
 function PlanningLine({ name, times, isCp, isEco }) {
   const kind = PLANNING_KINDS[isCp ? 'cp' : isEco ? 'ecole' : 'present']
   const detail = isCp ? 'Congé payé' : `${times}${isEco ? ' · École' : ''}`
+  const shifts = isCp ? ['CP'] : times.split(' · ')
   return (
-    <div title={`${name} · ${detail}`} className="flex items-start gap-1.5 px-1 py-0.5 text-[11px] leading-snug">
-      <span className={`mt-[5px] h-1.5 w-1.5 rounded-full shrink-0 ${kind.dot}`} />
-      <span className="min-w-0 break-words">
-        <span className="font-semibold text-gray-800 dark:text-neutral-100">{name.split(' ')[0]}</span>{' '}
-        <span className="text-gray-500 dark:text-neutral-400 tabular-nums">{isCp ? 'CP' : times}</span>
-        {isEco && <span className="text-lime-700 dark:text-lime-400"> · École</span>}
+    <div title={`${name} · ${detail}`} className="flex items-start gap-1.5 px-1 py-0.5 leading-tight">
+      <span className={`mt-[4px] h-1.5 w-1.5 rounded-full shrink-0 ${kind.dot}`} />
+      <span className="min-w-0">
+        <span className="block text-[11px] font-semibold text-gray-800 dark:text-neutral-100 truncate">
+          {shortName(name)}{isEco && <span className="font-medium text-lime-700 dark:text-lime-400"> · École</span>}
+        </span>
+        <span className="flex flex-wrap gap-x-1.5 text-[10px] text-gray-500 dark:text-neutral-400 tabular-nums">
+          {shifts.map(t => <span key={t} className="whitespace-nowrap">{t}</span>)}
+        </span>
       </span>
     </div>
   )
@@ -718,6 +728,8 @@ export default function WeeklyCalendar({ magasinId }) {
     return result
   }, [allEvents])
 
+  const weekHasPlanning = days.some(d => (planningByDate[toDateStr(d)] || []).length > 0)
+
   /* Types visibles pour les filtres */
   const visibleTypes = useMemo(() => {
     if (isPersonal) return ['rdv_perso']
@@ -853,7 +865,7 @@ export default function WeeklyCalendar({ magasinId }) {
     setModal({ event: ev, date: dateStr })
   }
 
-  // Événements puis planning de l'équipe d'un jour
+  // Téléphone : événements puis planning de l'équipe d'un jour
   function dayItems(dateStr) {
     const dayEvents = byDate[dateStr] || []
     const planning = planningByDate[dateStr] || []
@@ -987,7 +999,6 @@ export default function WeeklyCalendar({ magasinId }) {
         {days.map((day, i) => {
           const dateStr = toDateStr(day)
           const dayEvents = byDate[dateStr] || []
-          const planning = planningByDate[dateStr] || []
           const today = isToday(day)
           const quotaInfo = getDayQuotaInfo(dateStr)
 
@@ -1019,13 +1030,15 @@ export default function WeeklyCalendar({ magasinId }) {
                 )}
               </div>
 
-              {/* Événements puis planning de l'équipe */}
+              {/* Événements (le planning de l'équipe est dans la bande du bas) */}
               <div
                 className="flex-1 p-1.5 space-y-1 overflow-y-auto cursor-pointer group"
                 onClick={() => setModal({ event: null, date: dateStr })}
               >
-                {dayItems(dateStr)}
-                {dayEvents.length === 0 && planning.length === 0 && (
+                {dayEvents.map(ev => (
+                  <EventChip key={ev.id} ev={ev} onClick={e => { e.stopPropagation(); openEvent(ev, dateStr) }} />
+                ))}
+                {dayEvents.length === 0 && (
                   <div className="h-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                     <span className="text-[10px] text-gray-300 dark:text-neutral-700">+</span>
                   </div>
@@ -1035,6 +1048,21 @@ export default function WeeklyCalendar({ magasinId }) {
           )
         })}
       </div>
+
+      {/* Ordinateur : horaires de l'équipe en bas, alignés sur les jours */}
+      {weekHasPlanning && (
+        <div className="hidden md:grid shrink-0 max-h-[45%] grid-cols-7 divide-x divide-gray-100 dark:divide-neutral-800 border-t border-gray-100 dark:border-neutral-800 bg-gray-50/60 dark:bg-neutral-950/40 overflow-hidden">
+          {days.map(day => {
+            const dateStr = toDateStr(day)
+            const planning = planningByDate[dateStr] || []
+            return (
+              <div key={dateStr} className={['min-w-0 p-1.5 space-y-0.5 overflow-y-auto', isToday(day) ? 'bg-gray-100/70 dark:bg-neutral-800/40' : ''].join(' ')}>
+                {planning.map(entry => <PlanningLine key={entry.name} {...entry} />)}
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* Légende : cliquer sur une couleur la masque ou l'affiche */}
       <div className="flex flex-wrap items-center gap-x-1 gap-y-1 px-3 py-2 border-t border-gray-100 dark:border-neutral-800">
