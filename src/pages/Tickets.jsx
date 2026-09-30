@@ -145,7 +145,14 @@ export default function Tickets() {
         const target = list.find(t => t.id === openId)
         if (target) setActiveTicket(target)
       }
-    }, err => setError(err.message))
+    }, err => {
+      // Liste vidée : ne pas laisser croire que les anciens tickets sont à jour
+      setTickets([])
+      setError(err.code === 'failed-precondition'
+        ? 'La base de données prépare l’affichage de ce magasin (quelques minutes après une mise à jour). Recharge la page dans un instant.'
+        : err.message)
+    })
+    setError('')
     return () => unsub()
   }, [effectiveMagasinId, profile, isGlobal])
 
@@ -353,7 +360,9 @@ export default function Tickets() {
             {/* New */}
             <button
               onClick={() => setShowForm(true)}
-              className="order-2 sm:order-none ml-auto sm:ml-0 h-8 px-4 rounded-lg bg-gray-900 text-white text-xs font-semibold
+              disabled={!effectiveMagasinId}
+              title={effectiveMagasinId ? '' : 'Sélectionne un magasin pour créer un ticket'}
+              className="disabled:opacity-50 order-2 sm:order-none ml-auto sm:ml-0 h-8 px-4 rounded-lg bg-gray-900 text-white text-xs font-semibold
                          hover:bg-gray-700 transition-colors
                          dark:bg-white dark:text-black dark:hover:bg-gray-100"
             >
