@@ -16,7 +16,7 @@ const PAGE_TITLES = {
   '/settings': 'Admin',
   '/b2b': 'B2B',
   '/rh': 'Ressources Humaines',
-  '/service': 'Services Vélo',
+  '/service': 'Services',
   '/profile': 'Mon profil',
   '/operations': 'Opérations Commerciales',
   '/flocage': 'Flocage',

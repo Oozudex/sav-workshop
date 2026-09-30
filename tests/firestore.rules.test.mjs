@@ -56,6 +56,9 @@ beforeEach(async () => {
     await setDoc(doc(db, 'b2b_tools', 'tool'), { label: 'Fournisseur', credentialStoreIds: ['A', 'B'] })
     await setDoc(doc(db, 'b2b_tools', 'tool', 'credentials', 'A'), { email: 'a@x.fr', password: 'pwdA' })
     await setDoc(doc(db, 'b2b_tools', 'tool', 'credentials', 'B'), { email: 'b@x.fr', password: 'pwdB' })
+    await setDoc(doc(db, 'services', 'svc'), { label: 'Upway', credentialStoreIds: ['A', 'B'] })
+    await setDoc(doc(db, 'services', 'svc', 'credentials', 'A'), { login: 'a@x.fr', password: 'pwdA' })
+    await setDoc(doc(db, 'services', 'svc', 'credentials', 'B'), { login: 'b@x.fr', password: 'pwdB' })
     await setDoc(doc(db, 'counters', 'tickets'), { lastNumber: 10, year: 2026 })
     await setDoc(doc(db, 'calendar_events', 'evB'), { magasinId: 'B', date: '2026-01-01', createdBy: 'veloB' })
     await setDoc(doc(db, 'flocage_stock', 'B'), { grande_lettre_blanc: { A: 3 } })
@@ -159,6 +162,27 @@ describe('b2b_tools', () => {
   it("les globaux gèrent tous les identifiants", async () => {
     await assertSucceeds(getDocs(collection(as('acheteur'), 'b2b_tools', 'tool', 'credentials')))
     await assertFails(setDoc(doc(as('dirmagA'), 'b2b_tools', 'tool', 'credentials', 'A'), { password: 'x' }))
+  })
+})
+
+describe('services', () => {
+  it("seuls les administrateurs gèrent les services", async () => {
+    await assertSucceeds(getDoc(doc(as('veloA'), 'services', 'svc')))
+    await assertFails(updateDoc(doc(as('acheteur'), 'services', 'svc'), { label: 'X' }))
+    await assertFails(updateDoc(doc(as('dirgen'), 'services', 'svc'), { label: 'X' }))
+    await assertSucceeds(updateDoc(doc(as('admin'), 'services', 'svc'), { label: 'X' }))
+    await assertSucceeds(setDoc(doc(as('admin'), 'services', 'nouveau'), { label: 'Nouveau' }))
+  })
+  it("un magasin ne lit que ses propres identifiants", async () => {
+    await assertSucceeds(getDoc(doc(as('veloA'), 'services', 'svc', 'credentials', 'A')))
+    await assertFails(getDoc(doc(as('veloA'), 'services', 'svc', 'credentials', 'B')))
+    await assertFails(getDocs(collection(as('veloA'), 'services', 'svc', 'credentials')))
+  })
+  it("les globaux lisent tout, seuls les administrateurs écrivent", async () => {
+    await assertSucceeds(getDocs(collection(as('acheteur'), 'services', 'svc', 'credentials')))
+    await assertFails(setDoc(doc(as('acheteur'), 'services', 'svc', 'credentials', 'A'), { password: 'x' }))
+    await assertFails(setDoc(doc(as('dirmagA'), 'services', 'svc', 'credentials', 'A'), { password: 'x' }))
+    await assertSucceeds(setDoc(doc(as('admin'), 'services', 'svc', 'credentials', 'A'), { password: 'x' }))
   })
 })
 

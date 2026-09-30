@@ -36,6 +36,7 @@ const VENDEURS = {
 
 // Comptes globaux et directeurs ; les comptes rayon sont générés plus bas
 const COMPTES = [
+  { uid: 'admin-local', email: 'admin@sav.test', displayName: 'Admin', role: 'admin' },
   { uid: 'directeurgen', email: 'directeurgen@sav.test', displayName: 'Directeur Général', role: 'directeurgen' },
   { uid: 'acheteur', email: 'acheteur@sav.test', displayName: 'Acheteur Tous rayons', role: 'acheteur', rayons: RAYONS },
   { uid: 'acheteur-velo', email: 'acheteur-velo@sav.test', displayName: 'Acheteur Vélo', role: 'acheteur', rayons: ['velo'] },

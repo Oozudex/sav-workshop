@@ -143,7 +143,7 @@ const SECTIONS = [
   },
   {
     label: 'Service',
-    description: 'Accéder aux plateformes de services vélo partenaires',
+    description: 'Accéder aux services partenaires et à leurs procédures',
     path: '/service',
     roles: null,
     icon: (

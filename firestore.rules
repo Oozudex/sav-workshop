@@ -212,6 +212,18 @@ service cloud.firestore {
       }
     }
 
+    /* ── Services (gérés par les administrateurs) ─────────────────────────── */
+    match /services/{serviceId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn() && isAdmin();
+
+      // Identifiants par magasin : un magasin ne lit que les siens
+      match /credentials/{credMagasinId} {
+        allow read: if isSignedIn() && (isGlobal() || magasinId() == credMagasinId);
+        allow write: if isSignedIn() && isAdmin();
+      }
+    }
+
     /* ── Calendrier ─────────────────────────────────────────────────────── */
     match /calendar_events/{eventId} {
       allow read: if isSignedIn() && (
