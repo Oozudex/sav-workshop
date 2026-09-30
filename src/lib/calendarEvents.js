@@ -37,3 +37,38 @@ export function ticketPrefill(ev) {
     issueDescription: (ev?.description || '').trim(),
   }
 }
+
+// ── Présence au RDV ──────────────────────────────────────────────────────────
+// presence : 'venu' | 'absent' | null (pas encore pointé)
+export const PRESENCE_LABELS = { venu: 'Venu', absent: 'Absent' }
+
+// Le pointage n'a de sens qu'à partir du jour du RDV
+export function canMarkPresence(ev, today) {
+  return ev?.type === 'rdv_client' && !!ev.id && !!ev.date && ev.date <= today
+}
+
+// RDV passé (avant aujourd'hui) que personne n'a pointé
+export function rdvToCheck(ev, today) {
+  return ev?.type === 'rdv_client' && !ev.presence && !!ev.date && ev.date < today
+}
+
+// RDV manqués par le même numéro (du plus récent au plus ancien), hors RDV en cours d'édition
+export function absencesFor(events, phone, excludeId = null) {
+  const digits = phoneDigits(phone)
+  if (digits.length < 10) return []
+  return events
+    .filter(e => e.id !== excludeId && e.type === 'rdv_client' && e.presence === 'absent' && phoneDigits(e.customerPhone) === digits)
+    .sort((a, b) => b.date.localeCompare(a.date))
+}
+
+// Nouveau RDV pour un client absent : mêmes informations, date à choisir
+export function reschedulePrefill(ev) {
+  return {
+    type: 'rdv_client',
+    customerName: (ev?.customerName || ev?.title || '').trim(),
+    customerPhone: formatPhone(ev?.customerPhone),
+    description: (ev?.description || '').trim(),
+    rayonType: ev?.rayonType || null,
+    rescheduledFrom: ev?.date || null,
+  }
+}

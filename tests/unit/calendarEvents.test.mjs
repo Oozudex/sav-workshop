@@ -1,6 +1,8 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { formatPhone, rdvClientErrors, ticketPrefill } from '../../src/lib/calendarEvents.js'
+import {
+  absencesFor, canMarkPresence, formatPhone, rdvClientErrors, rdvToCheck, reschedulePrefill, ticketPrefill,
+} from '../../src/lib/calendarEvents.js'
 
 const OK = { customerName: 'Marie Dubois', customerPhone: '06 12 34 56 78', description: 'Freins avant qui frottent et vitesses qui sautent' }
 
@@ -32,5 +34,36 @@ describe('RDV client', () => {
       issueDescription: 'Freins avant qui frottent et vitesses qui sautent',
     })
     assert.deepEqual(ticketPrefill({}), { customerName: '', customerPhone: '', issueDescription: '' })
+  })
+})
+
+describe('présence au RDV', () => {
+  const TODAY = '2026-09-30'
+  const rdv = (id, date, extra = {}) => ({ id, type: 'rdv_client', date, customerPhone: '06 12 34 56 78', ...extra })
+
+  it("se pointe à partir du jour du RDV", () => {
+    assert.equal(canMarkPresence(rdv('a', '2026-09-30'), TODAY), true)
+    assert.equal(canMarkPresence(rdv('a', '2026-10-01'), TODAY), false)
+    assert.equal(canMarkPresence({ type: 'teams', id: 'x', date: '2026-09-01' }, TODAY), false)
+  })
+  it("signale les RDV passés non pointés", () => {
+    assert.equal(rdvToCheck(rdv('a', '2026-09-29'), TODAY), true)
+    assert.equal(rdvToCheck(rdv('a', '2026-09-30'), TODAY), false)
+    assert.equal(rdvToCheck(rdv('a', '2026-09-29', { presence: 'venu' }), TODAY), false)
+  })
+  it("retrouve les absences d'un numéro, quel que soit le format", () => {
+    const events = [
+      rdv('a', '2026-09-10', { presence: 'absent' }),
+      rdv('b', '2026-09-20', { presence: 'absent', customerPhone: '0612345678' }),
+      rdv('c', '2026-09-21', { presence: 'venu' }),
+      rdv('d', '2026-09-22', { presence: 'absent', customerPhone: '07 00 00 00 00' }),
+    ]
+    assert.deepEqual(absencesFor(events, '06.12.34.56.78').map(e => e.id), ['b', 'a'])
+    assert.deepEqual(absencesFor(events, '06 12 34 56 78', 'b').map(e => e.id), ['a'])
+    assert.deepEqual(absencesFor(events, '0612'), [])
+  })
+  it("prépare la reprogrammation", () => {
+    const p = reschedulePrefill(rdv('a', '2026-09-29', { customerName: ' Marie Dubois ', description: 'Freins', rayonType: 'velo' }))
+    assert.deepEqual(p, { type: 'rdv_client', customerName: 'Marie Dubois', customerPhone: '06 12 34 56 78', description: 'Freins', rayonType: 'velo', rescheduledFrom: '2026-09-29' })
   })
 })

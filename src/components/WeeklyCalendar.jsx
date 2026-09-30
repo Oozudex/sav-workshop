@@ -10,7 +10,9 @@ import {
 import { GLOBAL_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
 import { safeUrl } from '../lib/security'
 import { isOpVisibleFor } from '../lib/opSearch'
-import { formatPhone, phoneDigits, rdvClientErrors, ticketPrefill } from '../lib/calendarEvents'
+import {
+  absencesFor, canMarkPresence, formatPhone, phoneDigits, rdvClientErrors, rdvToCheck, reschedulePrefill, ticketPrefill,
+} from '../lib/calendarEvents'
 import CalendarSettings from './CalendarSettings'
 import Portal from './Portal'
 
@@ -130,8 +132,50 @@ function TransformButton({ onClick }) {
   )
 }
 
-function EventModal({ event, defaultDate, onClose, onSave, onDelete, onTransform, canEdit, isGlobal, profile }) {
+// Pointage d'un RDV client passé ou du jour : venu / absent, puis appeler ou reprogrammer
+function PresenceBlock({ event, onPresence, onReschedule }) {
+  const p = event.presence
+  const btn = (value, label, on, d) => (
+    <button type="button" onClick={() => onPresence(event, p === value ? null : value)} aria-pressed={p === value}
+      className={['h-9 inline-flex items-center justify-center gap-1.5 rounded-lg border text-xs font-semibold transition-colors',
+        p === value ? on : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800'].join(' ')}>
+      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d={d} /></svg>
+      {label}
+    </button>
+  )
+  return (
+    <div className={['rounded-xl border p-3 space-y-2.5', !p ? 'border-orange-300 bg-orange-50/60 dark:border-orange-500/40 dark:bg-orange-500/10'
+      : 'border-gray-200 dark:border-neutral-800'].join(' ')}>
+      <p className={LABEL}>{p ? 'Présence' : 'Le client est-il venu ?'}</p>
+      <div className="grid grid-cols-2 gap-2">
+        {btn('venu', 'Venu', 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300', 'M4.5 12.75l6 6 9-13.5')}
+        {btn('absent', 'Absent', 'border-red-500 bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300', 'M6 18L18 6M6 6l12 12')}
+      </div>
+      {p === 'absent' && (
+        <div className="grid grid-cols-2 gap-2">
+          {event.customerPhone ? (
+            <a href={`tel:${phoneDigits(event.customerPhone)}`}
+              className="h-9 inline-flex items-center justify-center gap-1.5 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
+              📞 Appeler
+            </a>
+          ) : <span />}
+          <button type="button" onClick={() => onReschedule(event)}
+            className="h-9 inline-flex items-center justify-center gap-1.5 rounded-lg border text-xs font-semibold border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800">
+            {event.rescheduledTo ? 'Reprogrammer à nouveau' : 'Reprogrammer'}
+          </button>
+        </div>
+      )}
+      {event.rescheduledTo && (
+        <p className="text-[11px] text-gray-500 dark:text-neutral-400">Reprogrammé au {fmtDateLong(event.rescheduledTo)}.</p>
+      )}
+    </div>
+  )
+}
+
+function EventModal({ event, prefill, defaultDate, onClose, onSave, onDelete, onTransform, onPresence, onReschedule, absentRdvs = [], canEdit, isGlobal, profile }) {
   const isNew = !event?.id
+  const today = toDateStr(new Date())
+  const showPresence = !isNew && onPresence && canMarkPresence(event, today)
   const isTicket = event?.type === 'ticket_rendu'
 
   const creatableTypes = useMemo(() => {
@@ -143,16 +187,18 @@ function EventModal({ event, defaultDate, onClose, onSave, onDelete, onTransform
 
   const [form, setForm] = useState({
     title: event?.title || '',
-    type: event?.type || creatableTypes[0],
-    date: event?.date || defaultDate || toDateStr(new Date()),
+    type: event?.type || prefill?.type || creatableTypes[0],
+    // Reprogrammation : la nouvelle date est à choisir
+    date: event?.date || (prefill ? '' : defaultDate || toDateStr(new Date())),
     startTime: event?.startTime || '',
     endTime: event?.endTime || '',
     // Anciens RDV client : le titre était le plus souvent le nom du client
-    customerName: event?.customerName ?? (event?.type === 'rdv_client' ? event.title : ''),
-    customerPhone: event?.customerPhone || '',
-    description: event?.description || '',
+    customerName: event?.customerName ?? (event?.type === 'rdv_client' ? event.title : prefill?.customerName || ''),
+    customerPhone: event?.customerPhone || prefill?.customerPhone || '',
+    description: event?.description || prefill?.description || '',
+    rescheduledFrom: event?.rescheduledFrom || prefill?.rescheduledFrom || null,
     teamsLink: event?.teamsLink || '',
-    rayonType: event?.rayonType || (RAYON_TYPES.includes(profile?.role) ? profile.role : ''),
+    rayonType: event?.rayonType || prefill?.rayonType || (RAYON_TYPES.includes(profile?.role) ? profile.role : ''),
     teamsRayons: event?.teamsRayons || [],
     teamsMagasins: event?.teamsMagasins || [],
   })
@@ -161,7 +207,12 @@ function EventModal({ event, defaultDate, onClose, onSave, onDelete, onTransform
   const [tried, setTried] = useState(false)
 
   const isRdvClient = form.type === 'rdv_client'
-  const errors = isRdvClient ? rdvClientErrors(form) : (form.title.trim() ? {} : { title: 'Le titre est obligatoire.' })
+  const errors = {
+    ...(isRdvClient ? rdvClientErrors(form) : (form.title.trim() ? {} : { title: 'Le titre est obligatoire.' })),
+    ...(form.date ? {} : { date: prefill ? 'Choisissez la nouvelle date du RDV.' : 'Choisissez une date.' }),
+  }
+  // Absences récentes du même numéro (RDV manqués)
+  const absences = isRdvClient ? absencesFor(absentRdvs, form.customerPhone, event?.id) : []
   const shown = tried ? errors : {}
 
   useEffect(() => {
@@ -201,7 +252,7 @@ function EventModal({ event, defaultDate, onClose, onSave, onDelete, onTransform
               </span>
             )}
             <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-              {isNew ? (creatableTypes.length === 1 ? `Nouveau ${EVENT_TYPES[creatableTypes[0]].label}` : 'Nouvel événement') : isTicket ? event.title : (canEdit ? 'Modifier' : event.title)}
+              {isNew ? (prefill ? 'Reprogrammer le RDV' : creatableTypes.length === 1 ? `Nouveau ${EVENT_TYPES[creatableTypes[0]].label}` : 'Nouvel événement') : isTicket ? event.title : (canEdit ? 'Modifier' : event.title)}
             </span>
           </div>
           <button onClick={onClose} aria-label="Fermer" className="shrink-0 h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
@@ -223,6 +274,8 @@ function EventModal({ event, defaultDate, onClose, onSave, onDelete, onTransform
         ) : !isNew && !canEdit ? (
           /* Vue lecture */
           <div className="p-5 space-y-3">
+            {showPresence && <PresenceBlock event={event} onPresence={onPresence} onReschedule={onReschedule} />}
+            {event.rescheduledFrom && <p className="text-[11px] text-gray-500 dark:text-neutral-400">Reprogrammé : le client n’était pas venu au RDV du {fmtDateLong(event.rescheduledFrom)}.</p>}
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div><span className="text-gray-400">Date</span><p className="font-medium text-gray-900 dark:text-white mt-0.5">{fmtDateLong(event.date)}{event.startTime && ` · ${event.startTime}${event.endTime ? ` – ${event.endTime}` : ''}`}</p></div>
               {event.rayonType && <div><span className="text-gray-400">Rayon</span><p className="font-medium text-gray-900 dark:text-white mt-0.5">{RAYON_TYPE_LABELS[event.rayonType] || event.rayonType}</p></div>}
@@ -257,6 +310,12 @@ function EventModal({ event, defaultDate, onClose, onSave, onDelete, onTransform
         ) : (
           /* Formulaire */
           <form onSubmit={handleSave} noValidate className="p-5 space-y-4">
+            {showPresence && <PresenceBlock event={event} onPresence={onPresence} onReschedule={onReschedule} />}
+            {form.rescheduledFrom && (
+              <p className="rounded-lg bg-gray-50 dark:bg-neutral-800/60 px-3 py-2 text-[11px] text-gray-600 dark:text-neutral-300">
+                {isNew ? 'Nouveau RDV' : 'RDV reprogrammé'} : le client n’était pas venu au RDV du {fmtDateLong(form.rescheduledFrom)}.
+              </p>
+            )}
             {/* Type */}
             {isNew && creatableTypes.length > 1 && (
               <div className="space-y-1.5">
@@ -289,6 +348,12 @@ function EventModal({ event, defaultDate, onClose, onSave, onDelete, onTransform
                     placeholder="Ex. 06 12 34 56 78" autoComplete="off" onChange={e => set('customerPhone', e.target.value)}
                     onBlur={e => set('customerPhone', formatPhone(e.target.value))} />
                 </Field>
+                {absences.length > 0 && (
+                  <p className="sm:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                    ⚠ Ce client ne s’est pas présenté à son RDV du {fmtDateLong(absences[0].date)}
+                    {absences.length > 1 && ` (et ${absences.length - 1} autre${absences.length > 2 ? 's' : ''} RDV manqué${absences.length > 2 ? 's' : ''})`}.
+                  </p>
+                )}
               </div>
             ) : (
               <Field label="Titre" required error={shown.title}>
@@ -298,8 +363,8 @@ function EventModal({ event, defaultDate, onClose, onSave, onDelete, onTransform
 
             {/* Date + Heures */}
             <div className="grid grid-cols-2 sm:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2">
-              <Field label="Date" className="col-span-2 sm:col-span-1">
-                <input type="date" className="Input" value={form.date} onChange={e => set('date', e.target.value)} />
+              <Field label="Date" required={!!prefill} error={shown.date} className="col-span-2 sm:col-span-1">
+                <input type="date" className={`Input ${shown.date ? INVALID : ''}`} value={form.date} onChange={e => set('date', e.target.value)} />
               </Field>
               <Field label="Début">
                 <input type="time" className="Input" value={form.startTime} onChange={e => set('startTime', e.target.value)} />
@@ -428,12 +493,19 @@ function EventModal({ event, defaultDate, onClose, onSave, onDelete, onTransform
 }
 
 /* ── Éléments de la grille ──────────────────────────────────────────────────── */
-function EventChip({ ev, onClick }) {
+function EventChip({ ev, onClick, today }) {
   const t = EVENT_TYPES[ev.type]
   const time = ev.startTime ? `${ev.startTime}${ev.endTime ? `–${ev.endTime}` : ''}` : null
   const top = [time, ev.label].filter(Boolean).join(' · ')
   const sub = ev.subtitle ?? (ev.type === 'rdv_client' ? ev.description : null)
+  // Présence au RDV client : à pointer (passé, non renseigné), venu ou absent
+  const toCheck = rdvToCheck(ev, today)
+  const presence = ev.type === 'rdv_client' ? ev.presence : null
+  const status = toCheck ? { text: '⚠ À pointer', cls: 'text-orange-600 dark:text-orange-400' }
+    : presence === 'absent' ? { text: ev.rescheduledTo ? 'Absent · reprogrammé' : 'Absent', cls: 'text-red-600 dark:text-red-400' }
+      : presence === 'venu' ? { text: '✓ Venu', cls: 'text-emerald-700 dark:text-emerald-400' } : null
   const tooltip = [
+    status?.text,
     [t?.label, ev.label].filter(Boolean).join(' · '),
     time, ev.title,
     ev.type === 'rdv_client' && ev.customerPhone ? formatPhone(ev.customerPhone) : null,
@@ -441,9 +513,11 @@ function EventChip({ ev, onClick }) {
   ].filter(Boolean).join('\n')
   return (
     <button onClick={onClick} title={tooltip}
-      className={`w-full text-left rounded-md border-l-[3px] pl-1.5 pr-1 py-1 text-[11px] leading-snug transition hover:brightness-95 dark:hover:brightness-125 ${t?.chip || ''}`}>
+      className={['w-full text-left rounded-md border-l-[3px] pl-1.5 pr-1 py-1 text-[11px] leading-snug transition hover:brightness-95 dark:hover:brightness-125',
+        t?.chip || '', toCheck ? 'ring-1 ring-orange-400 dark:ring-orange-500/70' : '', presence === 'absent' ? 'opacity-60' : ''].join(' ')}>
+      {status && <span className={`block text-[10px] font-bold truncate ${status.cls}`}>{status.text}</span>}
       {top && <span className="block text-[10px] font-semibold tabular-nums opacity-70 truncate">{top}</span>}
-      <span className="font-semibold line-clamp-2 break-words">{ev.title}</span>
+      <span className={`font-semibold line-clamp-2 break-words ${presence === 'absent' ? 'line-through' : ''}`}>{ev.title}</span>
       {sub && <span className="text-[10px] opacity-75 line-clamp-2 break-words">{sub}</span>}
     </button>
   )
@@ -505,6 +579,8 @@ export default function WeeklyCalendar({ magasinId }) {
   const [rayonSettings, setRayonSettings] = useState({}) // { [rayonType]: { quotas: {...} } }
   const [pendingForm, setPendingForm] = useState(null)
   const [quotaWarning, setQuotaWarning] = useState(null) // { rayonType, quota, count }
+  const [absentRdvs, setAbsentRdvs] = useState([]) // RDV client manqués du magasin (avertissement à la prise de RDV)
+  const todayStr = toDateStr(new Date())
 
   const isPersonal = isGlobal && calendarView === 'personal'
 
@@ -635,6 +711,13 @@ export default function WeeklyCalendar({ magasinId }) {
       }))
     })
   }, [magasinId, isPersonal, isChaussure, days[0].getTime()])
+
+  /* RDV client manqués du magasin (supprimés un mois après leur date par le nettoyage RGPD) */
+  useEffect(() => {
+    if (!magasinId || isPersonal) { setAbsentRdvs([]); return }
+    const q = query(collection(db, 'calendar_events'), where('magasinId', '==', magasinId), where('presence', '==', 'absent'))
+    return onSnapshot(q, snap => setAbsentRdvs(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => setAbsentRdvs([]))
+  }, [magasinId, isPersonal])
 
   /* Chargement des paramètres rayon */
   useEffect(() => {
@@ -771,8 +854,8 @@ export default function WeeklyCalendar({ magasinId }) {
       teamsLink: form.teamsLink || null,
       teamsRayons: form.type === 'teams' && form.teamsRayons?.length ? form.teamsRayons : null,
       teamsMagasins: form.type === 'teams' && form.teamsMagasins?.length ? form.teamsMagasins : null,
-      rayonType: form.type === 'rdv_client' && isRayonRole
-        ? profile.role
+      rayonType: form.type === 'rdv_client'
+        ? (isRayonRole ? profile.role : (form.rayonType || null))
         : (form.type === 'op_commerciale' ? (form.rayonType || null) : null),
       magasinId: isPersonal ? null : magasinId,
       createdBy: user.uid,
@@ -780,8 +863,29 @@ export default function WeeklyCalendar({ magasinId }) {
     if (modal?.event?.id) {
       await updateDoc(doc(db, 'calendar_events', modal.event.id), { ...data, updatedAt: serverTimestamp() })
     } else {
-      await addDoc(collection(db, 'calendar_events'), { ...data, createdAt: serverTimestamp() })
+      await addDoc(collection(db, 'calendar_events'), {
+        ...data,
+        ...(isRdvClient && form.rescheduledFrom ? { rescheduledFrom: form.rescheduledFrom } : {}),
+        createdAt: serverTimestamp(),
+      })
+      // Reprogrammation : l'ancien RDV (absent) indique la nouvelle date
+      if (modal?.rescheduleFrom?.id) {
+        await updateDoc(doc(db, 'calendar_events', modal.rescheduleFrom.id), { rescheduledTo: form.date, updatedAt: serverTimestamp() })
+      }
     }
+  }
+
+  // Pointage : venu / absent (null = pas encore pointé)
+  async function setPresence(ev, presence) {
+    await updateDoc(doc(db, 'calendar_events', ev.id), {
+      presence, presenceAt: presence ? serverTimestamp() : null,
+      presenceBy: presence ? (profile?.displayName || user.email || null) : null,
+      updatedAt: serverTimestamp(),
+    })
+  }
+
+  function reschedule(ev) {
+    setModal({ event: null, date: '', prefill: reschedulePrefill(ev), rescheduleFrom: ev })
   }
 
   async function handleSave(form) {
@@ -826,6 +930,8 @@ export default function WeeklyCalendar({ magasinId }) {
   }
 
   function handleTransformToTicket(ev) {
+    // Créer la fiche atelier = le client est venu
+    if (ev?.id && ev.type === 'rdv_client' && ev.presence !== 'venu') setPresence(ev, 'venu').catch(() => {})
     navigate('/tickets', {
       state: {
         openForm: true,
@@ -872,7 +978,7 @@ export default function WeeklyCalendar({ magasinId }) {
     return (
       <>
         {dayEvents.map(ev => (
-          <EventChip key={ev.id} ev={ev} onClick={e => { e.stopPropagation(); openEvent(ev, dateStr) }} />
+          <EventChip key={ev.id} ev={ev} today={todayStr} onClick={e => { e.stopPropagation(); openEvent(ev, dateStr) }} />
         ))}
         {planning.length > 0 && (
           <div className={['space-y-0.5', dayEvents.length ? 'pt-1.5 mt-1.5 border-t border-dashed border-gray-200 dark:border-neutral-700' : ''].join(' ')}>
@@ -882,6 +988,9 @@ export default function WeeklyCalendar({ magasinId }) {
       </>
     )
   }
+
+  // Fenêtre ouverte : version à jour de l'événement (pointage en direct)
+  const modalEvent = modal?.event?.id ? (events.find(e => e.id === modal.event.id) || modal.event) : modal?.event
 
   if (!magasinId) return null
 
@@ -1036,7 +1145,7 @@ export default function WeeklyCalendar({ magasinId }) {
                 onClick={() => setModal({ event: null, date: dateStr })}
               >
                 {dayEvents.map(ev => (
-                  <EventChip key={ev.id} ev={ev} onClick={e => { e.stopPropagation(); openEvent(ev, dateStr) }} />
+                  <EventChip key={ev.id} ev={ev} today={todayStr} onClick={e => { e.stopPropagation(); openEvent(ev, dateStr) }} />
                 ))}
                 {dayEvents.length === 0 && (
                   <div className="h-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1094,12 +1203,17 @@ export default function WeeklyCalendar({ magasinId }) {
       {/* Modal événement */}
       {modal !== null && (
         <EventModal
-          event={modal.event}
+          key={modal.prefill ? `reprog-${modal.rescheduleFrom?.id}` : modal.event?.id || 'new'}
+          event={modalEvent}
+          prefill={modal.prefill}
           defaultDate={modal.date}
           onClose={() => setModal(null)}
           onSave={handleSave}
           onDelete={handleDelete}
           onTransform={handleTransformToTicket}
+          onPresence={setPresence}
+          onReschedule={reschedule}
+          absentRdvs={absentRdvs}
           canEdit={modal.event ? canEditEvent(modal.event) : true}
           isGlobal={isGlobal}
           profile={profile}

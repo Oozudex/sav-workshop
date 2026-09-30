@@ -236,7 +236,11 @@ service cloud.firestore {
       allow update: if isSignedIn() && (
         isGlobal() ||
         ((isDirMag() && inMyStore(resource.data)) || isCreator(resource.data)) &&
-          request.resource.data.get('magasinId', null) == resource.data.get('magasinId', null)
+          request.resource.data.get('magasinId', null) == resource.data.get('magasinId', null) ||
+        // Pointage d'un RDV client (venu / absent, reprogrammation) par tout compte du magasin
+        (isLocalUser() && inMyStore(resource.data) && resource.data.get('type', null) == 'rdv_client' &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['presence', 'presenceAt', 'presenceBy', 'rescheduledTo', 'updatedAt']))
       );
       allow delete: if isSignedIn() && (
         isGlobal() || (isDirMag() && inMyStore(resource.data)) || isCreator(resource.data)

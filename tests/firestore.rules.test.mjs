@@ -61,6 +61,7 @@ beforeEach(async () => {
     await setDoc(doc(db, 'services', 'svc', 'credentials', 'B'), { login: 'b@x.fr', password: 'pwdB' })
     await setDoc(doc(db, 'counters', 'tickets'), { lastNumber: 10, year: 2026 })
     await setDoc(doc(db, 'calendar_events', 'evB'), { magasinId: 'B', date: '2026-01-01', createdBy: 'veloB' })
+    await setDoc(doc(db, 'calendar_events', 'rdvA'), { magasinId: 'A', type: 'rdv_client', date: '2026-01-01', createdBy: 'dirmagA', title: 'Client' })
     await setDoc(doc(db, 'flocage_stock', 'B'), { grande_lettre_blanc: { A: 3 } })
   })
 })
@@ -209,6 +210,12 @@ describe('counters', () => {
 })
 
 describe('calendar_events', () => {
+  it("un rayon pointe un RDV client de son magasin, sans rien modifier d'autre", async () => {
+    await assertSucceeds(updateDoc(doc(as('veloA'), 'calendar_events', 'rdvA'), { presence: 'absent', presenceAt: serverTimestamp() }))
+    await assertFails(updateDoc(doc(as('veloA'), 'calendar_events', 'rdvA'), { presence: 'venu', title: 'Autre' }))
+    await assertFails(updateDoc(doc(as('veloB'), 'calendar_events', 'rdvA'), { presence: 'venu' }))
+    await assertFails(updateDoc(doc(as('chaussureA'), 'calendar_events', 'evB'), { presence: 'venu' }))
+  })
   it("un vendeur ne liste pas le calendrier d'un autre magasin", async () => {
     await assertFails(getDocs(query(collection(as('veloA'), 'calendar_events'), where('magasinId', '==', 'B'))))
     await assertSucceeds(getDocs(query(collection(as('veloA'), 'calendar_events'), where('magasinId', '==', 'A'))))
