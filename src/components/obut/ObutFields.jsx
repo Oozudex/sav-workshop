@@ -1,5 +1,5 @@
 // Champs d'une commande OBUT (création et modification) : client, boules, marquage, services et récapitulatif des prix
-import { catalogueByKind, catalogueChoice, obutRemaining, obutTotal } from '../../lib/obut'
+import { catalogueByKind, catalogueChoice, obutMinDeposit, obutRemaining, obutTotal } from '../../lib/obut'
 import { formatEuro, parseEuro } from '../../lib/orders'
 import { INVALID } from '../admin/ui'
 
@@ -67,6 +67,7 @@ export default function ObutFields({ form, setForm, catalogue, staff, errors = {
 
   const total = obutTotal(form)
   const reste = obutRemaining(form)
+  const minDeposit = obutMinDeposit(form)
   const money = v => (v == null || v === '' ? '' : Number(v).toFixed(2).replace('.', ','))
 
   return (
@@ -181,16 +182,17 @@ export default function ObutFields({ form, setForm, catalogue, staff, errors = {
           ))}
         </div>
 
-        <div className="mt-3 rounded-xl bg-gray-50 dark:bg-neutral-800/60 border border-gray-200 dark:border-neutral-700 p-3 grid grid-cols-3 gap-3 items-end">
+        <div className="mt-3 rounded-xl bg-gray-50 dark:bg-neutral-800/60 border border-gray-200 dark:border-neutral-700 p-3 grid grid-cols-2 sm:grid-cols-3 gap-3 items-end">
           <div>
             <p className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide mb-1">Total TTC</p>
             <p className="text-base sm:text-lg font-bold text-gray-900 dark:text-white tabular-nums">{formatEuro(total)}</p>
           </div>
-          <label className="block">
+          <label className="block col-span-2 sm:col-span-1 order-last sm:order-none">
             <span className="block text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide mb-1">Acompte</span>
             <div className="relative">
               <input className={`Input h-9 text-sm !pr-6 text-right tabular-nums ${errors.acompte ? INVALID : ''}`} inputMode="decimal"
-                value={form.acompte} onChange={e => set('acompte', e.target.value)} onBlur={e => { const n = parseEuro(e.target.value); if (n != null) set('acompte', money(n)) }} placeholder="0,00" />
+                value={form.acompte} onChange={e => set('acompte', e.target.value)} onBlur={e => { const n = parseEuro(e.target.value); if (n != null) set('acompte', money(n)) }} placeholder={minDeposit ? `min ${money(minDeposit)}` : '0,00'}
+                title={minDeposit ? `Acompte minimum : 30 % du total, soit ${formatEuro(minDeposit)}` : undefined} />
               <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">€</span>
             </div>
           </label>

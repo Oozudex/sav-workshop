@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  DEFAULT_CATALOGUE, catalogueByKind, catalogueItemErrors, emptyObutForm, isObutListed, obutFormErrors,
+  DEFAULT_CATALOGUE, obutMinDeposit, catalogueByKind, catalogueItemErrors, emptyObutForm, isObutListed, obutFormErrors,
   obutFormFromCmd, obutLines, obutMatches, obutPayload, obutRemaining, obutStatus, obutTotal,
 } from '../../src/lib/obut.js'
 
@@ -36,6 +36,11 @@ describe('formulaire', () => {
     assert.equal(obutTotal(f), 246.1)
     assert.equal(obutRemaining(f), 196.1)
     assert.equal(obutLines(f)[1].detail, 'J.L.')
+  })
+  it("acompte minimum : 30 % du total, au centime supérieur", () => {
+    const f = emptyObutForm(DEFAULT_CATALOGUE, '')
+    assert.equal(obutMinDeposit(f), 68.13) // 227,10 × 30 % = 68,13
+    assert.equal(obutMinDeposit({ ...f, modele: null, options: [] }), null)
   })
   it("exige client, téléphone, texte de marquage et acompte cohérent", () => {
     const f = { ...emptyObutForm(DEFAULT_CATALOGUE, ''), marquage: { id: 'm', label: 'M', prix: '15' }, acompte: '9999' }

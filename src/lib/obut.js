@@ -151,6 +151,14 @@ export function obutRemaining(src) {
   return Math.max(0, round2(total - (parseEuro(src.acompte) || 0)))
 }
 
+// Acompte minimum demandé au client : 30 % du total, arrondi au centime supérieur
+export const OBUT_MIN_DEPOSIT_RATE = 0.3
+
+export function obutMinDeposit(src) {
+  const total = obutTotal(src)
+  return total ? Math.ceil(round2(total * OBUT_MIN_DEPOSIT_RATE * 100)) / 100 : null
+}
+
 export function obutFormErrors(f) {
   const errors = {}
   const filled = v => v != null && String(v).trim() !== ''
