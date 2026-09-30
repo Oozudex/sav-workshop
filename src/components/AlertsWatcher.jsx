@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { collection, doc, onSnapshot, query, where } from 'firebase/firestore'
 import { useShallow } from 'zustand/react/shallow'
 import { db } from '../lib/firebase'
-import { computeAlerts } from '../lib/alerts'
+import { computeAlerts, pendingAlerts } from '../lib/alerts'
 import { ORDER_CLOSED_STATUTS } from '../lib/constants'
 import { ORDER_ALERTS } from '../lib/orders'
 import { TICKET_ALERTS } from '../lib/ticketStats'
@@ -13,14 +13,14 @@ import { useAlerts } from '../store/useAlerts'
 const REFRESH_MS = 5 * 60 * 1000
 
 // Réglages d'un jeu de règles (magasins/{id}/alert_settings/{settingsId}) en temps réel
-function useAlertSettings(active, magasinId, settingsId) {
+function useAlertSettings(active, magasinId, settingsId, field = 'rules') {
   const [settings, setSettings] = useState(null)
   useEffect(() => {
     if (!active) { setSettings(null); return }
     return onSnapshot(doc(db, 'magasins', magasinId, 'alert_settings', settingsId),
-      snap => setSettings(snap.exists() ? snap.data().rules || {} : {}),
+      snap => setSettings(snap.exists() ? snap.data()[field] || {} : {}),
       () => setSettings({}))
-  }, [active, magasinId, settingsId])
+  }, [active, magasinId, settingsId, field])
   return settings
 }
 
@@ -50,6 +50,8 @@ export default function AlertsWatcher() {
   const orderSettings = useAlertSettings(active, magasinId, ORDER_ALERTS.settingsId)
   const openTickets = useOpenDocs(active, magasinId, 'tickets', 'status', ['Closed'])
   const openOrders = useOpenDocs(active, magasinId, 'orders', 'statut', ORDER_CLOSED_STATUTS)
+  // Alertes marquées « traitées » ({ [scope:clé]: itemIds })
+  const dismissed = useAlertSettings(active, magasinId, 'dismissed', 'items')
 
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
@@ -60,11 +62,11 @@ export default function AlertsWatcher() {
 
   useEffect(() => {
     if (!active) { setAlerts([]); return }
-    setAlerts([
+    setAlerts(pendingAlerts([
       ...(ticketSettings ? computeAlerts(openTickets, ticketSettings, TICKET_ALERTS, now) : []),
       ...(orderSettings ? computeAlerts(openOrders, orderSettings, ORDER_ALERTS, now) : []),
-    ])
-  }, [active, ticketSettings, orderSettings, openTickets, openOrders, now, setAlerts])
+    ], dismissed || {}))
+  }, [active, ticketSettings, orderSettings, openTickets, openOrders, dismissed, now, setAlerts])
 
   return null
 }

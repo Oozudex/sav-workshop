@@ -38,3 +38,16 @@ export function computeAlerts(items, settings, ruleSet, now = new Date()) {
   }
   return alerts
 }
+
+// ── Alertes marquées « traitées » par le directeur ──────────────────────────
+// dismissed : { [alertId]: itemIds au moment où l'alerte a été traitée }
+export const alertId = alert => `${alert.scope}:${alert.key}`
+
+// Une alerte traitée reste masquée tant que les mêmes éléments dépassent le seuil ;
+// elle revient dès qu'un nouvel élément le dépasse.
+export function pendingAlerts(alerts, dismissed = {}) {
+  return alerts.filter(a => {
+    const done = new Set(dismissed[alertId(a)] || [])
+    return a.itemIds.some(id => !done.has(id))
+  })
+}

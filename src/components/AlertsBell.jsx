@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAlerts } from '../store/useAlerts'
+import { useAuth } from '../store/useAuth'
+import { dismissAlert, useAlerts } from '../store/useAlerts'
 
 /** Cloche des alertes du magasin (tickets SAV et commandes), affichée au directeur de magasin. */
 export default function AlertsBell() {
   const alerts = useAlerts(s => s.alerts)
+  const magasinId = useAuth(s => s.profile?.magasinId)
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
   const navigate = useNavigate()
@@ -52,10 +54,10 @@ export default function AlertsBell() {
           ) : (
             <ul className="max-h-80 overflow-y-auto divide-y divide-gray-100 dark:divide-neutral-800">
               {alerts.map(a => (
-                <li key={`${a.scope}-${a.key}`}>
+                <li key={`${a.scope}-${a.key}`} className="flex items-stretch">
                   <button
                     onClick={() => { setOpen(false); navigate(`${a.path}?alerte=${a.key}`) }}
-                    className="w-full text-left px-3 py-2.5 flex gap-2 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors"
+                    className="flex-1 min-w-0 text-left px-3 py-2.5 flex gap-2 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors"
                   >
                     <span aria-hidden className="text-red-600 dark:text-red-400 text-sm leading-5">⚠</span>
                     <span className="min-w-0">
@@ -65,6 +67,14 @@ export default function AlertsBell() {
                       </span>
                     </span>
                   </button>
+                  {magasinId && (
+                    <button onClick={() => dismissAlert(magasinId, a)}
+                      title="Marquer comme traitée : l'alerte reviendra si d'autres éléments dépassent le seuil"
+                      className="shrink-0 px-2.5 text-[11px] font-semibold text-gray-500 hover:text-emerald-700 hover:bg-emerald-50
+                                 dark:text-neutral-400 dark:hover:text-emerald-300 dark:hover:bg-emerald-500/10 transition-colors">
+                      ✓ Traité
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

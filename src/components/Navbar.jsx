@@ -8,6 +8,7 @@ import { db } from '../lib/firebase'
 import { collection, doc, onSnapshot, orderBy, query } from 'firebase/firestore'
 import { GLOBAL_ROLES } from '../lib/constants'
 import AlertsBell from './AlertsBell'
+import AlertsStrip from './AlertsStrip'
 
 const PAGE_TITLES = {
   '/tickets': 'Réparation / SAV',
@@ -107,6 +108,13 @@ export default function Navbar() {
             </>
           )}
         </div>
+
+        {/* Alertes à traiter du directeur de magasin (ordinateur) */}
+        {profile?.role === 'directeurmag' && (
+          <div className="hidden lg:flex flex-1 min-w-0 justify-center px-2">
+            <AlertsStrip />
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex items-center gap-1.5 shrink-0">
