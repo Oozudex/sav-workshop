@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import Navbar from '../components/Navbar'
 import { useAuth } from '../store/useAuth'
 import { useShallow } from 'zustand/react/shallow'
@@ -8,153 +8,114 @@ import {
   collection, query, where, getDocs, writeBatch, doc, serverTimestamp,
 } from 'firebase/firestore'
 import { GLOBAL_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
-import { parseTamigoExcel } from '../lib/parseTamigo'
+import { ABSENCE_LABELS, parseTamigoExcel } from '../lib/parseTamigo'
+import { Avatar, BTN_PRIMARY, BTN_SECONDARY, EmptyState, LABEL, Notice, Section, Tag } from '../components/admin/ui'
 
 const IMPORT_ROLES = ['directeurmag', ...GLOBAL_ROLES, ...RAYON_TYPES]
+const TAMIGO_URL = 'https://signin.tamigo.com/login?signin=5d11b9f27e54d48168a008e9064e3a75'
 
-const RH_TOOLS = [
-  {
-    label: 'Tamigo',
-    description: 'Gestion des plannings et des temps de travail',
-    url: null,
-    roles: null,
-    color: 'blue',
-    icon: (
-      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-      </svg>
-    ),
-  },
-  {
-    label: 'Lucca',
-    description: 'Gestion des congés, absences et notes de frais',
-    url: null,
-    roles: null,
-    color: 'emerald',
-    icon: (
-      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-      </svg>
-    ),
-  },
-]
-
-const COLOR = {
-  blue: { bg: 'bg-blue-50 dark:bg-blue-500/10', icon: 'text-blue-600 dark:text-blue-400', ring: 'hover:ring-blue-200 dark:hover:ring-blue-500/30', btn: 'bg-blue-600 hover:bg-blue-700' },
-  emerald: { bg: 'bg-emerald-50 dark:bg-emerald-500/10', icon: 'text-emerald-600 dark:text-emerald-400', ring: 'hover:ring-emerald-200 dark:hover:ring-emerald-500/30', btn: 'bg-emerald-600 hover:bg-emerald-700' },
-  violet: { bg: 'bg-violet-50 dark:bg-violet-500/10', icon: 'text-violet-600 dark:text-violet-400', ring: 'hover:ring-violet-200 dark:hover:ring-violet-500/30', btn: 'bg-violet-600 hover:bg-violet-700' },
-  amber: { bg: 'bg-amber-50 dark:bg-amber-500/10', icon: 'text-amber-600 dark:text-amber-400', ring: 'hover:ring-amber-200 dark:hover:ring-amber-500/30', btn: 'bg-amber-500 hover:bg-amber-600' },
-}
-
-const DAYS_FR = { '1': 'Lun', '2': 'Mar', '3': 'Mer', '4': 'Jeu', '5': 'Ven', '6': 'Sam', '0': 'Dim' }
+const DAYS_FR = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam']
 
 function fmtShortDate(dateStr) {
   const d = new Date(dateStr + 'T12:00:00')
-  const day = DAYS_FR[String(d.getDay())] ?? ''
-  return `${day} ${d.getDate()}/${d.getMonth() + 1}`
+  return `${DAYS_FR[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1}`
 }
 
-/* ── Modal de prévisualisation de l'import ────────────────────────────────── */
+// L'import est une photo du planning Tamigo au moment de l'import : rien ne se met à jour ensuite
+function SnapshotWarning({ compact = false }) {
+  return (
+    <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 dark:border-amber-500/30 dark:bg-amber-500/10">
+      <svg className="h-4 w-4 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+      </svg>
+      <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-200">
+        <span className="font-semibold">Restez vigilant sur les horaires.</span>{' '}
+        L’import reprend le planning tel qu’il est aujourd’hui dans Tamigo : les modifications faites dans Tamigo après l’import
+        n’apparaîtront pas dans le calendrier.{!compact && ' Réimportez le planning après chaque changement (les créneaux des mêmes jours sont remplacés).'}
+      </p>
+    </div>
+  )
+}
+
+/* ── Vérification avant import ───────────────────────────────────────────── */
 function PreviewModal({ preview, rayonType, onConfirm, onClose, importing }) {
+  useEffect(() => {
+    const onKey = e => e.key === 'Escape' && !importing && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose, importing])
+
+  // Par employé : créneaux et absences, dans l'ordre des jours
   const byEmployee = {}
-  for (const s of preview.shifts) {
-    if (!byEmployee[s.employeeName]) byEmployee[s.employeeName] = []
-    byEmployee[s.employeeName].push(s)
-  }
+  const add = (name, entry) => { (byEmployee[name] ||= []).push(entry) }
+  preview.shifts.forEach(s => add(s.employeeName, { ...s, kind: 'shift' }))
+  ;(preview.absences || []).forEach(a => add(a.employeeName, { ...a, kind: 'absence' }))
   const employees = Object.keys(byEmployee).sort()
+  employees.forEach(e => byEmployee[e].sort((a, b) => a.date.localeCompare(b.date) || (a.startTime || '').localeCompare(b.startTime || '')))
+  const absences = preview.absences?.length || 0
+  const first = preview.dates[0]
+  const last = preview.dates[preview.dates.length - 1]
 
   return (
-    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-2xl rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-[400] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
+      <div role="dialog" aria-modal="true" aria-label="Vérifier le planning avant import"
+        className="w-full max-w-2xl rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh]">
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800 shrink-0">
-          <div>
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">Prévisualisation du planning</p>
-              {rayonType && (
-                <span className="h-5 px-2 rounded-full bg-teal-100 dark:bg-teal-500/20 text-[11px] font-semibold text-teal-700 dark:text-teal-300">
-                  {RAYON_TYPE_LABELS[rayonType]}
-                </span>
-              )}
+        <div className="flex items-start justify-between gap-3 px-4 sm:px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800 shrink-0">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">Vérifier avant d’importer</p>
+            {preview.title && <p className="text-[11px] text-gray-400 dark:text-neutral-500 mt-0.5 break-words">{preview.title}</p>}
+            <div className="flex flex-wrap gap-1 mt-2">
+              <Tag dark>{RAYON_TYPE_LABELS[rayonType] || rayonType}</Tag>
+              {first && <Tag>{fmtShortDate(first)} → {fmtShortDate(last)}</Tag>}
+              <Tag>{employees.length} personne{employees.length > 1 ? 's' : ''}</Tag>
+              <Tag>{preview.shifts.length} créneau{preview.shifts.length > 1 ? 'x' : ''}</Tag>
+              {absences > 0 && <Tag>{absences} absence{absences > 1 ? 's' : ''}</Tag>}
             </div>
-            {preview.title && (
-              <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">{preview.title}</p>
-            )}
           </div>
-          <button onClick={onClose} className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+          <button onClick={onClose} disabled={importing} aria-label="Fermer"
+            className="h-8 w-8 -mr-1 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800 shrink-0">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
-        {/* Stats */}
-        <div className="flex gap-4 px-5 py-3 border-b border-gray-100 dark:border-neutral-800 shrink-0">
-          <div className="flex items-center gap-2">
-            <span className="h-6 w-6 rounded-full bg-teal-100 dark:bg-teal-500/20 flex items-center justify-center shrink-0">
-              <span className="h-2 w-2 rounded-full bg-teal-500" />
-            </span>
-            <span className="text-xs text-gray-500 dark:text-neutral-400">
-              <span className="font-semibold text-gray-900 dark:text-white">{preview.shifts.length}</span> créneaux détectés
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500 dark:text-neutral-400">
-              <span className="font-semibold text-gray-900 dark:text-white">{employees.length}</span> employés
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500 dark:text-neutral-400">
-              <span className="font-semibold text-gray-900 dark:text-white">{preview.dates.length}</span> jours
-              {preview.dates[0] && ` · ${fmtShortDate(preview.dates[0])} – ${fmtShortDate(preview.dates[preview.dates.length - 1])}`}
-            </span>
-          </div>
-        </div>
-
-        {/* Table */}
-        <div className="overflow-y-auto flex-1 px-5 py-3">
+        <div className="overflow-y-auto flex-1 divide-y divide-gray-100 dark:divide-neutral-800">
+          {employees.length === 0 && (
+            <EmptyState title="Aucun créneau trouvé" text="Vérifiez que le fichier est bien l’export Excel du planning Tamigo." />
+          )}
           {employees.map(emp => (
-            <div key={emp} className="mb-4">
-              <p className="text-xs font-semibold text-gray-700 dark:text-neutral-300 mb-1.5">{emp}</p>
-              <div className="grid grid-cols-2 gap-1">
-                {byEmployee[emp].map((s, i) => (
-                  <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-teal-50 dark:bg-teal-500/10 text-xs">
-                    <span className="font-medium text-teal-700 dark:text-teal-300 shrink-0">
-                      {s.startTime} – {s.endTime}
-                    </span>
-                    <span className="text-gray-400 dark:text-neutral-500 truncate">{fmtShortDate(s.date)}</span>
-                    {s.activityCode && (
-                      <span className="ml-auto text-[10px] text-gray-400 dark:text-neutral-500 shrink-0">{s.activityCode}</span>
-                    )}
+            <div key={emp} className="px-4 sm:px-5 py-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Avatar name={emp} size="h-7 w-7 text-[10px]" />
+                <p className="text-sm font-medium text-gray-900 dark:text-white">{emp}</p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                {byEmployee[emp].map((s, i) => s.kind === 'shift' ? (
+                  <div key={i} className="rounded-lg border border-gray-200 dark:border-neutral-700 px-2.5 py-1.5">
+                    <p className="text-[11px] text-gray-400 dark:text-neutral-500">{fmtShortDate(s.date)}{s.activityCode ? ` · ${s.activityCode}` : ''}</p>
+                    <p className="text-xs font-semibold text-gray-900 dark:text-white tabular-nums">{s.startTime} – {s.endTime}</p>
+                  </div>
+                ) : (
+                  <div key={i} className="rounded-lg border border-dashed border-gray-300 dark:border-neutral-600 bg-gray-50 dark:bg-neutral-800/40 px-2.5 py-1.5">
+                    <p className="text-[11px] text-gray-400 dark:text-neutral-500">{fmtShortDate(s.date)}</p>
+                    <p className="text-xs font-medium text-gray-600 dark:text-neutral-300">{ABSENCE_LABELS[s.absenceCode] || s.absenceCode}</p>
                   </div>
                 ))}
               </div>
             </div>
           ))}
-          {preview.shifts.length === 0 && (
-            <p className="text-sm text-gray-400 dark:text-neutral-500 text-center py-6">
-              Aucun créneau horaire détecté dans ce fichier.
-            </p>
-          )}
         </div>
 
-        {/* Footer */}
-        <div className="px-5 py-3.5 border-t border-gray-100 dark:border-neutral-800 flex items-center justify-between shrink-0">
-          <p className="text-xs text-gray-400 dark:text-neutral-500">
-            Les créneaux existants pour ces dates seront remplacés.
-          </p>
-          <div className="flex gap-2">
-            <button onClick={onClose} disabled={importing}
-              className="h-8 px-3 rounded-lg text-xs border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800 disabled:opacity-50">
-              Annuler
-            </button>
-            <button onClick={onConfirm} disabled={importing || preview.shifts.length === 0}
-              className="h-8 px-4 rounded-lg text-xs font-semibold bg-teal-600 hover:bg-teal-700 text-white transition-colors disabled:opacity-50">
-              {importing ? 'Import en cours…' : `Importer ${preview.shifts.length} créneaux`}
-            </button>
+        <div className="px-4 sm:px-5 py-3 space-y-3 border-t border-gray-100 dark:border-neutral-800 shrink-0">
+          <SnapshotWarning />
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <p className="text-[11px] text-gray-400 dark:text-neutral-500">Les créneaux déjà importés pour ces jours seront remplacés.</p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={onClose} disabled={importing} className={BTN_SECONDARY}>Annuler</button>
+              <button onClick={onConfirm} disabled={importing || preview.shifts.length === 0} className={BTN_PRIMARY}>
+                {importing ? 'Import en cours…' : `Importer ${preview.shifts.length + absences} ligne${preview.shifts.length + absences > 1 ? 's' : ''}`}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -162,25 +123,31 @@ function PreviewModal({ preview, rayonType, onConfirm, onClose, importing }) {
   )
 }
 
-/* ── Section import Tamigo ────────────────────────────────────────────────── */
+/* ── Import du planning Tamigo ───────────────────────────────────────────── */
 function TamigoImportSection({ magasinId, userId, userRayonType }) {
   const [dragging, setDragging] = useState(false)
   const [parsing, setParsing] = useState(false)
   const [preview, setPreview] = useState(null)
   const [importing, setImporting] = useState(false)
-  const [success, setSuccess] = useState(null)
-  const [error, setError] = useState(null)
+  const [notice, setNotice] = useState(null)
+  const [imported, setImported] = useState(false)
   const [rayonType, setRayonType] = useState(userRayonType || '')
   const inputRef = useRef()
 
   async function handleFile(file) {
-    if (!file?.name.match(/\.xlsx?$/i)) { setError('Fichier Excel (.xlsx) requis'); return }
-    setError(null); setSuccess(null); setParsing(true)
+    if (!file?.name.match(/\.xlsx?$/i)) { setNotice({ tone: 'error', text: 'Il faut un fichier Excel (.xlsx) exporté depuis Tamigo.' }); return }
+    setNotice(null); setImported(false); setParsing(true)
     try {
       const result = await parseTamigoExcel(file)
-      setPreview(result)
+      // Une même absence peut figurer sur plusieurs lignes de l'export : une seule par personne et par jour
+      const seen = new Set()
+      const absences = (result.absences || []).filter(a => {
+        const key = `${a.employeeName}|${a.date}|${a.absenceCode}`
+        return seen.has(key) ? false : seen.add(key)
+      })
+      setPreview({ ...result, absences })
     } catch (e) {
-      setError(e.message)
+      setNotice({ tone: 'error', text: e.message })
     } finally {
       setParsing(false)
     }
@@ -226,11 +193,9 @@ function TamigoImportSection({ magasinId, userId, userRayonType }) {
           activityCode: a.absenceCode, employeeName: a.employeeName,
         })),
       ]
-      const chunks = []
-      for (let i = 0; i < allEntries.length; i += 499) chunks.push(allEntries.slice(i, i + 499))
-      for (const chunk of chunks) {
+      for (let i = 0; i < allEntries.length; i += 499) {
         const batch = writeBatch(db)
-        for (const entry of chunk) {
+        for (const entry of allEntries.slice(i, i + 499)) {
           batch.set(doc(collection(db, 'calendar_events')), {
             ...entry, rayonType, magasinId, createdBy: userId,
             source: 'tamigo_import', createdAt: serverTimestamp(),
@@ -239,146 +204,99 @@ function TamigoImportSection({ magasinId, userId, userRayonType }) {
         await batch.commit()
       }
 
-      setSuccess(allEntries.length)
+      const first = preview.dates[0]
+      const last = preview.dates[preview.dates.length - 1]
+      setNotice({ tone: 'ok', text: `Planning importé : ${allEntries.length} ligne${allEntries.length > 1 ? 's' : ''}${first ? ` du ${fmtShortDate(first)} au ${fmtShortDate(last)}` : ''}, visibles dans le calendrier de l’accueil.` })
+      setImported(true)
       setPreview(null)
     } catch (e) {
-      setError(e.message)
+      setNotice({ tone: 'error', text: e.message })
     } finally {
       setImporting(false)
     }
   }
 
-  if (!magasinId) {
-    return (
-      <div className="mt-8">
-        <h2 className="text-sm font-semibold text-gray-700 dark:text-neutral-300 mb-4">Import planning</h2>
-        <p className="text-xs text-gray-400 dark:text-neutral-500">
-          Sélectionnez un magasin pour importer un planning.
-        </p>
-      </div>
-    )
-  }
+  const ready = !!rayonType
 
   return (
-    <div className="mt-8">
-      <h2 className="text-sm font-semibold text-gray-700 dark:text-neutral-300 mb-1">Import planning Tamigo</h2>
-      <p className="text-xs text-gray-400 dark:text-neutral-500 mb-4">
-        Importez un export Excel Tamigo pour afficher les horaires de l'équipe dans le calendrier.
-      </p>
-
-      {/* Sélecteur de rayon — masqué si le rôle fixe le rayon */}
-      {userRayonType ? (
-        <div className="mb-4 flex items-center gap-2">
-          <span className="text-xs text-gray-400 dark:text-neutral-500">Rayon :</span>
-          <span className="h-6 px-2.5 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-black text-[11px] font-semibold flex items-center">
-            {RAYON_TYPE_LABELS[userRayonType]}
-          </span>
-        </div>
-      ) : (
-        <div className="mb-4">
-          <p className="text-xs font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide mb-2">
-            Rayon concerné *
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {RAYON_TYPES.map(r => (
-              <button
-                key={r}
-                type="button"
-                onClick={() => { setRayonType(r); setSuccess(null) }}
-                className={['h-7 px-3 rounded-lg text-[11px] font-semibold border transition-colors',
-                  rayonType === r
-                    ? 'bg-gray-900 text-white dark:bg-white dark:text-black border-transparent'
-                    : 'text-gray-500 border-gray-200 dark:border-neutral-700 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800',
-                ].join(' ')}
-              >
-                {RAYON_TYPE_LABELS[r]}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Zone de dépôt */}
-      <div
-        onDragOver={e => { e.preventDefault(); if (rayonType) setDragging(true) }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={e => { if (rayonType) onDrop(e) }}
-        onClick={() => { if (rayonType) inputRef.current?.click() }}
-        className={[
-          'relative flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed transition-colors p-10',
-          !rayonType
-            ? 'border-gray-100 dark:border-neutral-800 bg-gray-50 dark:bg-neutral-900/50 opacity-50 cursor-not-allowed'
-            : dragging
-              ? 'border-teal-400 bg-teal-50 dark:bg-teal-500/10 cursor-pointer'
-              : 'border-gray-200 dark:border-neutral-700 hover:border-teal-300 dark:hover:border-teal-600 bg-white dark:bg-neutral-900 cursor-pointer',
-        ].join(' ')}
-      >
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".xlsx,.xls"
-          className="hidden"
-          onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = '' }}
-        />
-
-        {parsing ? (
-          <div className="flex flex-col items-center gap-2">
-            <svg className="h-8 w-8 text-teal-500 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-            </svg>
-            <p className="text-sm text-gray-500 dark:text-neutral-400">Lecture du fichier…</p>
-          </div>
+    <Section title="Importer le planning Tamigo" hint="Affiche les horaires de l’équipe dans le calendrier de l’accueil">
+      <div className="p-4 sm:p-5 space-y-4">
+        {!magasinId ? (
+          <EmptyState title="Choisissez un magasin" text="Sélectionnez le magasin dans la barre du haut pour importer son planning." />
         ) : (
           <>
-            <div className="h-12 w-12 rounded-2xl bg-teal-50 dark:bg-teal-500/10 flex items-center justify-center">
-              <svg className="h-6 w-6 text-teal-600 dark:text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 3.75H6.912a2.25 2.25 0 00-2.15 1.588L2.35 13.177a2.25 2.25 0 00-.1.661V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 00-2.15-1.588H15M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859M12 3v8.25m0 0l-3-3m3 3l3-3" />
-              </svg>
+            {/* Rayon */}
+            <div className="space-y-1.5">
+              <span className={LABEL}>Rayon</span>
+              {userRayonType ? (
+                <div><Tag dark>{RAYON_TYPE_LABELS[userRayonType]}</Tag></div>
+              ) : (
+                <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Rayon du planning">
+                  {RAYON_TYPES.map(r => (
+                    <button key={r} type="button" role="radio" aria-checked={rayonType === r}
+                      onClick={() => { setRayonType(r); setNotice(null); setImported(false) }}
+                      className={['h-8 px-3 rounded-lg text-xs font-semibold border transition-colors',
+                        rayonType === r ? 'bg-gray-900 text-white border-transparent dark:bg-white dark:text-black'
+                          : 'text-gray-600 border-gray-200 hover:bg-gray-50 dark:text-neutral-300 dark:border-neutral-700 dark:hover:bg-neutral-800'].join(' ')}>
+                      {RAYON_TYPE_LABELS[r]}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-            <div className="text-center">
-              <p className="text-sm font-medium text-gray-700 dark:text-neutral-300">
-                Déposez votre export Tamigo ici
-              </p>
-              <p className="text-xs text-gray-400 dark:text-neutral-500 mt-1">ou cliquez pour sélectionner un fichier .xlsx</p>
+
+            {/* Fichier */}
+            <div
+              role="button" tabIndex={ready ? 0 : -1} aria-disabled={!ready}
+              onKeyDown={e => { if (ready && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); inputRef.current?.click() } }}
+              onDragOver={e => { e.preventDefault(); if (ready) setDragging(true) }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={e => { if (ready) onDrop(e); else e.preventDefault() }}
+              onClick={() => { if (ready) inputRef.current?.click() }}
+              className={['flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-6 sm:p-8 text-center transition-colors',
+                !ready ? 'border-gray-200 dark:border-neutral-800 bg-gray-50 dark:bg-neutral-900/50 cursor-not-allowed'
+                  : dragging ? 'border-gray-900 bg-gray-50 dark:border-white dark:bg-neutral-800/60 cursor-pointer'
+                    : 'border-gray-300 hover:border-gray-500 dark:border-neutral-700 dark:hover:border-neutral-500 cursor-pointer'].join(' ')}>
+              <input ref={inputRef} type="file" accept=".xlsx,.xls" className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = '' }} />
+              {parsing ? (
+                <>
+                  <svg className="h-7 w-7 text-gray-500 animate-spin motion-reduce:animate-none" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                  <p className="text-sm text-gray-500 dark:text-neutral-400">Lecture du fichier…</p>
+                </>
+              ) : (
+                <>
+                  <span className={`h-11 w-11 rounded-xl grid place-items-center ${ready ? 'bg-gray-900 text-white dark:bg-white dark:text-black' : 'bg-gray-100 text-gray-400 dark:bg-neutral-800'}`}>
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                    </svg>
+                  </span>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                      {ready ? 'Déposez l’export Excel de Tamigo ici' : 'Choisissez d’abord le rayon'}
+                    </p>
+                    <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">
+                      {ready ? 'ou cliquez pour choisir le fichier .xlsx' : 'Le planning sera rattaché à ce rayon'}
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
+
+            <Notice notice={notice} onClose={() => { setNotice(null); setImported(false) }} />
+            {imported && <SnapshotWarning compact />}
           </>
         )}
       </div>
 
-      {/* Message d'erreur */}
-      {error && (
-        <div className="mt-3 flex items-start gap-2 px-3 py-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20">
-          <svg className="h-4 w-4 text-red-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-          </svg>
-          <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
-        </div>
-      )}
-
-      {/* Message de succès */}
-      {success && (
-        <div className="mt-3 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-teal-50 dark:bg-teal-500/10 border border-teal-200 dark:border-teal-500/20">
-          <svg className="h-4 w-4 text-teal-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <p className="text-xs text-teal-700 dark:text-teal-300 font-medium">
-            {success} créneaux importés avec succès dans le calendrier.
-          </p>
-        </div>
-      )}
-
-      {/* Modal de prévisualisation */}
       {preview && (
-        <PreviewModal
-          preview={preview}
-          rayonType={rayonType}
-          onClose={() => setPreview(null)}
-          onConfirm={handleImport}
-          importing={importing}
-        />
+        <PreviewModal preview={preview} rayonType={rayonType} onClose={() => setPreview(null)}
+          onConfirm={handleImport} importing={importing} />
       )}
-    </div>
+    </Section>
   )
 }
 
@@ -393,53 +311,56 @@ export default function RH() {
   const magasinId = isGlobal ? selectedId : profile?.magasinId
   const userRayonType = isRayonRole ? profile?.role : null
 
-  const visibleTools = RH_TOOLS.filter(t => t.roles === null || t.roles.includes(profile?.role))
-
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
       <Navbar />
 
-      <main className="flex-1 p-6 max-w-5xl mx-auto w-full">
-        <div className="mb-8">
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Ressources Humaines</h1>
-          <p className="text-sm text-gray-400 dark:text-neutral-500 mt-1">
-            Accédez aux outils RH du Groupe Nivault
-          </p>
-        </div>
+      <main className="flex-1 p-4 sm:p-6">
+        <div className="max-w-5xl mx-auto space-y-4 sm:space-y-5">
+          <div>
+            <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">Ressources humaines</h1>
+            <p className="text-xs sm:text-sm text-gray-400 dark:text-neutral-500 mt-0.5">Plannings de l’équipe et outils RH du Groupe Nivault</p>
+          </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          {visibleTools.map((t, i) => {
-            const c = COLOR[t.color] || COLOR.blue
-            return (
-              <button
-                key={i}
-                onClick={() => t.url && window.open(t.url, '_blank', 'noopener,noreferrer')}
-                disabled={!t.url}
-                className={[
-                  'flex flex-col items-start gap-3 p-5 rounded-2xl border text-left transition-all',
-                  'bg-white dark:bg-neutral-900',
-                  'border-gray-200 dark:border-neutral-800',
-                  t.url ? `hover:shadow-lg hover:ring-4 ${c.ring}` : 'opacity-50 cursor-not-allowed',
-                ].join(' ')}
-              >
-                <div className={`p-2.5 rounded-xl ${c.bg}`}>
-                  <span className={c.icon}>{t.icon}</span>
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{t.label}</p>
-                  <p className="text-xs text-gray-400 dark:text-neutral-500 mt-1 leading-relaxed">{t.description}</p>
-                </div>
-                <span className={`w-full h-7 flex items-center justify-center rounded-lg text-xs font-semibold text-white transition-colors ${c.btn}`}>
-                  {t.url ? 'Accéder →' : 'Bientôt disponible'}
-                </span>
-              </button>
-            )
-          })}
-        </div>
+          <div className={`grid grid-cols-1 gap-4 items-start ${canImport ? 'lg:grid-cols-[minmax(0,1fr)_18rem]' : ''}`}>
+            {canImport && <TamigoImportSection magasinId={magasinId} userId={user?.uid} userRayonType={userRayonType} />}
 
-        {canImport && (
-          <TamigoImportSection magasinId={magasinId} userId={user?.uid} userRayonType={userRayonType} />
-        )}
+            <div className="space-y-4">
+              {/* Tamigo */}
+              <Section title="Tamigo" hint="Plannings et temps de travail">
+                <div className="p-4 space-y-3">
+                  <p className="text-xs text-gray-500 dark:text-neutral-400 leading-relaxed">
+                    Consultez et modifiez les plannings, puis exportez-les en Excel pour les importer ici.
+                  </p>
+                  <a href={TAMIGO_URL} target="_blank" rel="noopener noreferrer"
+                    className={`${BTN_PRIMARY} h-9 w-full inline-flex items-center justify-center gap-1.5`}>
+                    Ouvrir Tamigo
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
+                  </a>
+                </div>
+              </Section>
+
+              {/* Mode d'emploi de l'import */}
+              {canImport && (
+                <Section title="Mettre à jour le calendrier">
+                  <ol className="p-4 space-y-3">
+                    {[
+                      'Dans Tamigo, exportez le planning de la semaine au format Excel.',
+                      'Choisissez le rayon, puis déposez le fichier ici.',
+                      'Vérifiez les horaires et confirmez l’import.',
+                      'Si le planning change dans Tamigo, refaites l’import.',
+                    ].map((step, i) => (
+                      <li key={i} className="flex gap-2.5">
+                        <span className="h-5 w-5 shrink-0 grid place-items-center rounded-full bg-gray-900 text-white dark:bg-white dark:text-black text-[10px] font-bold">{i + 1}</span>
+                        <span className="text-xs text-gray-600 dark:text-neutral-300 leading-relaxed">{step}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </Section>
+              )}
+            </div>
+          </div>
+        </div>
       </main>
     </div>
   )
