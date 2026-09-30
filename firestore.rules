@@ -318,6 +318,12 @@ service cloud.firestore {
     }
 
     /* ── Commandes OBUT (rayon vélo) ─────────────────────────────────────── */
+    // Catalogue OBUT (boules, marquages, services) : prix gérés par les acheteurs et la direction
+    match /obut_catalogue/{itemId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isGlobal();
+    }
+
     match /obut_commandes/{cmdId} {
       function obutLocal() { return isDirMag() || role() == 'velo'; }
 

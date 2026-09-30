@@ -186,6 +186,16 @@ describe('services', () => {
   })
 })
 
+describe('obut_catalogue', () => {
+  it("seuls les globaux modifient le catalogue", async () => {
+    await assertSucceeds(getDoc(doc(as('veloA'), 'obut_catalogue', 'atx')))
+    await assertFails(setDoc(doc(as('veloA'), 'obut_catalogue', 'atx'), { label: 'ATX', prix: 1 }))
+    await assertFails(setDoc(doc(as('dirmagA'), 'obut_catalogue', 'atx'), { label: 'ATX', prix: 1 }))
+    await assertSucceeds(setDoc(doc(as('acheteur'), 'obut_catalogue', 'atx'), { label: 'ATX', prix: 320 }))
+    await assertSucceeds(deleteDoc(doc(as('acheteur'), 'obut_catalogue', 'atx')))
+  })
+})
+
 describe('counters', () => {
   it("n'accepte qu'un incrément de 1", async () => {
     const ref = doc(as('veloA'), 'counters', 'tickets')

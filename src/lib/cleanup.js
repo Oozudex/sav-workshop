@@ -9,6 +9,7 @@ const ANONYMIZE_AFTER_DAYS = 14
 // Données personnelles effacées ; le reste (vélo, dates, statuts, description) sert aux statistiques
 const TICKET_PERSONAL_FIELDS = ['customerName', 'customerPhone', 'customerEmail', 'serialNumber', 'trackingNumber']
 const ORDER_PERSONAL_FIELDS = ['client', 'tel', 'notes', 'commentaire']
+const OBUT_PERSONAL_FIELDS = ['clientNom', 'clientPrenom', 'clientTel']
 
 // Entrées d'historique conservées : les autres (commentaires, modifications, suivi)
 // peuvent contenir des données personnelles dans leur texte
@@ -52,6 +53,7 @@ function blankFields(fields) {
 /**
  * - anonymise les tickets SAV clôturés depuis plus de 14 jours (et supprime leurs commentaires)
  * - anonymise les commandes clients retirées ou annulées depuis plus de 14 jours (nom, téléphone, notes)
+ * - anonymise les commandes OBUT remises ou annulées depuis plus de 14 jours (nom, prénom, téléphone)
  * - supprime les RDV Client du calendrier datant de plus de 1 mois
  * - supprime les infos importantes créées depuis plus de 48h
  *
@@ -100,6 +102,17 @@ export async function runCleanup(role) {
   ordersSnap.forEach(d => {
     if (!shouldAnonymize(d.data(), cutoff)) return
     ops.push({ ref: d.ref, data: { ...blankFields(ORDER_PERSONAL_FIELDS), anonymizedAt: serverTimestamp() } })
+  })
+
+  // ── 2 bis. Commandes OBUT remises / annulées depuis > 14 jours : anonymisation ──
+  const obutSnap = await getDocs(
+    query(collection(db, 'obut_commandes'), where('statut', 'in', ['livre', 'annule']))
+  )
+  obutSnap.forEach(d => {
+    const data = d.data()
+    // Anciennes commandes archivées sans date de clôture : déjà anonymisées à l'archivage
+    if (!data.closedAt || !shouldAnonymize(data, cutoff)) return
+    ops.push({ ref: d.ref, data: { ...blankFields(OBUT_PERSONAL_FIELDS), anonymizedAt: serverTimestamp() } })
   })
 
   // ── 3. RDV Client du calendrier datant de > 1 mois ──────────────────────
