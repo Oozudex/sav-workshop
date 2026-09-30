@@ -16,7 +16,7 @@
     "emulators": "firebase emulators:start --project sav-workshop --import=./emulator-data --export-on-exit",
     "test:rules": "firebase emulators:exec --only firestore --project demo-sav-workshop \"node --test tests/firestore.rules.test.mjs\"",
     "deploy:rules": "firebase deploy --only firestore:rules",
-    "deploy": "npm run build && firebase deploy --only hosting,firestore:rules"
+    "deploy": "npm run build && firebase deploy --only hosting,firestore:rules,firestore:indexes"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
