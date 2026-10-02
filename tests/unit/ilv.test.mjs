@@ -90,6 +90,14 @@ describe('modèles', () => {
   })
 })
 
+describe('jouets', () => {
+  it('draisienne : pas de pack, même s’il est encore enregistré', () => {
+    const d = buildIlv({ nom: 'DRAISIENNE', marque: 'NAKAMURA', famille: 'JOUET', segment: 'velo', prixFort: 59.99, pack: 'enfant', type: 'normal' })
+    assert.deepEqual(d.big, { int: '59', dec: '.99' })
+    assert.equal(d.packLine, null)
+  })
+})
+
 describe('accessoires', () => {
   const ANTIVOL = { nom: 'ANTIVOL ABUS 6000K', marque: 'ABUS', reference: '6000K', segment: 'accessoires', prixFort: 99.99 }
   it('pas de pack : ni dans le prix, ni dans le détail', () => {

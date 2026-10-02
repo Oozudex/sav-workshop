@@ -78,9 +78,16 @@ describe('nettoyage', () => {
   })
   it("packs", () => {
     assert.equal(packPourFamille('JUNIOR'), 'enfant')
-    assert.equal(packPourFamille('JOUET'), 'enfant')
+    assert.equal(packPourFamille('JOUET'), null) // draisiennes : jamais de pack
     assert.equal(packPourFamille('ELECTRIQUE'), 'electrique')
     assert.equal(packPourFamille('VTT'), null)
+  })
+  it("jouets : pas de pack, ni à choisir, ni repris, ni conservé, ni exporté", () => {
+    const draisienne = { chrono: '0-9', nom: 'DRAISIENNE', marque: 'NAKAMURA', famille: 'JOUET', pack: null, prixFort: 59.99, stock: 1 }
+    assert.equal(stockSummary([draisienne]).packARenseigner, 0)
+    assert.equal(withPacksFromBase([draisienne], [{ chrono: '0-9', marque: 'NAKAMURA', nom: 'DRAISIENNE', pack: 'enfant' }])[0].pack, null)
+    assert.equal(stockImportData(draisienne, { pack: 'enfant' }).pack, null)
+    assert.equal(catalogueExportTable([{ v: { ...draisienne, pack: 'enfant' } }])[1][9], '')
   })
   it("réimport : prix fort du fichier, pack déjà choisi conservé", () => {
     const p = { chrono: '0-1', nom: 'X', pack: 'enfant', prixFort: 199.99, stock: 3 }

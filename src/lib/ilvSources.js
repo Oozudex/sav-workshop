@@ -33,6 +33,7 @@ export async function enrichIlvSources(sources) {
       reference:   cat.reference || s.reference,
       couleur:     s.couleur || cat.couleur,
       segment:     cat.segment || s.segment || null,
+      famille:     cat.famille || s.famille || null,
       presqueParfait: cat.presqueParfait ?? s.presqueParfait ?? false,
       prixFort:    s.prixFort ?? cat.prixFort ?? bp?.prixFort ?? null,
       pack:        cat.pack || s.pack || null,

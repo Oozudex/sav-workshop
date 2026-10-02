@@ -45,7 +45,7 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
   const item = items?.find(i => i.key === key) || items?.[0]
   const types = item ? ilvTypesFor(item) : []
   const current = types.includes(type) ? type : types[0]
-  const noPack = item ? sansPack(item.segment) : false // accessoire : ni pack ni durée à choisir
+  const noPack = item ? sansPack(item.segment, item.famille) : false // accessoire ou jouet : ni pack ni durée à choisir
   const product = item && { ...item, type: current, pack: noPack ? null : item.pack || packChoisi || null }
   const packAjoute = noPack ? 0 : product?.pack ? packPrice(product.pack, duree) : null
   const total = product?.prixFort != null && packAjoute != null
@@ -153,7 +153,7 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
                     ))}
                   </div>
                 </div>}
-                {noPack && <p className="text-[11px] text-gray-500 dark:text-neutral-400">Accessoire : pas de pack optionnel, l’ILV affiche le prix seul.</p>}
+                {noPack && <p className="text-[11px] text-gray-500 dark:text-neutral-400">Pas de pack optionnel pour ce produit, l’ILV affiche le prix seul.</p>}
 
                 {current === 'normal' && (
                   <div className="space-y-1.5">

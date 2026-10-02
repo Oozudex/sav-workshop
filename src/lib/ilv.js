@@ -79,9 +79,13 @@ export function titleName(nom) {
   }).join('-')).join(' ')
 }
 
+// Famille sans pack optionnel : les jouets (draisiennes…)
+export const familleSansPack = famille => /JOUET/i.test(String(famille || ''))
+
 // Pack optionnel réservé aux vélos (neufs et presque parfaits) : les autres segments
-// (accessoires, chaussures, occasion…) sortent leur ILV sans pack. Sans segment : vélo de la base.
-export function sansPack(segment) {
+// (accessoires, chaussures, occasion…) et les jouets sortent leur ILV sans pack. Sans segment : vélo de la base.
+export function sansPack(segment, famille = null) {
+  if (familleSansPack(famille)) return true
   const s = normSegment(segment)
   return !!s && s !== 'velo' && s !== 'velo_pp'
 }
@@ -116,12 +120,12 @@ export function ilvTypesFor({ prixEngage, prixOp, prixBonPlan, prixFort }) {
 /**
  * Contenu d'une ILV : prix calculés (pack inclus) et textes prêts à dessiner.
  * p : { type, nom, marque, reference, segment, presqueParfait, prixFort, prixOp, prixBonPlan, prixEngage, pack, dateDebut, dateFin }
- * Accessoires : pas de pack, ni dans le prix ni dans le détail.
+ * Accessoires et jouets : pas de pack, ni dans le prix ni dans le détail.
  * options : { duree: 1 | 2 (pack 1 an / 2 ans), oney: null | 3 | 4 (ILV normale uniquement) }
  * Renvoie { error } si une donnée manque.
  */
 export function buildIlv(p, { duree = 1, oney = null } = {}) {
-  const noPack = sansPack(p.segment)
+  const noPack = sansPack(p.segment, p.famille)
   const pack = noPack ? 0 : packPrice(p.pack, duree)
   if (pack == null) return { error: 'Pack optionnel non renseigné pour ce produit.' }
   if (p.prixFort == null) return { error: 'Prix fort non renseigné pour ce produit.' }
@@ -196,7 +200,7 @@ export function opIlvBatch(items, { duree = 1 } = {}) {
   for (const item of items) {
     const type = ilvTypesFor(item)[0]
     if (!type) { skipped.push({ item, reason: 'Prix manquant.' }); continue }
-    const ilv = buildIlv({ ...item, type, pack: sansPack(item.segment) ? null : item.pack || null }, { duree })
+    const ilv = buildIlv({ ...item, type, pack: sansPack(item.segment, item.famille) ? null : item.pack || null }, { duree })
     if (ilv.error) skipped.push({ item, reason: ilv.error })
     else ilvs.push({ item, ilv })
   }

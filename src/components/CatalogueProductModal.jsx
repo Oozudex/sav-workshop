@@ -4,8 +4,7 @@ import { db } from '../lib/firebase'
 import { PACKS } from '../lib/ilv'
 import { BON_PLAN_COLLECTION, bonPlanDocId } from '../lib/bonPlan'
 import { SEGMENT_LABELS, parsePrice } from '../lib/opImport'
-import { CATALOGUE_SEGMENTS, catalogueData, catalogueFormErrors, catalogueFormValues, effectiveSegment, remiseSur } from '../lib/catalogueForm'
-import { sansPack } from '../lib/ilv'
+import { CATALOGUE_SEGMENTS, catalogueData, catalogueFormErrors, catalogueFormValues, effectiveSegment, formSansPack, remiseSur } from '../lib/catalogueForm'
 import { BIKE_FAMILLES } from '../lib/constants'
 import { packPourFamille } from '../lib/stockImport'
 import BikeBrandSelect from './BikeBrandSelect'
@@ -126,8 +125,8 @@ export default function CatalogueProductModal({ produit, produits, start, onClos
   }, [onClose, saving])
 
   const errors = catalogueFormErrors(form, { produits, id: produit?.id })
-  // Pas de pack hors vélos (accessoires, autre segment…)
-  const accessoire = sansPack(effectiveSegment(form))
+  // Pas de pack hors vélos (accessoires, autre segment…) ni pour les jouets (draisiennes…)
+  const accessoire = formSansPack(form)
   const presqueParfait = effectiveSegment(form) === 'velo_pp'
   // Passage en « Vélos PP » : le prix bon plan devient obligatoire
   useEffect(() => { if (presqueParfait && !form.bonPlan) setForm(f => ({ ...f, bonPlan: true })) }, [presqueParfait, form.bonPlan])
@@ -223,7 +222,7 @@ export default function CatalogueProductModal({ produit, produits, start, onClos
           </Section>
 
           <Section title={accessoire ? 'Prix' : 'Prix et pack'}
-            hint={accessoire ? 'Hors vélos : pas de pack optionnel, l’ILV affiche le prix seul.' : 'Utilisés pour les ILV : le pack est toujours ajouté au prix affiché.'}>
+            hint={accessoire ? 'Pas de pack optionnel (autre segment ou jouet) : l’ILV affiche le prix seul.' : 'Utilisés pour les ILV : le pack est toujours ajouté au prix affiché.'}>
             <Field label="Prix fort *" error={shown.prixFort} className="w-44">
               <PriceInput {...input('prixFort')} placeholder="Ex. 1499,99" />
             </Field>

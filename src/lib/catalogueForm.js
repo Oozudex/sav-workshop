@@ -11,6 +11,11 @@ export function effectiveSegment(form) {
   return form.autreSegment ? segmentFromInput(form.segmentLibre) : (form.segment || null)
 }
 
+// Pas de pack optionnel : « Autre segment » choisi (même avant de le nommer), segment hors vélos ou jouet
+export function formSansPack(form) {
+  return !!form.autreSegment || sansPack(effectiveSegment(form), form.famille)
+}
+
 const euro = v => (v != null ? String(v).replace('.', ',') : '')
 
 // Produit existant (ou vide) → valeurs du formulaire ; bonPlan : prix bon plan actuel du produit
@@ -51,7 +56,7 @@ export function catalogueFormErrors(form, { produits = [], id = null } = {}) {
   if (prixFort == null) errors.prixFort = 'Prix fort obligatoire'
   const segment = effectiveSegment(form)
   if (form.autreSegment && !segment) errors.segment = 'Renseigne le segment'
-  if (!form.pack && !sansPack(segment)) errors.pack = 'Choisis le pack de ce vélo'
+  if (!form.pack && !formSansPack(form)) errors.pack = 'Choisis le pack de ce vélo'
   if (segment === 'velo_pp' && !form.bonPlan) errors.prixBonPlan = 'Vélo presque parfait : le prix bon plan est obligatoire'
   for (const [flag, field, name] of [['engage', 'prixEngage', 'prix engagé'], ['bonPlan', 'prixBonPlan', 'prix bon plan']]) {
     if (!form[flag]) continue
@@ -74,7 +79,7 @@ export function catalogueData(form) {
     famille:    form.famille.trim() || null,
     segment,
     prixFort:   parsePrice(form.prixFort),
-    pack:       sansPack(segment) ? null : form.pack || null, // pack optionnel réservé aux vélos
+    pack:       formSansPack(form) ? null : form.pack || null, // pack optionnel réservé aux vélos (hors jouets)
     presqueParfait: segment === 'velo_pp',
     prixEngage: form.engage ? parsePrice(form.prixEngage) : null,
   }

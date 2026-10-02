@@ -69,6 +69,14 @@ describe('accessoires sans pack', () => {
   })
 })
 
+describe('jouets sans pack', () => {
+  it('famille Jouet : pack ni demandé ni enregistré', () => {
+    const draisienne = { ...valide, segment: 'velo', famille: 'JOUET', pack: '' }
+    assert.deepEqual(catalogueFormErrors(draisienne), {})
+    assert.equal(catalogueData({ ...draisienne, pack: 'enfant' }).pack, null)
+  })
+})
+
 describe('autre segment', () => {
   it('texte libre enregistré en majuscules, sans pack ; obligatoire une fois choisi', () => {
     const autre = { ...valide, autreSegment: true, segmentLibre: 'Skate board', pack: '' }
@@ -76,6 +84,7 @@ describe('autre segment', () => {
     assert.equal(catalogueData({ ...autre, pack: 'sport' }).segment, 'SKATE BOARD')
     assert.equal(catalogueData({ ...autre, pack: 'sport' }).pack, null)
     assert.equal(catalogueFormErrors({ ...autre, segmentLibre: ' ' }).segment, 'Renseigne le segment')
+    assert.equal(catalogueFormErrors({ ...autre, segmentLibre: ' ' }).pack, undefined) // pas de pack demandé, même avant de le nommer
     // Un segment reconnu reprend sa valeur de liste
     assert.equal(catalogueData({ ...autre, segmentLibre: 'presque parfait', bonPlan: true, prixBonPlan: '1' }).presqueParfait, true)
   })

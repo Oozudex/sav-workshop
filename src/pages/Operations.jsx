@@ -11,7 +11,7 @@ import {
 } from 'firebase/firestore'
 import { GLOBAL_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
 import IlvDialog from '../components/IlvDialog'
-import { sansPack } from '../lib/ilv'
+import { familleSansPack, sansPack } from '../lib/ilv'
 import CatalogueProductModal from '../components/CatalogueProductModal'
 import ActionsMenu from '../components/ActionsMenu'
 import { formatEuro } from '../lib/orders'
@@ -226,7 +226,7 @@ function ImportSummary({ rows, report }) {
   const items = [
     ['Vélos', s.total, s.sansPrix ? `${s.sansPrix} sans prix` : 'avec prix fort'],
     ['Presque parfaits', s.presqueParfaits, 'prix bon plan à saisir'],
-    ['Pack enfant', s.packEnfant, 'Junior, Jouet'],
+    ['Pack enfant', s.packEnfant, 'Junior'],
     ['Pack électrique', s.packElectrique, 'gamme électrique'],
     ['Pack à choisir', s.packARenseigner, 'dans la fiche du vélo'],
   ]
@@ -424,7 +424,7 @@ function CatalogueImportModal({ produits, bonPlanDocs, onClose }) {
                         <td className="px-3 py-2 text-gray-500 dark:text-neutral-400">{r.famille || '—'}</td>
                         <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-gray-700 dark:text-neutral-300">{r.prixFort != null ? `${r.prixFort.toFixed(2).replace('.', ',')} €` : '—'}</td>
                         <td className="px-3 py-2 whitespace-nowrap">
-                          {r.pack ? <span className="text-gray-700 dark:text-neutral-300">{PACK_COURT[r.pack]}</span> : <span className="text-amber-600 dark:text-amber-400">À choisir</span>}
+                          {familleSansPack(r.famille) ? <span className="text-gray-300 dark:text-neutral-600" title="Jouet : pas de pack">—</span> : r.pack ? <span className="text-gray-700 dark:text-neutral-300">{PACK_COURT[r.pack]}</span> : <span className="text-amber-600 dark:text-amber-400">À choisir</span>}
                           {r.packRepris && <span className="ml-1 text-[9px] text-gray-400" title="Pack repris d’un vélo du même modèle déjà dans la base">repris</span>}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums text-gray-500 dark:text-neutral-400">{r.stock}</td>
@@ -468,7 +468,7 @@ export function catalogueSource(p) {
   return {
     key: p.id, label: [p.couleur, p.reference, p.chrono].filter(Boolean).join(' · ') || p.nom,
     chrono: p.chrono, nom: p.nom, marque: p.marque, reference: p.reference, couleur: p.couleur, segment: p.segment,
-    prixFort: p.prixFort ?? null, pack: p.pack || null,
+    famille: p.famille || null, prixFort: p.prixFort ?? null, pack: p.pack || null,
   }
 }
 
@@ -620,7 +620,7 @@ function ProduitsSection({ canCreate, mode }) {
   }, [mode, produits, bonPlanDocs])
 
   // À compléter : prix fort ou pack manquant, ou vélo presque parfait sans prix bon plan
-  const incomplet = r => !r.p || r.p.prixFort == null || (!r.p.pack && !sansPack(r.p.segment)) ||
+  const incomplet = r => !r.p || r.p.prixFort == null || (!r.p.pack && !sansPack(r.p.segment, r.p.famille)) ||
     (normSegment(r.p.segment) === 'velo_pp' && r.bp?.prixBonPlan == null)
   const FILTRES = {
     incomplets: incomplet,
@@ -815,7 +815,7 @@ function ProduitsSection({ canCreate, mode }) {
                       {prixSpecial ? <SpecialPrice mode={mode} prixFort={prixFort} r={r} />
                         : prixFort != null ? formatEuro(prixFort) : <span className="text-amber-600 dark:text-amber-400">à saisir</span>}
                     </td>
-                    <td className="px-3 sm:px-4 py-2.5 hidden md:table-cell whitespace-nowrap">{sansPack(v.segment) ? <span className="text-gray-300 dark:text-neutral-600">—</span> : v.pack ? PACK_COURT[v.pack] : <span className="text-amber-600 dark:text-amber-400">à choisir</span>}</td>
+                    <td className="px-3 sm:px-4 py-2.5 hidden md:table-cell whitespace-nowrap">{sansPack(v.segment, v.famille) ? <span className="text-gray-300 dark:text-neutral-600">—</span> : v.pack ? PACK_COURT[v.pack] : <span className="text-amber-600 dark:text-amber-400">à choisir</span>}</td>
                     {!prixSpecial && <td className="px-3 sm:px-4 py-2.5 hidden sm:table-cell"><div className="flex flex-col items-start gap-1">{badges(r)}</div></td>}
                     <td className="pl-1 pr-3 sm:px-4 py-2.5" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">

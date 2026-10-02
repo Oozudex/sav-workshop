@@ -3,6 +3,7 @@
 // noms et couleurs nettoyés, vélos « presque parfaits » repérés, pack déduit de la famille.
 // Fonctions pures (tests/unit/stockImport.test.mjs).
 import { cleanRef, cleanText, normHeader, normSegment, parsePrice } from './opImport.js'
+import { familleSansPack } from './ilv.js'
 
 const HEADER_FIELDS = {
   'univers': 'univers', 'segment': 'segmentFichier', 'famille': 'famille',
@@ -49,11 +50,12 @@ export function cleanCouleur(v) {
 }
 
 // Pack optionnel : électrique (59,99 €) pour toute la gamme électrique, enfant (9,99 €) pour
-// les vélos enfant (junior, jouet), sinon à renseigner par l'acheteur
+// les vélos enfant (junior), aucun pour les jouets (draisiennes…), sinon à renseigner par l'acheteur
 export function packPourFamille(famille) {
   const f = cleanText(famille).toUpperCase()
+  if (familleSansPack(f)) return null
   if (/ELECTRIQUE|ÉLECTRIQUE|VAE/.test(f)) return 'electrique'
-  if (/JUNIOR|JOUET|ENFANT/.test(f)) return 'enfant'
+  if (/JUNIOR|ENFANT/.test(f)) return 'enfant'
   return null
 }
 
@@ -127,20 +129,21 @@ export function stockSummary(produits) {
     sansPrix: produits.filter(p => p.prixFort == null).length,
     packEnfant: produits.filter(p => p.pack === 'enfant').length,
     packElectrique: produits.filter(p => p.pack === 'electrique').length,
-    packARenseigner: produits.filter(p => !p.pack).length,
+    packARenseigner: produits.filter(p => !p.pack && !familleSansPack(p.famille)).length,
   }
 }
 
 /**
  * Données écrites pour un vélo du fichier. existing : document actuel (ou null).
- * Le prix fort suit le fichier (s'il y en a un) ; le prix engagé et un pack déjà choisi sont conservés.
+ * Le prix fort suit le fichier (s'il y en a un) ; le prix engagé et un pack déjà choisi sont conservés,
+ * sauf pour les jouets, qui n'ont jamais de pack.
  */
 export function stockImportData(produit, existing) {
   const { stock: _stock, pack, prixFort, packRepris: _repris, ...rest } = produit
   return {
     ...rest,
     ...(prixFort != null || !existing ? { prixFort } : {}),
-    ...(existing?.pack ? {} : { pack }),
+    ...(existing?.pack && !familleSansPack(produit.famille) ? {} : { pack }),
   }
 }
 
@@ -158,7 +161,7 @@ export function catalogueExportTable(items) {
     ...items.map(({ v, bp }) => [
       v.chrono || '', v.reference || '', v.nom || '', v.marque || '', v.couleur || '', v.famille || '', v.sousFamille || '',
       normSegment(v.segment) === 'velo_pp' ? 'OUI' : '',
-      num(v.prixFort ?? bp?.prixFort), PACK_EXPORT[v.pack] || '', num(v.prixEngage), num(bp?.prixBonPlan),
+      num(v.prixFort ?? bp?.prixFort), familleSansPack(v.famille) ? '' : PACK_EXPORT[v.pack] || '', num(v.prixEngage), num(bp?.prixBonPlan),
     ]),
   ]
 }
@@ -183,7 +186,7 @@ export function withPacksFromBase(produits, existing = []) {
     if (!byName.has(nameKey(e))) byName.set(nameKey(e), e.pack)
   }
   return produits.map(p => {
-    if (p.pack) return p
+    if (p.pack || familleSansPack(p.famille)) return p
     const pack = byChrono.get(p.chrono) || (modelKey(p.reference) && byModel.get(modelKey(p.reference))) || byName.get(nameKey(p))
     return pack ? { ...p, pack, packRepris: true } : p
   })
