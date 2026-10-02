@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   ORDER_ALERTS, formatOrderNumber, isOrderOpen, orderFormErrors, orderMatches, orderStatus, orderTotal, parseEuro,
-  orderQuantity, parseQuantity, remainingToPay,
+  orderQuantity, parseQuantity, remainingToPay, withNoteEdited, withNoteRemoved,
 } from '../../src/lib/orders.js'
 import { computeAlerts } from '../../src/lib/alerts.js'
 
@@ -119,5 +119,20 @@ describe('alertes commandes', () => {
   it('rien sous les seuils', () => {
     const relaxed = Object.fromEntries(Object.keys(all).map(k => [k, { enabled: true, threshold: 30 }]))
     assert.deepEqual(computeAlerts(ORDERS, relaxed, ORDER_ALERTS, NOW), [])
+  })
+})
+
+describe('notes de commande', () => {
+  const a = { at: '2026-10-01T09:00:00.000Z', author: 'Julie', text: 'Client rappelé' }
+  const b = { at: '2026-10-01T09:00:00.000Z', author: 'Paul', text: 'Même minute, autre auteur' }
+  const c = { at: '2026-10-02T10:00:00.000Z', author: 'Julie', text: 'Colis reçu' }
+  it('modifie seulement la note visée', () => {
+    const notes = withNoteEdited([a, b, c], { ...a }, 'Client rappelé deux fois', '2026-10-02T11:00:00.000Z')
+    assert.deepEqual(notes[0], { ...a, text: 'Client rappelé deux fois', editedAt: '2026-10-02T11:00:00.000Z' })
+    assert.deepEqual(notes.slice(1), [b, c])
+  })
+  it('supprime seulement la note visée', () => {
+    assert.deepEqual(withNoteRemoved([a, b, c], { ...b }), [a, c])
+    assert.deepEqual(withNoteRemoved(undefined, a), [])
   })
 })

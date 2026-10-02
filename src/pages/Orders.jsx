@@ -9,7 +9,7 @@ import { useAlerts } from '../store/useAlerts'
 import { db } from '../lib/firebase'
 import {
   addDoc, arrayUnion, collection, deleteDoc, doc, getDoc, onSnapshot,
-  orderBy, query, serverTimestamp, updateDoc, where,
+  orderBy, query, runTransaction, serverTimestamp, updateDoc, where,
 } from 'firebase/firestore'
 import { getNextOrderNumber } from '../lib/counters'
 import { GLOBAL_ROLES, CAN_DELETE_ROLES, ORDER_CLOSED_STATUTS } from '../lib/constants'
@@ -17,6 +17,7 @@ import {
   ORDER_ALERTS, ORDER_OPEN_STATUSES, ORDER_STATUSES, ORDER_STATUS_META, ORDER_TYPES, ORDER_VISIBLE_DAYS,
   formatEuro, formatOrderNumber, isOrderListed, isWaitingReception, isOrderOpen, orderMatches, orderStatus,
   orderFormErrors, orderQuantity, orderStatusSince, orderTotal, parseEuro, parseQuantity, remainingToPay,
+  withNoteEdited, withNoteRemoved,
 } from '../lib/orders'
 import { toDate } from '../lib/ticketStats'
 import { useMagasin } from '../store/useMagasin'
@@ -229,6 +230,23 @@ export default function Orders() {
       updatedAt: serverTimestamp(),
       history: arrayUnion(historyEntry('note', `Note ajoutée par ${author}`)),
     })
+  }
+
+  /* Modification et suppression d'une note (le texte n'est pas recopié dans l'historique : RGPD).
+     Transaction : la liste des notes est relue au dernier moment (notes ajoutées entre-temps) */
+  async function changeNote(order, note, text) {
+    const ref = doc(db, 'orders', order.id)
+    await runTransaction(db, async tx => {
+      const snap = await tx.get(ref)
+      if (!snap.exists()) return
+      const notes = text == null ? withNoteRemoved(snap.data().notes, note) : withNoteEdited(snap.data().notes, note, text)
+      tx.update(ref, {
+        notes,
+        updatedAt: serverTimestamp(),
+        history: arrayUnion(historyEntry('note', `Note de ${note.author || '—'} ${text == null ? 'supprimée' : 'modifiée'}`)),
+      })
+    })
+    showToast(text == null ? 'Note supprimée' : 'Note modifiée')
   }
 
   /* Suppression (directeurs et acheteurs) */
@@ -464,6 +482,8 @@ export default function Orders() {
           onChangeStatut={s => changeStatut(activeOrder, s)}
           onSaveFields={f => saveFields(activeOrder, f)}
           onAddNote={(author, text) => addNote(activeOrder, author, text)}
+          onEditNote={(note, text) => changeNote(activeOrder, note, text)}
+          onRemoveNote={note => changeNote(activeOrder, note, null)}
           onDelete={() => remove(activeOrder)}
           onCopy={showToast}
         />
@@ -498,7 +518,7 @@ export default function Orders() {
 }
 
 /* ── Fiche commande ────────────────────────────────────────────────────────── */
-function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFields, onAddNote, onDelete, onCopy }) {
+function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFields, onAddNote, onEditNote, onRemoveNote, onDelete, onCopy }) {
   const overlayRef = useRef(null)
   const [editing, setEditing] = useState(false)
   const [fields, setFields]   = useState(() => fieldsOf(order))
@@ -507,6 +527,10 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
   const [noteAuthor, setNoteAuthor] = useState('')
   const [noteText, setNoteText]     = useState('')
   const [noteError, setNoteError]   = useState(false)
+  const [sendingNote, setSendingNote] = useState(false)
+  const [editingNote, setEditingNote] = useState(null) // note en cours de modification
+  const noteKey = n => `${n.at}|${n.author}`
+  const [editingText, setEditingText] = useState('')
 
   const status = orderStatus(order)
   const meta = ORDER_STATUS_META[status]
@@ -534,11 +558,26 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
   function cancelEdit() { setFields(fieldsOf(order)); setEditing(false); setTried(false) }
 
   async function submitNote(e) {
-    e.preventDefault()
-    if (!noteText.trim()) return
+    e?.preventDefault?.()
+    if (!noteText.trim() || sendingNote) return
     if (!noteAuthor) { setNoteError(true); return }
-    await onAddNote(noteAuthor, noteText.trim())
-    setNoteText('')
+    setSendingNote(true)
+    try { await onAddNote(noteAuthor, noteText.trim()); setNoteText(''); setNoteAuthor('') }
+    finally { setSendingNote(false) }
+  }
+
+  function startEditNote(n) { setEditingNote(n); setEditingText(n.text || '') }
+
+  async function saveNote() {
+    const text = editingText.trim()
+    if (!text || text === editingNote.text) { setEditingNote(null); return }
+    await onEditNote(editingNote, text)
+    setEditingNote(null)
+  }
+
+  async function removeNote(n) {
+    if (!confirm(`Supprimer la note de ${n.author || '—'} ?`)) return
+    await onRemoveNote(n)
   }
 
   async function copyInfo() {
@@ -561,7 +600,8 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
     onCopy?.('Informations copiées dans le presse-papier')
   }
 
-  const notes = (order.notes || []).slice().sort((a, b) => (a.at || '').localeCompare(b.at || ''))
+  // Notes : la plus récente en premier, sous le formulaire (comme les commentaires des tickets)
+  const notes = (order.notes || []).slice().sort((a, b) => (b.at || '').localeCompare(a.at || ''))
   const history = (order.history || []).slice().reverse()
 
   return (
@@ -668,36 +708,86 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
           {/* Notes */}
           {!editing && (
             <MCard title="Notes">
-              <div className="space-y-2.5 mb-3 max-h-48 overflow-y-auto">
-                {notes.length === 0 && !order.commentaire && <p className="text-xs text-gray-400 dark:text-neutral-500">Aucune note.</p>}
-                {order.commentaire && (
-                  <p className="text-sm text-gray-800 dark:text-neutral-200 whitespace-pre-wrap">{order.commentaire}</p>
-                )}
-                {notes.map((n, i) => (
-                  <div key={i}>
-                    <p className="text-[11px] text-gray-400 dark:text-neutral-500">
-                      <span className="font-semibold text-gray-600 dark:text-neutral-300">{n.author}</span> · {fmtDate(n.at)}
-                    </p>
-                    <p className="text-sm text-gray-800 dark:text-neutral-200 whitespace-pre-wrap break-words">{n.text}</p>
-                  </div>
-                ))}
-              </div>
               {!anonymized && (
-                <form onSubmit={submitNote} className="space-y-1.5">
-                  <div className="flex flex-col sm:flex-row gap-2">
+                <form onSubmit={submitNote} className="space-y-2 mb-3">
+                  <textarea
+                    value={noteText}
+                    onChange={e => setNoteText(e.target.value)}
+                    placeholder="Ajouter une note…"
+                    rows={3}
+                    className="Input text-sm resize-y min-h-[4.5rem] leading-relaxed"
+                    onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitNote() } }}
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
                     <select value={noteAuthor} onChange={e => { setNoteAuthor(e.target.value); setNoteError(false) }}
-                      className={`Input h-9 sm:!w-36 text-xs shrink-0 ${noteError ? '!border-red-400' : ''}`}>
+                      className={`h-9 px-2 rounded-xl border text-xs font-medium bg-white dark:bg-neutral-800 text-gray-700 dark:text-neutral-200 flex-1 sm:flex-none sm:w-40 min-w-0 ${noteError ? 'border-red-400 dark:border-red-500' : 'border-gray-200 dark:border-neutral-700'}`}>
                       <option value="">— Auteur</option>
                       {staff.map(s => <option key={s.id} value={s.nom}>{s.nom}</option>)}
                     </select>
-                    <div className="flex gap-2 flex-1 min-w-0">
-                      <input className="Input h-9 text-sm min-w-0" placeholder="Ajouter une note…" value={noteText} onChange={e => setNoteText(e.target.value)} />
-                      <SmallBtn primary type="submit" disabled={!noteText.trim()}>Ajouter</SmallBtn>
-                    </div>
+                    <span className="hidden sm:inline text-[11px] text-gray-400 dark:text-neutral-500">
+                      Entrée : nouvelle ligne · Ctrl/⌘ + Entrée : ajouter
+                    </span>
+                    <button type="submit" disabled={!noteText.trim() || sendingNote}
+                      className="h-9 px-4 rounded-xl bg-gray-900 text-white text-sm font-medium shrink-0 sm:ml-auto
+                                 hover:bg-gray-700 disabled:opacity-40 transition-colors
+                                 dark:bg-white dark:text-black dark:hover:bg-gray-100">
+                      Ajouter
+                    </button>
                   </div>
                   {noteError && <p className="text-xs text-red-500 dark:text-red-400">Choisis le vendeur qui écrit la note.</p>}
                 </form>
               )}
+              <div className="max-h-64 overflow-y-auto space-y-3">
+                {notes.length === 0 && !order.commentaire && <p className="text-xs text-gray-400 dark:text-neutral-500 py-1">Aucune note.</p>}
+                {notes.map(n => (
+                  <div key={noteKey(n)} className="group flex gap-3">
+                    <div className="h-7 w-7 rounded-full bg-gray-100 dark:bg-neutral-800 text-gray-600 dark:text-neutral-300
+                                    text-xs font-semibold grid place-items-center shrink-0">
+                      {(n.author || '?')[0].toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline flex-wrap gap-x-2 mb-0.5">
+                        <span className="text-xs font-semibold text-gray-700 dark:text-neutral-300">{n.author || '—'}</span>
+                        <span className="text-[11px] text-gray-400 dark:text-neutral-500">
+                          {toDate(n.at)?.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) || '—'}
+                          {n.editedAt ? ' · modifiée' : ''}
+                        </span>
+                        {!anonymized && (!editingNote || noteKey(editingNote) !== noteKey(n)) && (
+                          <span className="ml-auto flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                            <button type="button" onClick={() => startEditNote(n)}
+                              className="text-[11px] px-1.5 py-0.5 rounded text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-neutral-400 dark:hover:text-white dark:hover:bg-neutral-800">
+                              Modifier
+                            </button>
+                            <button type="button" onClick={() => removeNote(n)}
+                              className="text-[11px] px-1.5 py-0.5 rounded text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10">
+                              Supprimer
+                            </button>
+                          </span>
+                        )}
+                      </div>
+                      {editingNote && noteKey(editingNote) === noteKey(n) ? (
+                        <div className="space-y-1.5">
+                          <textarea rows={3} className="Input text-sm resize-y leading-relaxed" value={editingText} autoFocus
+                            onChange={e => setEditingText(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); saveNote() }
+                              if (e.key === 'Escape') { e.stopPropagation(); setEditingNote(null) }
+                            }} />
+                          <div className="flex gap-2">
+                            <SmallBtn primary onClick={saveNote} disabled={!editingText.trim()}>Enregistrer</SmallBtn>
+                            <SmallBtn onClick={() => setEditingNote(null)}>Annuler</SmallBtn>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-800 dark:text-neutral-200 leading-relaxed whitespace-pre-wrap break-words">{n.text}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {order.commentaire && (
+                  <p className="text-sm text-gray-800 dark:text-neutral-200 whitespace-pre-wrap">{order.commentaire}</p>
+                )}
+              </div>
             </MCard>
           )}
 

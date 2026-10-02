@@ -195,3 +195,15 @@ export const ORDER_ALERTS = {
     },
   ],
 }
+
+// ── Notes d'une commande ──────────────────────────────────────────────────────
+// Une note est repérée par sa date (à la milliseconde) et son auteur
+const sameNote = (a, b) => a?.at === b?.at && a?.author === b?.author
+
+export function withNoteEdited(notes, note, text, editedAt = new Date().toISOString()) {
+  return (notes || []).map(n => (sameNote(n, note) ? { ...n, text, editedAt } : n))
+}
+
+export function withNoteRemoved(notes, note) {
+  return (notes || []).filter(n => !sameNote(n, note))
+}
