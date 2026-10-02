@@ -19,7 +19,7 @@ import { buildPromoIndex, isOpVisibleFor, opFormError, opRayons, opStatus, opTim
 import { deleteOperation, opFormData } from '../lib/opActions'
 import { useMagasin } from '../store/useMagasin'
 import { BON_PLAN_COLLECTION, bonPlanDocId, parseBonPlanSheet, remiseBonPlan } from '../lib/bonPlan'
-import { SEGMENT_LABELS, cleanRef, normName, normSegment, parsePrice } from '../lib/opImport'
+import { PP_MENTION, SEGMENT_LABELS, cleanRef, isPresqueParfait, nomAffiche, nomSansPP, normName, normSegment, parsePrice } from '../lib/opImport'
 import { safeUrl } from '../lib/security'
 import { downloadWorkbook, readSheetRows } from '../lib/excel'
 import { catalogueExportTable, parseStockSheet, stockImportData, stockSummary } from '../lib/stockImport'
@@ -360,8 +360,7 @@ function CatalogueImportModal({ catalogueCount, onClose }) {
                       <tr key={i} className="border-b last:border-0 border-gray-100 dark:border-neutral-800">
                         <td className="px-3 py-2 font-mono text-gray-500 dark:text-neutral-400 whitespace-nowrap">{r.chrono}</td>
                         <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">
-                          {r.nom || '—'}{r.marque && <span className="font-normal text-gray-400"> · {r.marque}</span>}
-                          {r.presqueParfait && <span className="ml-1.5 px-1 py-px rounded text-[9px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 whitespace-nowrap">PP</span>}
+                          <NomVelo v={r} />{r.marque && <span className="font-normal text-gray-400"> · {r.marque}</span>}
                         </td>
                         <td className="px-3 py-2 text-gray-500 dark:text-neutral-400 whitespace-nowrap">{r.couleur || '—'}</td>
                         <td className="px-3 py-2 text-gray-500 dark:text-neutral-400">{r.famille || '—'}</td>
@@ -399,6 +398,13 @@ function CatalogueImportModal({ catalogueCount, onClose }) {
 }
 
 // ── Base de données (vélos en stock) ──────────────────────────────────────────
+
+// Nom d'un vélo, mention « "Presque parfait" » en couleur pour les vélos PP
+function NomVelo({ v }) {
+  if (!v.nom) return '—'
+  if (!isPresqueParfait(v)) return v.nom
+  return <>{nomSansPP(v.nom)} <span className="text-amber-700 dark:text-amber-300 whitespace-nowrap" title="Vélo presque parfait : vendu en prix bon plan">{PP_MENTION}</span></>
+}
 
 const PACK_COURT = { enfant: 'Enfant', classique: 'Classique', sport: 'Sport', electrique: 'Électrique' }
 
@@ -569,7 +575,7 @@ function ProduitsSection({ canCreate, mode }) {
       if (marque && r.v.marque !== marque) return false
       if (segment && normSegment(r.v.segment) !== segment) return false
       if (!words.length) return true
-      const text = normName([r.v.nom, r.v.marque, r.v.reference, r.v.chrono, r.v.couleur, r.bp?.refFournisseur].join(' '))
+      const text = normName([nomAffiche(r.v), r.v.marque, r.v.reference, r.v.chrono, r.v.couleur, r.bp?.refFournisseur].join(' '))
       return words.every(w => text.includes(w))
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -731,11 +737,7 @@ function ProduitsSection({ canCreate, mode }) {
                     className={['border-b last:border-0 border-gray-100 dark:border-neutral-800 align-top', canCreate ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-neutral-800/50' : ''].join(' ')}>
                     <td className="px-3 sm:px-4 py-2.5">
                       <p className="font-medium text-gray-900 dark:text-white">
-                        {v.nom || '—'}
-                        {normSegment(v.segment) === 'velo_pp' && (
-                          <span title="Vélo presque parfait : vendu en prix bon plan"
-                            className="ml-1.5 align-middle px-1 py-px rounded text-[9px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">PP</span>
-                        )}
+                        <NomVelo v={v} />
                       </p>
                       <p className="text-[11px] text-gray-400 dark:text-neutral-500">{v.couleur || 'Sans couleur'}<span className="md:hidden">{v.marque ? ` · ${v.marque}` : ''}</span></p>
                       <div className="sm:hidden mt-1 flex flex-wrap gap-1">{badges(r)}</div>

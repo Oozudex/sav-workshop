@@ -50,6 +50,25 @@ export function normSegment(v) {
   return s
 }
 
+// Vélo « presque parfait » : segment Vélos PP (ou repéré à l'import de l'état de stock)
+export function isPresqueParfait(p) {
+  return normSegment(p?.segment) === 'velo_pp' || p?.presqueParfait === true
+}
+
+export const PP_MENTION = '"Presque parfait"'
+const PP_TAG_END = /\s*"?\s*presque\s+parfaits?\s*"?\s*$/i
+
+// Nom sans la mention presque parfait (si elle figure déjà dans le nom importé)
+export function nomSansPP(nom) {
+  return String(nom || '').replace(PP_TAG_END, '').trim()
+}
+
+// Nom affiché : « ALLROAD 450 » → « ALLROAD 450 "Presque parfait" » pour un vélo presque parfait
+export function nomAffiche(p) {
+  const nom = String(p?.nom || '').trim()
+  return isPresqueParfait(p) && nom ? `${nomSansPP(nom)} ${PP_MENTION}` : nom
+}
+
 // Seuls les vélos sont dans la base de stock : les autres segments sont importés sans vérification
 export function checksStock(segment) {
   return !segment || segment === 'velo'

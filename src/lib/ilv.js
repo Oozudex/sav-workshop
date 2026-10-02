@@ -1,6 +1,6 @@
 // ILV (étiquettes prix en rayon) : packs, calcul des prix affichés et textes de chaque modèle.
 // Fonctions pures (tests/unit/ilv.test.mjs) ; le dessin du PDF est dans lib/ilvPdf.js.
-import { normSegment } from './opImport.js'
+import { PP_MENTION, isPresqueParfait, nomSansPP, normSegment } from './opImport.js'
 
 export const PACKS = {
   enfant:     { label: 'Pack enfant',     prix: { 1: 9.99,  2: 15.98 } },
@@ -113,7 +113,7 @@ export function ilvTypesFor({ prixEngage, prixOp, prixBonPlan, prixFort }) {
 
 /**
  * Contenu d'une ILV : prix calculés (pack inclus) et textes prêts à dessiner.
- * p : { type, nom, marque, reference, segment, prixFort, prixOp, prixBonPlan, prixEngage, pack, dateDebut, dateFin }
+ * p : { type, nom, marque, reference, segment, presqueParfait, prixFort, prixOp, prixBonPlan, prixEngage, pack, dateDebut, dateFin }
  * Accessoires : pas de pack, ni dans le prix ni dans le détail.
  * options : { duree: 1 | 2 (pack 1 an / 2 ans), oney: null | 3 | 4 (ILV normale uniquement) }
  * Renvoie { error } si une donnée manque.
@@ -124,12 +124,15 @@ export function buildIlv(p, { duree = 1, oney = null } = {}) {
   if (pack == null) return { error: 'Pack optionnel non renseigné pour ce produit.' }
   if (p.prixFort == null) return { error: 'Prix fort non renseigné pour ce produit.' }
 
-  const nom = String(p.nom || '').trim().toUpperCase()
+  // Vélo presque parfait : mention ajoutée au nom (« Allroad 450 "Presque parfait" »)
+  const pp = isPresqueParfait(p)
+  const nomBase = pp ? nomSansPP(p.nom) : String(p.nom || '').trim()
+  const nom = pp ? `${nomBase.toUpperCase()} ${PP_MENTION.toUpperCase()}` : nomBase.toUpperCase()
   const base = {
     type: p.type,
     marque: p.marque || '',
-    refLine: `Réf. :  ${p.reference || p.refFournisseur || p.chrono || ''} / ${titleName(p.nom)}`,
-    packLine: noPack ? null : `PRIX PACK OPTIONNEL ${fmtPoint(pack)}`,
+    refLine: `Réf. :  ${p.reference || p.refFournisseur || p.chrono || ''} / ${titleName(nomBase)}${pp ? ` ${PP_MENTION}` : ''}`,
+    packLine: noPack ? null : `PRIX PACK OPTIONNEL : ${fmtPoint(pack)}`,
     prixLine: `PRIX ${nom} : ${fmtPoint(p.prixFort)}`,
   }
   const plusPack = v => euros(cents(v) + cents(pack))

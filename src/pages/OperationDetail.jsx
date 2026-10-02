@@ -18,7 +18,7 @@ import { formatEuro } from '../lib/orders'
 import { readSheetWithFills } from '../lib/excel'
 import { BON_PLAN_COLLECTION, bonPlanDocId, bonPlanTransfer } from '../lib/bonPlan'
 import {
-  SEGMENT_LABELS, bonPlanPrices, cleanRef, isBonPlanBetter, normName, parseOpSheet, planImport, prixReference, remisePct, resolveLines,
+  SEGMENT_LABELS, bonPlanPrices, cleanRef, isBonPlanBetter, nomAffiche, normName, parseOpSheet, planImport, prixReference, remisePct, resolveLines,
 } from '../lib/opImport'
 
 const SEGMENTS = ['velo', 'trottinette', 'roller', 'accessoires', 'textile']
@@ -390,7 +390,7 @@ function ImportModal({ opId, produits, onClose }) {
                         ].join(' ')}>
                           <td className="px-3 py-2 font-mono text-gray-400">{l.line}</td>
                           <td className="px-3 py-2 min-w-[180px]">
-                            <p className={['font-medium', l.status === 'missing' ? 'text-gray-400 line-through' : 'text-gray-900 dark:text-white'].join(' ')}>{l.nom || '(sans nom)'}</p>
+                            <p className={['font-medium', l.status === 'missing' ? 'text-gray-400 line-through' : 'text-gray-900 dark:text-white'].join(' ')}>{nomAffiche(l) || '(sans nom)'}</p>
                             <p className="text-[10px] text-gray-400 dark:text-neutral-500">
                               {[l.marque, SEGMENT_LABELS[l.segment] || l.segment].filter(Boolean).join(' · ')}
                               {l.refFournisseur && <span className="font-mono"> · {l.refFournisseur}</span>}
@@ -563,7 +563,7 @@ function ProductRow({ group, canCreate, onIlv, onEdit, onToggleBonPlan }) {
   return (
     <tr className="border-t border-gray-100 dark:border-neutral-800 align-top">
       <td className="px-4 py-3 w-[22%]">
-        <p className="font-semibold text-gray-900 dark:text-white">{first.nom}</p>
+        <p className="font-semibold text-gray-900 dark:text-white">{nomAffiche(first)}</p>
         <p className="text-[11px] text-gray-400 dark:text-neutral-500">{[first.marque, SEGMENT_LABELS[first.segment] || first.segment].filter(Boolean).join(' · ')}</p>
       </td>
       <td className="px-4 py-2">
@@ -582,7 +582,7 @@ function ProductCard({ group, canCreate, onIlv, onEdit, onToggleBonPlan }) {
   return (
     <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 p-4 space-y-2">
       <div>
-        <p className="text-sm font-semibold text-gray-900 dark:text-white">{first.nom}</p>
+        <p className="text-sm font-semibold text-gray-900 dark:text-white">{nomAffiche(first)}</p>
         <p className="text-[11px] text-gray-400 dark:text-neutral-500">{[first.marque, SEGMENT_LABELS[first.segment] || first.segment].filter(Boolean).join(' · ')}</p>
       </div>
       {same && <PriceCell p={first} />}
@@ -756,7 +756,8 @@ export default function OperationDetail() {
   const grouped = (() => {
     const map = new Map()
     for (const p of filtered) {
-      const key = p.nom || p.id
+      // Un vélo presque parfait n'est pas regroupé avec le modèle neuf du même nom
+      const key = nomAffiche(p) || p.id
       if (!map.has(key)) map.set(key, [])
       map.get(key).push(p)
     }

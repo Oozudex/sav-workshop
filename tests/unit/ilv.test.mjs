@@ -43,11 +43,19 @@ describe('modèles', () => {
   it('ILV normale : pack inclus, Oney 3x', () => {
     const ilv = buildIlv({ ...ALLROAD, type: 'normal' }, { oney: 3 })
     assert.deepEqual(ilv.big, { int: '1539', dec: '.98' })
-    assert.deepEqual(ilv.lines, ['PRIX ALLROAD 450 : 1499.99€', 'PRIX PACK OPTIONNEL 39.99€'])
+    assert.deepEqual(ilv.lines, ['PRIX ALLROAD 450 : 1499.99€', 'PRIX PACK OPTIONNEL : 39.99€'])
     assert.equal(ilv.refLine, 'Réf. :  YJ60H8PF B06ZZS / Allroad 450')
     assert.equal(ilv.oney.monthly, '513€33')
     assert.equal(ilv.oney.mentions[1], 'particuliers et valable pour tout achat de 80€ à 6000€. Crédit affecté sur 3 mois au')
     assert.equal(buildIlv({ ...ALLROAD, type: 'normal' }).oney, null)
+  })
+
+  it('vélo presque parfait : mention dans le nom', () => {
+    const ilv = buildIlv({ ...ALLROAD, segment: 'velo_pp', type: 'bonplan', prixBonPlan: 1199.99 })
+    assert.equal(ilv.lines[0], 'PRIX ALLROAD 450 "PRESQUE PARFAIT" : 1499.99€')
+    assert.equal(ilv.refLine, 'Réf. :  YJ60H8PF B06ZZS / Allroad 450 "Presque parfait"')
+    const dejaDansLeNom = buildIlv({ ...ALLROAD, nom: 'ALLROAD 450 "PRESQUE PARFAIT"', presqueParfait: true, type: 'normal' })
+    assert.equal(dejaDansLeNom.refLine, 'Réf. :  YJ60H8PF B06ZZS / Allroad 450 "Presque parfait"')
   })
 
   it('ILV promo : prix barré et remise pack inclus, dates de l\'OP', () => {
@@ -70,7 +78,7 @@ describe('modèles', () => {
     const bp = buildIlv({ ...ALLROAD, type: 'bonplan', prixBonPlan: 1299.99 }, { duree: 2 })
     assert.equal(bp.conseille, 'Prix conseillé : 1563€97')
     assert.deepEqual(bp.big, { int: '1363', dec: '.97' })
-    assert.equal(bp.lines[2], 'PRIX PACK OPTIONNEL 63.98€')
+    assert.equal(bp.lines[2], 'PRIX PACK OPTIONNEL : 63.98€')
     const en = buildIlv({ ...ALLROAD, type: 'engage', prixEngage: 1299.99 })
     assert.equal(en.lines[1], 'PRIX ENGAGÉ : 1299.99€')
   })

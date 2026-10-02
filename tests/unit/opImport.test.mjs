@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  bonPlanPrices, isBlueFill, isBonPlanBetter, normSegment, parseOpSheet, parsePrice,
+  bonPlanPrices, isBlueFill, isBonPlanBetter, isPresqueParfait, nomAffiche, normSegment, parseOpSheet, parsePrice,
   planImport, prixReference, remisePct, resolveLines,
 } from '../../src/lib/opImport.js'
 
@@ -172,5 +172,20 @@ describe('import et réimport', () => {
     const plan = planImport([r[4], { ...r[4], prixOp: 1699.99, line: 20 }])
     assert.equal(plan.length, 2)
     assert.ok(plan.every(p => p.data.prixOp === 1699.99))
+  })
+})
+
+describe('vélos presque parfaits', () => {
+  it('repérés par le segment Vélos PP ou le drapeau de la base', () => {
+    assert.equal(isPresqueParfait({ segment: 'velo_pp' }), true)
+    assert.equal(isPresqueParfait({ segment: 'VELOS PP' }), true)
+    assert.equal(isPresqueParfait({ segment: 'velo', presqueParfait: true }), true)
+    assert.equal(isPresqueParfait({ segment: 'velo' }), false)
+  })
+  it('mention ajoutée au nom, sans doublon', () => {
+    assert.equal(nomAffiche({ nom: 'ALLROAD 450', segment: 'velo_pp' }), 'ALLROAD 450 "Presque parfait"')
+    assert.equal(nomAffiche({ nom: 'CLIFF 700 "PRESQUE PARFAIT"', segment: 'velo_pp' }), 'CLIFF 700 "Presque parfait"')
+    assert.equal(nomAffiche({ nom: 'ALLROAD 450', segment: 'velo' }), 'ALLROAD 450')
+    assert.equal(nomAffiche({ nom: '', segment: 'velo_pp' }), '')
   })
 })

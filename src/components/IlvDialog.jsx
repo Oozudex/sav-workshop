@@ -3,7 +3,7 @@ import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firesto
 import { db } from '../lib/firebase'
 import { BON_PLAN_COLLECTION, bonPlanDocId } from '../lib/bonPlan'
 import { ILV_TYPES, PACKS, buildIlv, ilvTypesFor, oneyAllowed, packPrice, sansPack } from '../lib/ilv'
-import { cleanRef } from '../lib/opImport'
+import { cleanRef, nomAffiche } from '../lib/opImport'
 
 /**
  * Complète les produits avec la base de données (prix fort, pack, prix engagé, référence) et le prix
@@ -32,6 +32,7 @@ async function enrich(sources) {
       reference:   cat.reference || s.reference,
       couleur:     s.couleur || cat.couleur,
       segment:     cat.segment || s.segment || null,
+      presqueParfait: cat.presqueParfait ?? s.presqueParfait ?? false,
       prixFort:    s.prixFort ?? cat.prixFort ?? bp?.prixFort ?? null,
       pack:        cat.pack || s.pack || null,
       prixEngage:  cat.prixEngage ?? null,
@@ -42,7 +43,7 @@ async function enrich(sources) {
 
 function fileName(ilv, source) {
   const clean = v => String(v || '').replace(/[\\/:*?"<>|]+/g, ' ').trim()
-  return `ILV ${ILV_TYPES[ilv.type]} - ${clean(source.nom)} ${clean(source.reference)}.pdf`
+  return `ILV ${ILV_TYPES[ilv.type]} - ${clean(nomAffiche(source))} ${clean(source.reference)}.pdf`
 }
 
 const choice = active => ['h-8 px-3 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-35 disabled:cursor-not-allowed',
@@ -136,7 +137,7 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
       <div className="w-full max-w-5xl max-h-[92vh] rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800 shrink-0">
           <span id="ilv-title" className="text-sm font-semibold text-gray-900 dark:text-white">
-            Télécharger l’ILV{item ? ` · ${item.nom}` : ''}
+            Télécharger l’ILV{item ? ` · ${nomAffiche(item)}` : ''}
           </span>
           <button onClick={onClose} aria-label="Fermer" className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
