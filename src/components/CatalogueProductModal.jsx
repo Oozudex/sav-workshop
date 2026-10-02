@@ -5,6 +5,9 @@ import { PACKS } from '../lib/ilv'
 import { BON_PLAN_COLLECTION, bonPlanDocId } from '../lib/bonPlan'
 import { SEGMENT_LABELS, parsePrice } from '../lib/opImport'
 import { CATALOGUE_SEGMENTS, catalogueData, catalogueFormErrors, catalogueFormValues, remiseSur } from '../lib/catalogueForm'
+import { BIKE_FAMILLES } from '../lib/constants'
+import { packPourFamille } from '../lib/stockImport'
+import BikeBrandSelect from './BikeBrandSelect'
 
 const euro = v => `${String(v).replace('.', ',')} €`
 
@@ -188,11 +191,20 @@ export default function CatalogueProductModal({ produit, produits, start, onClos
               <Field label="Nom *" error={shown.nom} className="col-span-2">
                 <TextInput {...input('nom')} placeholder="Ex. ALLROAD 450" autoFocus={!edit} />
               </Field>
-              <Field label="Marque"><TextInput {...input('marque')} placeholder="Ex. NAKAMURA" /></Field>
+              <Field label="Marque"><BikeBrandSelect value={form.marque} onChange={v => set('marque', v)} /></Field>
               <Field label="Couleur"><TextInput {...input('couleur')} placeholder="Ex. NOIR" /></Field>
               <Field label="Chrono *" error={shown.chrono}><TextInput {...input('chrono')} placeholder="Ex. 0-252871" className="font-mono" /></Field>
               <Field label="Référence"><TextInput {...input('reference')} placeholder="Ex. YJ60H8PF B06ZZS" className="font-mono" /></Field>
-              <Field label="Famille"><TextInput {...input('famille')} placeholder="Ex. VTC" /></Field>
+              <Field label="Famille">
+                {/* Pack déduit de la famille s'il n'est pas encore choisi (électrique, enfant), comme à l'import */}
+                <select className="Input" value={form.famille}
+                  onChange={e => { const famille = e.target.value; setForm(f => ({ ...f, famille, pack: f.pack || packPourFamille(famille) || '' })) }}>
+                  <option value="">—</option>
+                  {BIKE_FAMILLES.map(f => <option key={f} value={f}>{f}</option>)}
+                  {/* Famille hors liste déjà enregistrée : conservée */}
+                  {form.famille && !BIKE_FAMILLES.includes(form.famille) && <option value={form.famille}>{form.famille}</option>}
+                </select>
+              </Field>
               <Field label="Segment">
                 <select className="Input" value={form.segment} onChange={e => set('segment', e.target.value)}>
                   <option value="">—</option>
