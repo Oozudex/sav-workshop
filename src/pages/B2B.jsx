@@ -213,7 +213,9 @@ function CredentialsModal({ tool, magasins, userMagasinId, isGlobal, onClose, on
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <label className="space-y-1">
                     <span className="text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Email</span>
-                    <input className="Input text-xs" type="email"
+                    {/* Identifiants du magasin, pas ceux de la personne connectée : pas de remplissage automatique */}
+                    <input className="Input text-xs" type="email" name={`b2b-login-${m.id}`}
+                      autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
                       value={creds[m.id]?.email ?? ''}
                       onChange={e => setCreds(p => ({ ...p, [m.id]: { ...p[m.id], email: e.target.value } }))}
                       placeholder="email@exemple.com" />
@@ -221,7 +223,8 @@ function CredentialsModal({ tool, magasins, userMagasinId, isGlobal, onClose, on
                   <label className="space-y-1">
                     <span className="text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Mot de passe</span>
                     <div className="relative">
-                      <input className="Input text-xs pr-8"
+                      <input className="Input text-xs pr-8" name={`b2b-password-${m.id}`}
+                        autoComplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
                         type={showPwd[m.id] ? 'text' : 'password'}
                         value={creds[m.id]?.password ?? ''}
                         onChange={e => setCreds(p => ({ ...p, [m.id]: { ...p[m.id], password: e.target.value } }))}
