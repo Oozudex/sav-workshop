@@ -1,7 +1,8 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  catalogueExportTable, cleanCouleur, cleanNom, packPourFamille, parseStockSheet, stockImportData, stockSummary,
+  catalogueExportTable, cleanCouleur, cleanNom, packPourFamille, parseStockSheet, planStockImport, stockImportData, stockSummary,
+  withPacksFromBase,
 } from '../../src/lib/stockImport.js'
 
 const HEAD = ['Magasin', 'Univers', 'Segment', 'Famille', 'Sous-Famille', 'Modèle', 'Fourn. stat', 'Marque', 'Réf', 'Chrono', 'Couleur', 'Act.', 'QtStkFin', 'PV Mag']
@@ -103,5 +104,62 @@ describe('export Excel', () => {
   it("se réimporte à l'identique", () => {
     const again = parseStockSheet(table).produits.map(({ stock: _s, pack: _p, ...p }) => p)
     assert.deepEqual(again, produits.map(({ stock: _s, pack: _p, ...p }) => p))
+  })
+})
+
+describe('réimport', () => {
+  const { produits } = parseStockSheet(ROWS) // 0-263804, 0-252592, 0-2, 0-1
+  const existing = [
+    { id: 'a', chrono: '0-263804', nom: 'SPIKE', prixFort: 449.99, prixEngage: 399.99 }, // prix modifié, engagé
+    { id: 'b', chrono: '0-1', nom: 'ROCKY', prixFort: 199.99 },                          // inchangé
+    { id: 'c', chrono: '9-999', nom: 'ANCIEN', prixFort: 99 },                           // plus en stock
+    { id: 'd', chrono: '9-998', nom: 'ANCIEN PP', prixFort: 99 },                        // plus en stock, bon plan
+  ]
+  const plan = planStockImport(produits, existing, new Set(['0-1', '9-998']))
+
+  it("nouveaux, mis à jour et retirés", () => {
+    assert.deepEqual(plan.nouveaux.map(p => p.chrono), ['0-252592', '0-2'])
+    assert.deepEqual(plan.misAJour.map(p => p.chrono), ['0-263804', '0-1'])
+    assert.deepEqual(plan.retires.map(e => e.id), ['c', 'd'])
+  })
+  it("prix fort modifiés", () => {
+    assert.deepEqual(plan.prixChanges.map(p => [p.chrono, p.ancienPrix, p.prixFort]), [['0-263804', 449.99, 499.99]])
+  })
+  it("prix engagés et bon plan conservés, bon plan des vélos retirés supprimés", () => {
+    assert.equal(plan.engagesConserves, 1)
+    assert.equal(plan.bonPlansConserves, 1)
+    assert.deepEqual(plan.bonPlansRetires.map(e => e.chrono), ['9-998'])
+  })
+  it("base vide : tout est nouveau", () => {
+    const p = planStockImport(produits)
+    assert.equal(p.nouveaux.length, produits.length)
+    assert.equal(p.retires.length, 0)
+  })
+})
+
+describe('packs repris de la base', () => {
+  const nouveaux = [
+    { chrono: '1', reference: 'YF60K2 000AAA', nom: 'CLIFF 700', marque: 'NAKAMURA', pack: null },   // même modèle, autre couleur
+    { chrono: '2', reference: 'YF60K2PF B02KHV', nom: 'CLIFF 700', marque: 'NAKAMURA', pack: null }, // version presque parfaite
+    { chrono: '3', reference: 'ZZ99 X', nom: 'SPIKE 2.0 VTT', marque: 'BH', pack: null },            // même nom et marque
+    { chrono: '4', reference: 'QQ11 X', nom: 'INCONNU', marque: 'BH', pack: null },                   // rien dans la base
+    { chrono: '5', reference: 'YF60K2 000BBB', nom: 'CLIFF 700', marque: 'NAKAMURA', pack: 'enfant' }, // pack déjà déduit
+    { chrono: '6', reference: 'AA11 X', nom: 'GRAVEL', marque: 'BH', pack: null },                     // même chrono
+  ]
+  const base = [
+    { chrono: '0-9', reference: 'YF60K2 022XSW', nom: 'CLIFF 700', marque: 'NAKAMURA', pack: 'sport' },
+    { chrono: '0-8', reference: 'A2096 B05JFS', nom: 'SPIKE 2.0 VTT', marque: 'BH', pack: 'classique' },
+    { chrono: '6', reference: 'AA11 X', nom: 'GRAVEL', marque: 'BH', pack: 'sport' },
+  ]
+  it("reprend le pack du même chrono, puis du même modèle, puis du même nom", () => {
+    const r = withPacksFromBase(nouveaux, base)
+    assert.deepEqual(r.map(p => p.pack), ['sport', 'sport', 'classique', null, 'enfant', 'sport'])
+    assert.deepEqual(r.map(p => !!p.packRepris), [true, true, true, false, false, true])
+  })
+  it("le drapeau n'est pas enregistré", () => {
+    assert.equal('packRepris' in stockImportData(withPacksFromBase(nouveaux, base)[0], null), false)
+  })
+  it("compté dans l'aperçu du réimport", () => {
+    assert.equal(planStockImport(nouveaux, base).packsRepris, 3)
   })
 })

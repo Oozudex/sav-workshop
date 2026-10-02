@@ -136,7 +136,7 @@ export function stockSummary(produits) {
  * Le prix fort suit le fichier (s'il y en a un) ; le prix engagé et un pack déjà choisi sont conservés.
  */
 export function stockImportData(produit, existing) {
-  const { stock: _stock, pack, prixFort, ...rest } = produit
+  const { stock: _stock, pack, prixFort, packRepris: _repris, ...rest } = produit
   return {
     ...rest,
     ...(prixFort != null || !existing ? { prixFort } : {}),
@@ -161,4 +161,57 @@ export function catalogueExportTable(items) {
       num(v.prixFort ?? bp?.prixFort), PACK_EXPORT[v.pack] || '', num(v.prixEngage), num(bp?.prixBonPlan),
     ]),
   ]
+}
+
+// ── Réimport : la base suit le nouveau fichier ──────────────────────────────
+// Modèle d'un vélo : réf. modèle sans le suffixe « PF » des presque parfaits (« YF60K2PF B02KHV » → « YF60K2 »)
+function modelKey(reference) {
+  return cleanRef(reference).split(' ')[0].replace(/PF$/, '')
+}
+const nameKey = v => `${cleanText(v.marque).toUpperCase()}|${cleanNom(v.nom)}`
+
+/**
+ * Vélos du fichier sans pack : reprise du pack déjà choisi dans la base, pour le même chrono,
+ * sinon pour le même modèle (même réf. modèle, puis même marque et même nom). packRepris : pack retrouvé.
+ */
+export function withPacksFromBase(produits, existing = []) {
+  const byChrono = new Map(), byModel = new Map(), byName = new Map()
+  for (const e of existing) {
+    if (!e.pack) continue
+    byChrono.set(cleanRef(e.chrono), e.pack)
+    if (modelKey(e.reference) && !byModel.has(modelKey(e.reference))) byModel.set(modelKey(e.reference), e.pack)
+    if (!byName.has(nameKey(e))) byName.set(nameKey(e), e.pack)
+  }
+  return produits.map(p => {
+    if (p.pack) return p
+    const pack = byChrono.get(p.chrono) || (modelKey(p.reference) && byModel.get(modelKey(p.reference))) || byName.get(nameKey(p))
+    return pack ? { ...p, pack, packRepris: true } : p
+  })
+}
+
+/**
+ * Compare le fichier à la base actuelle. existing : vélos de la base ({ id, chrono, nom, prixFort, prixEngage }) ;
+ * bonPlanChronos : chronos qui ont un prix bon plan.
+ * - nouveaux : ajoutés ; misAJour : déjà présents (prix engagé, pack choisi et prix bon plan conservés) ;
+ * - retires : absents du fichier, supprimés avec leur prix bon plan ;
+ * - prixChanges : prix fort modifié par le fichier.
+ */
+export function planStockImport(fichier, existing = [], bonPlanChronos = new Set()) {
+  const produits = withPacksFromBase(fichier, existing)
+  const byChrono = new Map(existing.map(e => [cleanRef(e.chrono), e]))
+  const inFile = new Set(produits.map(p => p.chrono))
+  const misAJour = produits.filter(p => byChrono.has(p.chrono))
+  return {
+    produits, // vélos du fichier, packs repris de la base compris
+    packsRepris: produits.filter(p => p.packRepris && !byChrono.get(p.chrono)?.pack).length,
+    nouveaux: produits.filter(p => !byChrono.has(p.chrono)),
+    misAJour,
+    retires: existing.filter(e => !inFile.has(cleanRef(e.chrono))),
+    prixChanges: misAJour
+      .filter(p => p.prixFort != null && byChrono.get(p.chrono).prixFort != null && p.prixFort !== byChrono.get(p.chrono).prixFort)
+      .map(p => ({ ...p, ancienPrix: byChrono.get(p.chrono).prixFort })),
+    engagesConserves: misAJour.filter(p => byChrono.get(p.chrono).prixEngage != null).length,
+    bonPlansConserves: misAJour.filter(p => bonPlanChronos.has(p.chrono)).length,
+    bonPlansRetires: existing.filter(e => !inFile.has(cleanRef(e.chrono)) && bonPlanChronos.has(cleanRef(e.chrono))),
+  }
 }

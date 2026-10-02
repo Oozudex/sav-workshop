@@ -22,7 +22,7 @@ import { BON_PLAN_COLLECTION, bonPlanDocId, parseBonPlanSheet, remiseBonPlan } f
 import { PP_MENTION, SEGMENT_LABELS, cleanRef, isPresqueParfait, nomAffiche, nomSansPP, normName, normSegment, parsePrice } from '../lib/opImport'
 import { safeUrl } from '../lib/security'
 import { downloadWorkbook, readSheetRows } from '../lib/excel'
-import { catalogueExportTable, parseStockSheet, stockImportData, stockSummary } from '../lib/stockImport'
+import { catalogueExportTable, parseStockSheet, planStockImport, stockImportData, stockSummary } from '../lib/stockImport'
 
 const getStatus = op => opStatus(op)
 
@@ -250,8 +250,67 @@ function ImportSummary({ rows, report }) {
   )
 }
 
+// Réimport : ce qui va changer dans la base (le fichier devient la référence)
+function ImportChanges({ plan, baseCount }) {
+  const euro = v => `${Number(v).toFixed(2).replace('.', ',')} €`
+  const tiles = [
+    ['Nouveaux', plan.nouveaux.length, 'text-emerald-700 dark:text-emerald-400'],
+    ['Mis à jour', plan.misAJour.length, 'text-gray-900 dark:text-white'],
+    ['Supprimés', plan.retires.length, plan.retires.length ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'],
+    ['Prix fort modifiés', plan.prixChanges.length, 'text-gray-900 dark:text-white'],
+  ]
+  const conserves = [
+    plan.engagesConserves && `${plan.engagesConserves} prix engagé${plan.engagesConserves > 1 ? 's' : ''}`,
+    plan.bonPlansConserves && `${plan.bonPlansConserves} prix bon plan`,
+    'les packs déjà choisis',
+    plan.packsRepris && `${plan.packsRepris} pack${plan.packsRepris > 1 ? 's' : ''} repris d’un vélo du même modèle`,
+  ].filter(Boolean)
+  // Plus de la moitié de la base disparaîtrait : sans doute un fichier partiel
+  const suspect = plan.retires.length > baseCount / 2
+  return (
+    <div className="rounded-xl border border-gray-200 dark:border-neutral-700 p-3 space-y-2.5">
+      <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Changements dans la base ({baseCount} vélos aujourd’hui)</p>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {tiles.map(([label, n, cls]) => (
+          <div key={label} className="rounded-lg bg-gray-50 dark:bg-neutral-800/60 px-3 py-2">
+            <p className={`text-lg font-bold tabular-nums ${cls}`}>{n}</p>
+            <p className="text-[11px] text-gray-500 dark:text-neutral-400 leading-tight">{label}</p>
+          </div>
+        ))}
+      </div>
+      <p className="text-[11px] text-emerald-700 dark:text-emerald-400">✓ Conservés automatiquement : {conserves.join(', ')}.</p>
+      {plan.retires.length > 0 && (
+        <details className="text-[11px]">
+          <summary className="cursor-pointer text-red-600 dark:text-red-400 font-semibold">
+            {plan.retires.length} vélo{plan.retires.length > 1 ? 's' : ''} absent{plan.retires.length > 1 ? 's' : ''} du fichier, supprimé{plan.retires.length > 1 ? 's' : ''}
+            {plan.bonPlansRetires.length > 0 && ` avec ${plan.bonPlansRetires.length} prix bon plan`}
+          </summary>
+          <ul className="mt-1.5 max-h-32 overflow-y-auto space-y-0.5 text-gray-600 dark:text-neutral-300">
+            {plan.retires.map(e => <li key={e.id}><span className="font-mono text-gray-400">{e.chrono}</span> {e.nom}{e.couleur ? ` · ${e.couleur}` : ''}</li>)}
+          </ul>
+        </details>
+      )}
+      {plan.prixChanges.length > 0 && (
+        <details className="text-[11px]">
+          <summary className="cursor-pointer text-gray-700 dark:text-neutral-200 font-semibold">{plan.prixChanges.length} prix fort modifié{plan.prixChanges.length > 1 ? 's' : ''}</summary>
+          <ul className="mt-1.5 max-h-32 overflow-y-auto space-y-0.5 text-gray-600 dark:text-neutral-300">
+            {plan.prixChanges.map(p => (
+              <li key={p.chrono}>{p.nom}{p.couleur ? ` · ${p.couleur}` : ''} : <span className="line-through text-gray-400">{euro(p.ancienPrix)}</span> → <span className="font-semibold">{euro(p.prixFort)}</span></li>
+            ))}
+          </ul>
+        </details>
+      )}
+      {suspect && (
+        <p className="rounded-lg bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 px-3 py-2 text-[11px] text-red-700 dark:text-red-300">
+          ⚠ Plus de la moitié de la base serait supprimée. Vérifiez que c’est bien l’état de stock complet de tous les magasins.
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ── Modal import catalogue ────────────────────────────────────────────────────
-function CatalogueImportModal({ catalogueCount, onClose }) {
+function CatalogueImportModal({ produits, bonPlanDocs, onClose }) {
   const fileRef = useRef(null)
   const [rows, setRows] = useState(null)
   const [report, setReport] = useState(null) // { ecartes }
@@ -273,25 +332,32 @@ function CatalogueImportModal({ catalogueCount, onClose }) {
     }).catch(() => setError('Impossible de lire le fichier.'))
   }
 
-  // Mise à jour par chrono : les champs et le prix fort du fichier sont rafraîchis ; le prix engagé et un pack
-  // déjà choisi par l'acheteur sont conservés. En mode « replace », les chronos absents du fichier sont retirés.
-  async function handleImport(mode) {
+  // Changements par rapport à la base actuelle (aperçu avant import)
+  const bonPlanIds = useMemo(() => new Map(bonPlanDocs.filter(b => b.chrono).map(b => [cleanRef(b.chrono), b.id])), [bonPlanDocs])
+  const bonPlanChronos = useMemo(() => new Set(bonPlanIds.keys()), [bonPlanIds])
+  const plan = useMemo(() => rows ? planStockImport(rows, produits, bonPlanChronos) : null, [rows, produits, bonPlanChronos])
+  const baseVide = produits.length === 0
+
+  // La base suit le nouveau fichier : mise à jour par chrono (prix fort et infos du fichier ; prix engagé et pack
+  // déjà choisi conservés), ajout des nouveaux vélos, suppression des vélos absents du fichier et de leur prix bon plan.
+  async function handleImport() {
     if (!rows?.length) return
     setImporting(true)
     setError('')
     try {
       const snap = await getDocs(collection(db, 'catalogue_produits'))
       const byChrono = new Map(snap.docs.map(d => [cleanRef(d.get('chrono')), d]))
-      const inFile = new Set()
+      const inFile = new Set(rows.map(r => r.chrono))
       const writes = []
-      for (const r of rows) {
+      for (const r of plan.produits) { // packs repris de la base compris
         const existing = byChrono.get(r.chrono)
         const data = { ...stockImportData(r, existing?.data()), importedAt: serverTimestamp() }
-        inFile.add(r.chrono)
         writes.push(b => existing ? b.set(existing.ref, data, { merge: true }) : b.set(doc(collection(db, 'catalogue_produits')), data))
       }
-      if (mode === 'replace') {
-        for (const [chrono, d] of byChrono) if (!inFile.has(chrono)) writes.push(b => b.delete(d.ref))
+      for (const [chrono, d] of byChrono) {
+        if (inFile.has(chrono)) continue
+        writes.push(b => b.delete(d.ref))
+        if (bonPlanIds.has(chrono)) writes.push(b => b.delete(doc(db, BON_PLAN_COLLECTION, bonPlanIds.get(chrono))))
       }
       for (let i = 0; i < writes.length; i += 450) {
         const batch = writeBatch(db)
@@ -336,16 +402,8 @@ function CatalogueImportModal({ catalogueCount, onClose }) {
                 <button onClick={() => { setRows(null); setReport(null); setFileName(''); if (fileRef.current) fileRef.current.value = '' }}
                   className="text-xs text-gray-400 hover:text-gray-600 underline">Changer</button>
               </div>
-              <ImportSummary rows={rows} report={report} />
-              {catalogueCount > 0 && (
-                <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20">
-                  <svg className="h-4 w-4 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
-                  <p className="text-[11px] text-amber-700 dark:text-amber-300">
-                    La base contient déjà <strong>{catalogueCount} références</strong>. Les produits déjà présents (même chrono) sont mis à jour
-                    avec le prix fort du fichier, sans perdre leur prix engagé ni le pack déjà choisi. « Remplacer » retire en plus les chronos absents du fichier.
-                  </p>
-                </div>
-              )}
+              <ImportSummary rows={plan?.produits || rows} report={report} />
+              {!baseVide && plan && <ImportChanges plan={plan} baseCount={produits.length} />}
               <div className="rounded-xl border border-gray-200 dark:border-neutral-700 overflow-hidden">
                 <table className="w-full text-[11px]">
                   <thead>
@@ -356,7 +414,7 @@ function CatalogueImportModal({ catalogueCount, onClose }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.slice(0, 30).map((r, i) => (
+                    {(plan?.produits || rows).slice(0, 30).map((r, i) => (
                       <tr key={i} className="border-b last:border-0 border-gray-100 dark:border-neutral-800">
                         <td className="px-3 py-2 font-mono text-gray-500 dark:text-neutral-400 whitespace-nowrap">{r.chrono}</td>
                         <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">
@@ -365,7 +423,10 @@ function CatalogueImportModal({ catalogueCount, onClose }) {
                         <td className="px-3 py-2 text-gray-500 dark:text-neutral-400 whitespace-nowrap">{r.couleur || '—'}</td>
                         <td className="px-3 py-2 text-gray-500 dark:text-neutral-400">{r.famille || '—'}</td>
                         <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-gray-700 dark:text-neutral-300">{r.prixFort != null ? `${r.prixFort.toFixed(2).replace('.', ',')} €` : '—'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{r.pack ? <span className="text-gray-700 dark:text-neutral-300">{PACK_COURT[r.pack]}</span> : <span className="text-amber-600 dark:text-amber-400">À choisir</span>}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {r.pack ? <span className="text-gray-700 dark:text-neutral-300">{PACK_COURT[r.pack]}</span> : <span className="text-amber-600 dark:text-amber-400">À choisir</span>}
+                          {r.packRepris && <span className="ml-1 text-[9px] text-gray-400" title="Pack repris d’un vélo du même modèle déjà dans la base">repris</span>}
+                        </td>
                         <td className="px-3 py-2 text-right tabular-nums text-gray-500 dark:text-neutral-400">{r.stock}</td>
                       </tr>
                     ))}
@@ -380,15 +441,9 @@ function CatalogueImportModal({ catalogueCount, onClose }) {
         </div>
         <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-gray-100 dark:border-neutral-800 shrink-0">
           <button onClick={onClose} className="h-8 px-3 rounded-lg text-xs border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800">Annuler</button>
-          {rows?.length > 0 && catalogueCount > 0 && (
-            <button onClick={() => handleImport('add')} disabled={importing}
-              className="h-8 px-4 rounded-lg text-xs font-semibold disabled:opacity-50 border border-gray-900 text-gray-900 hover:bg-gray-50 dark:border-white dark:text-white dark:hover:bg-neutral-800">
-              {importing ? '…' : 'Ajouter et mettre à jour'}
-            </button>
-          )}
-          <button onClick={() => handleImport(catalogueCount > 0 ? 'replace' : 'add')} disabled={!rows?.length || importing}
+          <button onClick={handleImport} disabled={!rows?.length || importing}
             className="h-8 px-4 rounded-lg text-xs font-semibold disabled:opacity-50 bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
-            {importing ? 'Import…' : catalogueCount > 0 ? `Remplacer (${rows?.length || 0} produits)` : `Importer ${rows?.length || 0} produits`}
+            {importing ? 'Import…' : baseVide ? `Importer ${rows?.length || 0} vélos` : 'Mettre à jour la base'}
           </button>
         </div>
         {rows && error && <p className="px-5 pb-3 text-xs text-red-500 text-right">{error}</p>}
@@ -769,7 +824,7 @@ function ProduitsSection({ canCreate, mode }) {
           <Pagination page={currentPage} pageCount={pageCount} total={filtered.length} onPage={goToPage} />
         </div>
       )}
-      {showImport && mode === 'catalogue' && <CatalogueImportModal catalogueCount={produits.length} onClose={() => setShowImport(false)} />}
+      {showImport && mode === 'catalogue' && <CatalogueImportModal produits={produits} bonPlanDocs={bonPlanDocs} onClose={() => setShowImport(false)} />}
       {showImport && mode === 'bonplan' && <BonPlanImportModal items={bonPlanDocs} onClose={() => setShowImport(false)} />}
       {edit?.bonPlan && <AddBonPlanModal items={bonPlanDocs} initial={edit.bonPlan} onClose={() => setEdit(null)} />}
       {edit && !edit.bonPlan && (
