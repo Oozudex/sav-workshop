@@ -590,6 +590,8 @@ function ProduitsSection({ canCreate, mode }) {
   const [page, setPage] = useState(1)
   const listRef = useRef(null)
   const texts = SECTION_TEXTS[mode]
+  // Bon plan, presque parfait, prix engagé : une colonne « Prix » avec le prix fort barré
+  const prixSpecial = mode !== 'catalogue'
 
   useEffect(() => onSnapshot(collection(db, BON_PLAN_COLLECTION),
     snap => { setBonPlanDocs(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setLoaded(l => ({ ...l, bonPlans: true })) },
@@ -782,9 +784,9 @@ function ProduitsSection({ canCreate, mode }) {
                 <th className="px-3 sm:px-4 py-3 text-left">Produit</th>
                 <th className="px-3 sm:px-4 py-3 text-left hidden sm:table-cell">Réf. / chrono</th>
                 <th className="px-3 sm:px-4 py-3 text-left hidden md:table-cell">Marque</th>
-                <th className="px-3 sm:px-4 py-3 text-left whitespace-nowrap">Prix fort</th>
+                <th className="px-3 sm:px-4 py-3 text-left whitespace-nowrap">{prixSpecial ? 'Prix' : 'Prix fort'}</th>
                 <th className="px-3 sm:px-4 py-3 text-left hidden md:table-cell">Pack</th>
-                <th className="px-3 sm:px-4 py-3 text-left whitespace-nowrap hidden sm:table-cell">Prix spéciaux</th>
+                {!prixSpecial && <th className="px-3 sm:px-4 py-3 text-left whitespace-nowrap hidden sm:table-cell">Prix spéciaux</th>}
                 <th className="px-3 sm:px-4 py-3" />
               </tr>
             </thead>
@@ -802,16 +804,19 @@ function ProduitsSection({ canCreate, mode }) {
                         <NomVelo v={v} />
                       </p>
                       <p className="text-[11px] text-gray-400 dark:text-neutral-500">{v.couleur || 'Sans couleur'}<span className="md:hidden">{v.marque ? ` · ${v.marque}` : ''}</span></p>
-                      <div className="sm:hidden mt-1 flex flex-wrap gap-1">{badges(r)}</div>
+                      {!prixSpecial && <div className="sm:hidden mt-1 flex flex-wrap gap-1">{badges(r)}</div>}
                     </td>
                     <td className="px-3 sm:px-4 py-2.5 hidden sm:table-cell font-mono">
                       <p className="text-gray-700 dark:text-neutral-300 whitespace-nowrap">{v.reference || '—'}</p>
                       <p className="text-[10px] text-gray-400 dark:text-neutral-500 max-w-[11rem] break-words">{v.chrono || '—'}</p>
                     </td>
                     <td className="px-3 sm:px-4 py-2.5 hidden md:table-cell text-gray-500 dark:text-neutral-400">{v.marque || '—'}</td>
-                    <td className="px-3 sm:px-4 py-2.5 whitespace-nowrap">{prixFort != null ? formatEuro(prixFort) : <span className="text-amber-600 dark:text-amber-400">à saisir</span>}</td>
+                    <td className="px-3 sm:px-4 py-2.5 whitespace-nowrap">
+                      {prixSpecial ? <SpecialPrice mode={mode} prixFort={prixFort} r={r} />
+                        : prixFort != null ? formatEuro(prixFort) : <span className="text-amber-600 dark:text-amber-400">à saisir</span>}
+                    </td>
                     <td className="px-3 sm:px-4 py-2.5 hidden md:table-cell whitespace-nowrap">{sansPack(v.segment) ? <span className="text-gray-300 dark:text-neutral-600">—</span> : v.pack ? PACK_COURT[v.pack] : <span className="text-amber-600 dark:text-amber-400">à choisir</span>}</td>
-                    <td className="px-3 sm:px-4 py-2.5 hidden sm:table-cell"><div className="flex flex-col items-start gap-1">{badges(r)}</div></td>
+                    {!prixSpecial && <td className="px-3 sm:px-4 py-2.5 hidden sm:table-cell"><div className="flex flex-col items-start gap-1">{badges(r)}</div></td>}
                     <td className="pl-1 pr-3 sm:px-4 py-2.5" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
                         {canCreate && (
@@ -839,6 +844,28 @@ function ProduitsSection({ canCreate, mode }) {
       )}
       {ilv && <IlvDialog {...ilv} onClose={() => setIlv(null)} />}
     </div>
+  )
+}
+
+// Prix spécial d'un vélo (bon plan, presque parfait, prix engagé) : prix fort barré, prix spécial, remise
+function SpecialPrice({ mode, prixFort, r }) {
+  const engage = mode === 'engages'
+  const prix = engage ? r.v.prixEngage : r.bp?.prixBonPlan
+  if (prix == null) {
+    return (
+      <span className="inline-flex items-baseline gap-2">
+        {prixFort != null && <span className="text-gray-700 dark:text-neutral-300">{formatEuro(prixFort)}</span>}
+        <span className="text-amber-600 dark:text-amber-400">{engage ? 'prix engagé' : 'bon plan'} à saisir</span>
+      </span>
+    )
+  }
+  const rem = prixFort > 0 && prix < prixFort ? Math.round((1 - prix / prixFort) * 100) : null
+  return (
+    <span className="inline-flex items-baseline gap-2">
+      {prixFort != null && prixFort > prix && <span className="text-gray-400 dark:text-neutral-500 line-through">{formatEuro(prixFort)}</span>}
+      <span className={`text-sm font-bold ${engage ? 'text-blue-800 dark:text-blue-300' : 'text-red-600 dark:text-red-400'}`}>{formatEuro(prix)}</span>
+      {rem > 0 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">-{rem} %</span>}
+    </span>
   )
 }
 
@@ -1222,6 +1249,7 @@ function OpPromoLine({ s, allCouleurs, onOpenOp, onIlv }) {
   if (s.couleurs.length && s.couleurs.length < allCouleurs.length) notes.push(`Couleurs : ${s.couleurs.join(', ')}`)
   if (s.refIsBonPlan) notes.push(`Prix barré = prix bon plan (prix fort ${formatEuro(s.prixFort)})`)
   if (s.bonPlanBetter) notes.push('Le prix bon plan (carte fidélité) est déjà plus avantageux')
+  if (s.bonPlanSame) notes.push('Même prix que le bon plan déjà en place : pas de remise en plus')
   if (s.futurBonPlan) notes.push(`Après l'OP : passe en bon plan à ${formatEuro(s.prixOp)}`)
   return (
     <div className={['rounded-xl border px-3 py-2.5', enCours
@@ -1243,7 +1271,7 @@ function OpPromoLine({ s, allCouleurs, onOpenOp, onIlv }) {
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <Prices barre={s.prixRef} prix={s.prixOp} remise={s.remise}
+          <Prices barre={s.bonPlanSame ? null : s.prixRef} prix={s.prixOp} remise={s.bonPlanSame ? null : s.remise}
             strong={enCours ? 'text-amber-700 dark:text-amber-300' : 'text-green-700 dark:text-green-300'} />
           <IlvButton onClick={() => onIlv({ sources: s.produits.map(opProductSource), preferredType: 'promo' })} />
         </div>

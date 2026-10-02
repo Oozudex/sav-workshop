@@ -271,6 +271,11 @@ export function isBonPlanBetter(p) {
   return p.prixBonPlan != null && p.prixOp != null && p.prixBonPlan <= p.prixOp
 }
 
+// Prix OP égal au prix bon plan déjà en place : aucune remise en plus (ni prix barré ni pourcentage)
+export function isBonPlanSame(p) {
+  return p.prixBonPlan != null && p.prixOp != null && Math.abs(p.prixBonPlan - p.prixOp) < 0.005
+}
+
 // Prix barré légal : si le produit a un prix bon plan, la remise se calcule à partir de lui
 export function prixReference(p) {
   return p.prixBonPlan != null && !isBonPlanBetter(p) ? p.prixBonPlan : p.prixFort ?? null

@@ -19,7 +19,7 @@ import { formatEuro } from '../lib/orders'
 import { readSheetWithFills } from '../lib/excel'
 import { BON_PLAN_COLLECTION, bonPlanDocId, bonPlanTransfer } from '../lib/bonPlan'
 import {
-  OP_SEGMENTS, SEGMENT_LABELS, bonPlanPrices, segmentFromInput, cleanRef, isBonPlanBetter, nomAffiche, normName, parseOpSheet, planImport, prixReference, remisePct, resolveLines,
+  OP_SEGMENTS, SEGMENT_LABELS, bonPlanPrices, segmentFromInput, cleanRef, isBonPlanBetter, isBonPlanSame, nomAffiche, normName, parseOpSheet, planImport, prixReference, remisePct, resolveLines,
 } from '../lib/opImport'
 
 
@@ -193,19 +193,20 @@ function Check({ checked, onChange, disabled, color = 'blue', label }) {
 // Prix de la ligne : prix barré (prix fort, ou prix bon plan s'il sert de référence), prix OP, remise
 function LinePrices({ p }) {
   const ref = prixReference(p)
-  const better = isBonPlanBetter(p)
+  const same = isBonPlanSame(p) // même prix que le bon plan : rien de barré
+  const better = isBonPlanBetter(p) && !same
   const rem = remisePct(p)
   return (
     <div className={['space-y-0.5 whitespace-nowrap', better ? 'opacity-60' : ''].join(' ')}>
       <div className="flex items-baseline gap-1.5">
-        {ref != null && <span className="text-gray-400 dark:text-neutral-500 line-through">{fmtPrice(ref)}</span>}
+        {ref != null && !same && <span className="text-gray-400 dark:text-neutral-500 line-through">{fmtPrice(ref)}</span>}
         <span className="font-semibold text-gray-900 dark:text-white">{fmtPrice(p.prixOp)}</span>
-        {rem != null && !better && <span className="text-emerald-600 dark:text-emerald-400 font-semibold">-{rem}%</span>}
+        {rem != null && !better && !same && <span className="text-emerald-600 dark:text-emerald-400 font-semibold">-{rem}%</span>}
       </div>
       {p.prixBonPlan != null && (
         <p className={`text-[10px] ${better ? 'text-orange-600 dark:text-orange-400' : 'text-blue-600 dark:text-blue-400'}`}>
-          {better
-            ? `Bon plan déjà à ${fmtPrice(p.prixBonPlan)} : plus avantageux que l'OP`
+          {same ? `Même prix que le bon plan · prix fort ${fmtPrice(p.prixFort)}`
+            : better ? `Bon plan déjà à ${fmtPrice(p.prixBonPlan)} : plus avantageux que l'OP`
             : `Bon plan ${fmtPrice(p.prixBonPlan)} · prix fort ${fmtPrice(p.prixFort)}`}
         </p>
       )}
@@ -495,20 +496,28 @@ function Stat({ label, value, sub, tone }) {
 // Prix barré (prix fort, ou bon plan s'il sert de référence), prix OP et remise
 function PriceCell({ p, compact }) {
   const ref = prixReference(p)
-  const better = isBonPlanBetter(p)
+  // Même prix que le bon plan : affiché normalement, sans prix barré ni remise (il n'y en a pas)
+  const same = isBonPlanSame(p)
+  const better = isBonPlanBetter(p) && !same
   const rem = remisePct(p)
   return (
     <div className="space-y-0.5">
       <div className="flex items-baseline gap-2 flex-wrap">
-        {ref != null && !better && <span className="text-gray-400 dark:text-neutral-500 line-through">{formatEuro(ref)}</span>}
+        {/* Prix barré : la référence légale ; si le bon plan est au même prix ou moins cher, le prix fort (sans remise affichée) */}
+        {better || same
+          ? p.prixFort != null && p.prixFort > p.prixOp && <span className="text-gray-400 dark:text-neutral-500 line-through">{formatEuro(p.prixFort)}</span>
+          : ref != null && <span className="text-gray-400 dark:text-neutral-500 line-through">{formatEuro(ref)}</span>}
         <span className={`font-bold whitespace-nowrap ${compact ? 'text-xs' : 'text-sm'} ${better ? 'text-gray-400 dark:text-neutral-500' : 'text-gray-900 dark:text-white'}`}>{formatEuro(p.prixOp)}</span>
-        {rem > 0 && !better && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">-{rem} %</span>}
+        {rem > 0 && !better && !same && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">-{rem} %</span>}
       </div>
       {better && (
         <p className="text-[11px] font-semibold text-orange-600 dark:text-orange-400">Bon plan déjà moins cher ({formatEuro(p.prixBonPlan)})</p>
       )}
-      {!better && p.prixBonPlan != null && !compact && (
-        <p className="text-[10px] text-blue-600 dark:text-blue-400">Prix barré = prix bon plan · prix fort {formatEuro(p.prixFort)}</p>
+      {same && (
+        <p className="text-[11px] font-semibold text-blue-600 dark:text-blue-400">Même prix que le bon plan</p>
+      )}
+      {!better && !same && p.prixBonPlan != null && !compact && (
+        <p className="text-[10px] text-blue-600 dark:text-blue-400">Prix barré = prix bon plan</p>
       )}
     </div>
   )
@@ -851,7 +860,8 @@ export default function OperationDetail() {
                 <Stat label={status.key === 'terminee' ? 'Passés en bon plan' : 'Passeront en bon plan'}
                   value={status.key === 'terminee' ? summary.bonPlanFaits : summary.bonPlanFin + summary.bonPlanFaits} tone="blue"
                   sub={status.key !== 'terminee' && summary.bonPlanFaits ? `dont ${summary.bonPlanFaits} déjà passé${summary.bonPlanFaits > 1 ? 's' : ''}` : undefined} />
-                <Stat label="Bon plan déjà moins cher" value={summary.bonPlanMieux} tone={summary.bonPlanMieux ? 'orange' : undefined} />
+                <Stat label="Bon plan déjà moins cher" value={summary.bonPlanMieux} tone={summary.bonPlanMieux ? 'orange' : undefined}
+                  sub={summary.bonPlanEgal ? `+ ${summary.bonPlanEgal} au même prix que l’OP` : undefined} />
               </dl>
             )}
           </div>

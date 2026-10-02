@@ -134,8 +134,9 @@ describe('fiche d’une OP', () => {
       { nom: 'A', prixFort: 200, prixOp: 170 },
       { nom: 'B', prixFort: 100, prixOp: 90, prixBonPlan: 80 },
       { nom: 'C', prixFort: 100, prixOp: 90, passeBonPlan: true, bonPlanTransfere: true },
+      { nom: 'D', prixFort: 100, prixOp: 80, prixBonPlan: 80 }, // même prix que le bon plan : pas une remise
     ])
-    assert.deepEqual(s, { produits: 4, modeles: 3, remiseMax: 25, bonPlanFin: 1, bonPlanFaits: 1, bonPlanMieux: 1 })
+    assert.deepEqual(s, { produits: 5, modeles: 4, remiseMax: 25, bonPlanFin: 1, bonPlanFaits: 1, bonPlanMieux: 1, bonPlanEgal: 1 })
   })
 })
 
@@ -148,6 +149,8 @@ describe('bon plan actuel', () => {
       today: '2026-09-25',
     })
     const [g] = searchPromos(index, 'allroad')
-    assert.equal(g.ops[0].bonPlanBetter, true)
+    // Même prix : signalé comme tel (pas « plus avantageux »), sans prix barré ni remise
+    assert.equal(g.ops[0].bonPlanSame, true)
+    assert.equal(g.ops[0].bonPlanBetter, false)
   })
 })

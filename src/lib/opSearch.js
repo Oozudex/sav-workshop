@@ -1,7 +1,7 @@
 // Opérations commerciales : visibilité selon le profil et recherche « ce vélo est-il en remise ? »
 // pour les vendeurs. Fonctions pures (tests/unit/opSearch.test.mjs).
 import { RAYON_TYPES } from './constants.js'
-import { bonPlanKey, bonPlanPrices, cleanRef, isBonPlanBetter, latestBonPlans, normName, parsePrice, prixReference, remisePct } from './opImport.js'
+import { bonPlanKey, bonPlanPrices, cleanRef, isBonPlanBetter, isBonPlanSame, latestBonPlans, normName, parsePrice, prixReference, remisePct } from './opImport.js'
 
 // Date du jour au format des OP (AAAA-MM-JJ, heure locale)
 export function todayStr(now = new Date()) {
@@ -101,7 +101,8 @@ export function buildPromoIndex({ ops, produits, bonPlanList = [], engageList = 
       s = {
         id, status, op: { id: op.id, nom: op.nom, dateDebut: op.dateDebut, dateFin: op.dateFin },
         prixOp: p.prixOp, prixRef, prixFort: p.prixFort ?? null, refIsBonPlan: prixRef != null && prixRef === p.prixBonPlan,
-        remise: remisePct(p), bonPlanBetter: isBonPlanBetter(p), futurBonPlan: false, couleurs: [], produits: [],
+        remise: remisePct(p), bonPlanBetter: isBonPlanBetter(p) && !isBonPlanSame(p), bonPlanSame: isBonPlanSame(p),
+        futurBonPlan: false, couleurs: [], produits: [],
       }
       g.ops.push(s)
     }
@@ -192,6 +193,8 @@ export function opSummary(produits) {
     remiseMax: remises.length ? Math.max(...remises) : null,
     bonPlanFin: produits.filter(p => p.passeBonPlan && !p.bonPlanTransfere).length,
     bonPlanFaits: produits.filter(p => p.bonPlanTransfere).length,
-    bonPlanMieux: produits.filter(isBonPlanBetter).length,
+    // Bon plan strictement moins cher que le prix OP, ou au même prix
+    bonPlanMieux: produits.filter(p => isBonPlanBetter(p) && !isBonPlanSame(p)).length,
+    bonPlanEgal: produits.filter(isBonPlanSame).length,
   }
 }
