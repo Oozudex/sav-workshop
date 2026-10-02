@@ -1,16 +1,11 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  addDays, atelierTodoSpecs, autoObsolete, joursLabel, joursOuvresAvant, motRecent, opTodoSpecs, recurrenceSpecs,
+  addDays, atelierTodoSpecs, autoObsolete, joursLabel, motRecent, opTodoSpecs, recurrenceSpecs,
   sortTodos, todoAutoId, weekdayIndex, transfertTodoSpecs, classement, tigreDeLaSemaine, lundi,
 } from '../../src/lib/todos.js'
 
 describe('dates', () => {
-  it('jours ouvrés avant (week-ends sautés)', () => {
-    assert.equal(joursOuvresAvant('2026-10-07', 2), '2026-10-05') // mercredi → lundi
-    assert.equal(joursOuvresAvant('2026-10-05', 2), '2026-10-01') // lundi → jeudi précédent
-    assert.equal(joursOuvresAvant('2026-10-04', 2), '2026-10-01') // dimanche → jeudi
-  })
   it('jour de la semaine, lundi = 0', () => {
     assert.equal(weekdayIndex('2026-10-05'), 0)
     assert.equal(weekdayIndex('2026-10-04'), 6)
@@ -21,22 +16,23 @@ describe('dates', () => {
 describe('tâches des OP', () => {
   const op = { id: 'anniv', nom: 'OP ANNIVERSAIRE', dateDebut: '2026-10-07', dateFin: '2026-10-19', rayonTypes: ['velo'] }
   const ctx = today => ({ magasinId: 'nord', rayon: 'velo', today })
-  it('mise en place à partir de 2 jours ouvrés avant le début', () => {
-    assert.deepEqual(opTodoSpecs([op], ctx('2026-10-02')), [])
-    const [t] = opTodoSpecs([op], ctx('2026-10-05'))
+  it('mise en place le jour du début', () => {
+    assert.deepEqual(opTodoSpecs([op], ctx('2026-10-06')), [])
+    const [t] = opTodoSpecs([op], ctx('2026-10-07'))
     assert.equal(t.auto.type, 'op_debut')
     assert.equal(t.titre, 'Mettre en place l’OP « OP ANNIVERSAIRE »')
     assert.equal(t.id, todoAutoId('op_debut', 'anniv', 'nord', 'velo'))
   })
-  it('fin de l’OP à partir de 2 jours ouvrés avant la fin, mise en place retirée après la fin', () => {
-    assert.deepEqual(opTodoSpecs([op], ctx('2026-10-15')).map(t => t.auto.type), ['op_debut', 'op_fin'])
+  it('fin de l’OP le jour de la fin, mise en place retirée après la fin', () => {
+    assert.deepEqual(opTodoSpecs([op], ctx('2026-10-18')).map(t => t.auto.type), ['op_debut'])
+    assert.deepEqual(opTodoSpecs([op], ctx('2026-10-19')).map(t => t.auto.type), ['op_debut', 'op_fin'])
     assert.deepEqual(opTodoSpecs([op], ctx('2026-10-21')).map(t => t.auto.type), ['op_fin'])
     assert.deepEqual(opTodoSpecs([op], ctx('2026-10-27')), [])
   })
   it('seulement pour les rayons et magasins ciblés', () => {
-    assert.deepEqual(opTodoSpecs([op], { magasinId: 'nord', rayon: 'chaussure', today: '2026-10-06' }), [])
-    assert.deepEqual(opTodoSpecs([{ ...op, magasinIds: ['sud'] }], ctx('2026-10-06')), [])
-    assert.equal(opTodoSpecs([{ ...op, rayonTypes: [] }], { magasinId: 'nord', rayon: 'caisse', today: '2026-10-06' }).length, 1)
+    assert.deepEqual(opTodoSpecs([op], { magasinId: 'nord', rayon: 'chaussure', today: '2026-10-07' }), [])
+    assert.deepEqual(opTodoSpecs([{ ...op, magasinIds: ['sud'] }], ctx('2026-10-07')), [])
+    assert.equal(opTodoSpecs([{ ...op, rayonTypes: [] }], { magasinId: 'nord', rayon: 'caisse', today: '2026-10-07' }).length, 1)
   })
 })
 

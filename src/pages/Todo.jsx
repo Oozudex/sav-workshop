@@ -104,7 +104,7 @@ export default function Todo() {
             <div>
               <h1 className="text-lg font-bold text-gray-900 dark:text-white">Todo list{rayon ? ` · ${RAYON_TYPE_LABELS[rayon] || rayon}` : ''}</h1>
               <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">
-                Tâches de l’équipe, débuts et fins d’OP (2 jours ouvrés avant), relances atelier et mot du soir.
+                Tâches de l’équipe, débuts et fins d’OP (le jour même), relances atelier et mot du soir.
               </p>
             </div>
             <RayonPills rayons={rayons} rayon={rayon} onChoose={choose} />

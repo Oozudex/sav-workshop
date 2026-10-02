@@ -8,7 +8,6 @@ export const RECURRENCE_COLLECTION = 'todo_recurrences'
 export const MOT_COLLECTION = 'mots_du_soir'
 
 // Délais
-export const OP_PREAVIS_JOURS_OUVRES = 2   // tâches de début et de fin d'OP : 2 jours ouvrés avant
 export const RELANCE_PRET_JOURS = 7         // vélo prêt à rendre depuis 7 jours : relancer le client
 export const HISTORIQUE_JOURS = 30          // tâches terminées gardées 30 jours
 export const MOT_VALIDITE_HEURES = 36       // le mot du soir reste affiché jusqu'au lendemain soir
@@ -32,18 +31,6 @@ export function addDays(s, n) {
 export function weekdayIndex(s) {
   return (parseYmd(s).getDay() + 6) % 7
 }
-const isJourOuvre = s => weekdayIndex(s) < 5 // lundi au vendredi
-
-// Date située `n` jours ouvrés avant `s` (les week-ends ne comptent pas)
-export function joursOuvresAvant(s, n) {
-  let d = s, reste = n
-  while (reste > 0) {
-    d = addDays(d, -1)
-    if (isJourOuvre(d)) reste--
-  }
-  return d
-}
-
 export function fmtJour(s) {
   const [, m, d] = String(s || '').split('-')
   return d ? `${d}/${m}` : ''
@@ -62,15 +49,15 @@ export function opConcerne(op, magasinId, rayon) {
 }
 
 /**
- * Tâches automatiques des OP pour un rayon d'un magasin, à partir de 2 jours ouvrés avant
- * le début (mise en place) et avant la fin (fin de l'OP). Elles restent jusqu'à ce qu'on les coche,
+ * Tâches automatiques des OP pour un rayon d'un magasin, le jour même : le jour du début
+ * (mise en place) et le jour de la fin (fin de l'OP). Elles restent jusqu'à ce qu'on les coche,
  * ou jusqu'à la fin de l'OP pour la mise en place.
  */
 export function opTodoSpecs(ops, { magasinId, rayon, today }) {
   const out = []
   for (const op of ops) {
     if (!op.dateDebut || !op.dateFin || !opConcerne(op, magasinId, rayon)) continue
-    if (today >= joursOuvresAvant(op.dateDebut, OP_PREAVIS_JOURS_OUVRES) && today <= op.dateFin) {
+    if (today >= op.dateDebut && today <= op.dateFin) {
       out.push({
         id: todoAutoId('op_debut', op.id, magasinId, rayon),
         titre: `Mettre en place l’OP « ${op.nom} »`,
@@ -78,7 +65,7 @@ export function opTodoSpecs(ops, { magasinId, rayon, today }) {
         auto: { type: 'op_debut', refId: op.id },
       })
     }
-    if (today >= joursOuvresAvant(op.dateFin, OP_PREAVIS_JOURS_OUVRES) && today <= addDays(op.dateFin, 7)) {
+    if (today >= op.dateFin && today <= addDays(op.dateFin, 7)) {
       out.push({
         id: todoAutoId('op_fin', op.id, magasinId, rayon),
         titre: `J’ai bien mis fin à l’OP « ${op.nom} »`,
