@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from 'react'
+import { Fragment, useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import { useAuth } from '../store/useAuth'
@@ -557,17 +557,23 @@ const SECTION_TEXTS = {
     sousTitre: n => `Vélos dont l’ILV sort toujours en prix engagé (${n})`,
     vide: () => 'Aucun vélo en prix engagé. Active « Prix engagé » dans la fiche d’un vélo.',
   },
+  pp: {
+    titre: () => 'Presque parfait',
+    sousTitre: n => `Vélos presque parfaits, toujours vendus en prix bon plan (${n})`,
+    vide: canCreate => `Aucun vélo presque parfait.${canCreate ? ' Ils arrivent avec l’import de l’état de stock, ou ajoutez-en un.' : ''}`,
+  },
   bonplan: {
     titre: () => 'Prix bon plan',
-    sousTitre: n => `Prix réservés aux porteurs de la carte fidélité (${n})`,
+    sousTitre: n => `Prix réservés aux porteurs de la carte fidélité, hors presque parfaits (${n})`,
     vide: canCreate => `Aucun prix bon plan.${canCreate ? ' Active « Prix bon plan » dans la fiche d’un vélo, ou importez un fichier Excel.' : ''}`,
   },
 }
 
 /**
- * Liste commune aux onglets « Base de données », « Prix engagés » et « Prix bon plan » :
+ * Liste commune aux onglets « Base de données », « Prix engagés », « Prix bon plan » et « Presque parfait » :
  * mêmes colonnes, même fiche de modification (CatalogueProductModal), même affichage sur téléphone.
- * mode : 'catalogue' | 'engages' | 'bonplan'.
+ * mode : 'catalogue' | 'engages' | 'bonplan' | 'pp'. Un vélo presque parfait n'est que dans
+ * « Presque parfait », pas dans « Prix bon plan ».
  */
 function ProduitsSection({ canCreate, mode }) {
   const [produits, setProduits] = useState([])
@@ -604,9 +610,9 @@ function ProduitsSection({ canCreate, mode }) {
           return bonPlanDocs.map(b => {
             const p = byChrono.get(b.id) || null
             return { key: b.id, p, bp: b, v: p || bonPlanAsProduit(b) }
-          })
+          }).filter(r => !isPresqueParfait(r.v) && !isPresqueParfait(r.bp))
         })()
-      : produits.filter(p => mode !== 'engages' || p.prixEngage != null)
+      : produits.filter(p => mode === 'engages' ? p.prixEngage != null : mode === 'pp' ? isPresqueParfait(p) : true)
         .map(p => ({ key: p.id, p, bp: bonPlanById.get(bonPlanDocId({ chrono: p.chrono })) || null, v: p }))
     return list.sort((a, b) => (a.v.nom || '').localeCompare(b.v.nom || '', 'fr'))
   }, [mode, produits, bonPlanDocs])
@@ -648,7 +654,8 @@ function ProduitsSection({ canCreate, mode }) {
   }
 
   const count = f => rows.filter(FILTRES[f]).length
-  const chips = mode !== 'catalogue' ? [] : [
+  const chips = mode === 'pp' ? (canCreate ? [['', `Tous (${rows.length})`], ['incomplets', `À compléter (${count('incomplets')})`]] : [])
+    : mode !== 'catalogue' ? [] : [
     ['', `Tous (${rows.length})`],
     ...(canCreate ? [['incomplets', `À compléter (${count('incomplets')})`]] : []),
     ['engages', `Prix engagé (${count('engages')})`],
@@ -662,7 +669,7 @@ function ProduitsSection({ canCreate, mode }) {
     else setEdit({ bonPlan: r.bp })
   }
   function ilvFor(r) {
-    const preferredType = r.v.prixEngage != null ? 'engage' : mode === 'bonplan' ? 'bonplan' : 'normal'
+    const preferredType = r.v.prixEngage != null ? 'engage' : mode === 'bonplan' || mode === 'pp' ? 'bonplan' : 'normal'
     setIlv({ sources: [r.p ? catalogueSource(r.p) : bonPlanSource(r.bp)], initialKey: r.p ? r.p.id : r.bp.id, preferredType })
   }
 
@@ -671,7 +678,7 @@ function ProduitsSection({ canCreate, mode }) {
   async function exportExcel() {
     setExporting(true)
     try {
-      const name = { catalogue: 'base-velos', engages: 'prix-engages', bonplan: 'prix-bon-plan' }[mode]
+      const name = { catalogue: 'base-velos', engages: 'prix-engages', bonplan: 'prix-bon-plan', pp: 'presque-parfaits' }[mode]
       await downloadWorkbook([{ name: texts.titre(true).slice(0, 31), table: catalogueExportTable(filtered) }],
         `${name}-${new Date().toLocaleDateString('fr-CA')}`)
     } finally { setExporting(false) }
@@ -715,17 +722,17 @@ function ProduitsSection({ canCreate, mode }) {
                 {exporting ? 'Export…' : filtered.length === rows.length ? <>Exporter<span className="hidden sm:inline"> Excel</span></> : `Exporter (${filtered.length})`}
               </button>
             )}
-            <button onClick={() => setEdit({ produit: null, start: mode === 'engages' ? 'engage' : mode === 'bonplan' ? 'bonPlan' : undefined })}
+            <button onClick={() => setEdit({ produit: null, start: { engages: 'engage', bonplan: 'bonPlan', pp: 'pp' }[mode] })}
               className="h-9 px-3 rounded-lg text-xs font-medium border border-gray-200 dark:border-neutral-700 text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors">
               + Ajouter
             </button>
-            {mode !== 'engages' && (
+            {(mode === 'catalogue' || mode === 'bonplan') && (
               <button onClick={() => setShowImport(true)}
                 className="h-9 px-4 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
                 Importer<span className="hidden sm:inline"> Excel</span>
               </button>
             )}
-            {mode !== 'engages' && rows.length > 0 && <ActionsMenu items={[{ label: 'Tout supprimer…', onClick: clearAll, danger: true }]} />}
+            {(mode === 'catalogue' || mode === 'bonplan') && rows.length > 0 && <ActionsMenu items={[{ label: 'Tout supprimer…', onClick: clearAll, danger: true }]} />}
           </div>
         )}
       </div>
@@ -1416,19 +1423,19 @@ export default function Operations() {
     if (!(op.globale && st === 'en_cours')) grouped[st].push(op)
   }
 
-  // Deux blocs : les opérations, et les listes de prix et de produits
+  // Deux blocs : « Opérations » (les OP, puis les prix spéciaux) et « Liste des vélos (ILV) » (la base)
   const OP_TABS = [
     { key: 'en_cours', label: 'En cours', count: grouped.en_cours.length },
     { key: 'a_venir', label: 'À venir', count: grouped.a_venir.length },
     { key: 'terminee', label: 'Terminées', count: grouped.terminee.length },
+    // Prix spéciaux, aux couleurs de leur ILV
+    { key: 'bon_plan', label: 'Bon plan', dot: 'bg-red-600', separe: true },
+    { key: 'presque_parfait', label: 'Presque parfait', dot: 'bg-orange-500' },
+    { key: 'engages', label: 'Prix engagés', dot: 'bg-blue-800 dark:bg-blue-400' },
   ]
-  const PRIX_TABS = [
-    { key: 'bon_plan', label: 'Prix bon plan' },
-    { key: 'engages', label: 'Prix engagés' },
-    { key: 'catalogue', label: canCreate ? 'Base de données' : 'Tous les vélos' },
-  ]
-  const vuePrix = PRIX_TABS.some(t => t.key === section)
-  const tabs = vuePrix ? PRIX_TABS : OP_TABS
+  const vuePrix = section === 'catalogue' // Liste des vélos (ILV)
+  const vueListeOp = ['en_cours', 'a_venir', 'terminee'].includes(section)
+  const tabs = vuePrix ? [] : OP_TABS
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
@@ -1440,7 +1447,7 @@ export default function Operations() {
           {/* Choix du bloc : opérations ou listes de prix */}
           <div className="flex items-center justify-between gap-3">
             <div className="inline-flex p-1 rounded-xl bg-gray-200/70 dark:bg-neutral-800" role="tablist" aria-label="Affichage">
-              {[['en_cours', 'Opérations', !vuePrix], ['bon_plan', 'Prix et produits', vuePrix]].map(([key, label, active]) => (
+              {[['en_cours', 'Opérations', !vuePrix], ['catalogue', 'Liste des vélos (ILV)', vuePrix]].map(([key, label, active]) => (
                 <button key={key} role="tab" aria-selected={active} onClick={() => { setSection(key); setSearch('') }}
                   className={['h-8 px-3 sm:px-4 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap',
                     active ? 'bg-white text-gray-900 shadow-sm dark:bg-neutral-950 dark:text-white' : 'text-gray-500 hover:text-gray-800 dark:text-neutral-400 dark:hover:text-neutral-200'].join(' ')}>
@@ -1448,7 +1455,7 @@ export default function Operations() {
                 </button>
               ))}
             </div>
-            {canCreate && !vuePrix && (
+            {canCreate && vueListeOp && (
               <button onClick={() => setModal({})}
                 className="h-9 px-4 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100 transition-colors whitespace-nowrap">
                 + Nouvelle OP
@@ -1457,7 +1464,7 @@ export default function Operations() {
           </div>
 
           {/* Bannières OPs Globales en cours */}
-          {!vuePrix && opGlobales.length > 0 && (
+          {vueListeOp && opGlobales.length > 0 && (
             <div className="space-y-2">
               {opGlobales.map(op => (
                 <div key={op.id}
@@ -1503,8 +1510,8 @@ export default function Operations() {
             </div>
           )}
 
-          {/* Recherche des remises (bloc Opérations) : les listes de prix ont leur propre recherche */}
-          {!vuePrix && <div className="relative">
+          {/* Recherche des remises (liste des OP) : les listes de prix ont leur propre recherche */}
+          {vueListeOp && <div className="relative">
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-neutral-500 pointer-events-none"
               fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 104.5 4.5a7.5 7.5 0 0012.15 12.15z" />
@@ -1525,44 +1532,47 @@ export default function Operations() {
           </div>}
 
           {/* Résultats de recherche */}
-          {!vuePrix && search.trim() && (
+          {vueListeOp && search.trim() && (
             <PromoResults results={searchResults} term={search.trim()}
               loading={opProduits.loading} error={opProduits.error || bonPlanError}
               onOpenOp={id => navigate(`/operations/${id}`)} onIlv={setIlv} />
           )}
 
           {/* Tabs + Contenu (masqués pendant la recherche) */}
-          {(vuePrix || !search.trim()) && (<>
-            <div className="flex items-center gap-1 border-b border-gray-200 dark:border-neutral-800 overflow-x-auto" role="tablist">
+          {(!vueListeOp || !search.trim()) && (<>
+            {tabs.length > 0 && <div className="flex items-center gap-1 border-b border-gray-200 dark:border-neutral-800 overflow-x-auto" role="tablist">
               {tabs.map(s => {
                 const ACTIVE = {
                   en_cours: 'border-amber-500 text-amber-700 dark:border-amber-400 dark:text-amber-300',
                   a_venir: 'border-green-600 text-green-700 dark:border-green-500 dark:text-green-300',
                   terminee: 'border-violet-500 text-violet-600 dark:border-violet-400 dark:text-violet-300',
+                  bon_plan: 'border-red-600 text-red-700 dark:border-red-400 dark:text-red-300',
+                  presque_parfait: 'border-orange-500 text-orange-700 dark:border-orange-400 dark:text-orange-300',
                   engages: 'border-blue-800 text-blue-900 dark:border-blue-400 dark:text-blue-300',
-                  bon_plan: 'border-blue-500 text-blue-600 dark:border-blue-400 dark:text-blue-300',
-                  catalogue: 'border-gray-900 text-gray-900 dark:border-white dark:text-white',
                 }
-                return (
-                  <button key={s.key} role="tab" aria-selected={section === s.key} onClick={() => setSection(s.key)}
-                    className={['h-9 px-4 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap shrink-0',
+                return (<Fragment key={s.key}>
+                  {s.separe && <span aria-hidden className="mx-1 h-4 w-px bg-gray-200 dark:bg-neutral-700 shrink-0" />}
+                  <button role="tab" aria-selected={section === s.key} onClick={() => setSection(s.key)}
+                    className={['h-9 px-4 inline-flex items-center gap-1.5 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap shrink-0',
                       section === s.key
                         ? (ACTIVE[s.key] || 'border-gray-900 text-gray-900 dark:border-white dark:text-white')
                         : 'border-transparent text-gray-400 dark:text-neutral-500 hover:text-gray-700 dark:hover:text-neutral-300',
                     ].join(' ')}>
+                    {s.dot && <span aria-hidden className={`h-2 w-2 rounded-full ${s.dot}`} />}
                     {s.label}
                     {s.count > 0 && (
-                      <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] bg-gray-100 text-gray-500 dark:bg-neutral-800 dark:text-neutral-400">
+                      <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-gray-100 text-gray-500 dark:bg-neutral-800 dark:text-neutral-400">
                         {s.count}
                       </span>
                     )}
                   </button>
-                )
+                </Fragment>)
               })}
-            </div>
+            </div>}
 
             {/* Sections spéciales */}
             {section === 'bon_plan' && <ProduitsSection key="bonplan" canCreate={canCreate} mode="bonplan" />}
+            {section === 'presque_parfait' && <ProduitsSection key="pp" canCreate={canCreate} mode="pp" />}
             {section === 'catalogue' && <ProduitsSection key="catalogue" canCreate={canCreate} mode="catalogue" />}
             {section === 'engages' && <ProduitsSection key="engages" canCreate={canCreate} mode="engages" />}
 

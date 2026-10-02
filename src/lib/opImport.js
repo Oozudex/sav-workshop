@@ -33,21 +33,65 @@ export function parsePrice(v) {
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : null
 }
 
+// Segments des produits d'une OP (ordre de la liste déroulante), comme dans l'Excel commercial
+export const OP_SEGMENTS = [
+  'accessoires_cycliste', 'accessoires', 'chaussures', 'habillement', 'home_trainer', 'location',
+  'pieces_detachees', 'prestation', 'protection', 'velo', 'assurances', 'occasion',
+]
+
 export const SEGMENT_LABELS = {
-  velo_pp: 'Vélos PP', velo: 'Vélo', trottinette: 'Trottinette', roller: 'Roller', accessoires: 'Accessoires', textile: 'Textile',
+  accessoires_cycliste: 'ACCESSOIRES DU CYCLISTE',
+  accessoires:          'ACCESSOIRES DU VÉLO',
+  chaussures:           'CHAUSSURES',
+  habillement:          'HABILLEMENT',
+  home_trainer:         'HOME TRAINER',
+  location:             'LOCATION',
+  pieces_detachees:     'PIECES DETACHEES VELO',
+  prestation:           'PRESTATION DE SERVICE',
+  protection:           'PROTECTION',
+  velo:                 'VELO',
+  assurances:           'ASSURANCES',
+  occasion:             'OCCASION',
+  // Base vélos (ILV) et anciens segments
+  velo_pp:              'PRESQUE PARFAIT',
+  textile:              'HABILLEMENT',
+  trottinette:          'TROTTINETTE',
+  roller:               'ROLLER',
 }
 
-// « ACCESSOIRE DU VELO » → accessoires (à tester avant « vélo »), « HABILLEMENT » → textile…
+// Libellé de l'Excel (ou segment déjà enregistré) → segment. L'ordre compte : « ACCESSOIRES DU VÉLO »,
+// « PIECES DETACHEES VELO » ou « LOCATION VELO » contiennent « vélo » et sont testés avant lui.
+const SEGMENT_PATTERNS = [
+  // « ACCESOIRES » (une seule S) se rencontre aussi dans les fichiers
+  [/acc?ess?oire.*cycliste/, 'accessoires_cycliste'],
+  [/acc?ess?oire/, 'accessoires'],
+  [/velos?[ _-]?pp\b|presque[ _-]?parfait/, 'velo_pp'],
+  [/piece/, 'pieces_detachees'],
+  [/home[ _-]?trainer/, 'home_trainer'],
+  [/location/, 'location'],
+  [/prestation|service/, 'prestation'],
+  [/assurance/, 'assurances'],
+  [/occasion/, 'occasion'],
+  [/protection/, 'protection'],
+  [/chaussure/, 'chaussures'],
+  [/habillement|textile|vetement/, 'habillement'],
+  [/trottinette|scooter/, 'trottinette'],
+  [/roller/, 'roller'],
+  [/velo|vae|bike|cycle/, 'velo'],
+]
+
 export function normSegment(v) {
   const s = normName(v)
   if (!s) return null
-  if (/accessoire/.test(s)) return 'accessoires'
-  if (/velos?[ _-]?pp\b/.test(s)) return 'velo_pp'
-  if (/habillement|textile|vetement/.test(s)) return 'textile'
-  if (/trottinette|scooter/.test(s)) return 'trottinette'
-  if (/roller/.test(s)) return 'roller'
-  if (/velo|vae|bike|cycle/.test(s)) return 'velo'
-  return s
+  return SEGMENT_PATTERNS.find(([re]) => re.test(s))?.[1] ?? s
+}
+
+// « Autre segment » saisi à la main : segment connu s'il est reconnu (« chaussure » → CHAUSSURES),
+// sinon le texte en majuscules (« Skate » → « SKATE »)
+export function segmentFromInput(text) {
+  const key = normSegment(text)
+  if (!key) return null
+  return SEGMENT_LABELS[key] ? key : cleanText(text).toUpperCase()
 }
 
 // Vélo « presque parfait » : segment Vélos PP (ou repéré à l'import de l'état de stock)

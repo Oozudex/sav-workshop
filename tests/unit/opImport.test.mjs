@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  bonPlanPrices, isBlueFill, isBonPlanBetter, isPresqueParfait, nomAffiche, normSegment, parseOpSheet, parsePrice,
+  OP_SEGMENTS, SEGMENT_LABELS, bonPlanPrices, isBlueFill, segmentFromInput, isBonPlanBetter, isPresqueParfait, nomAffiche, normSegment, parseOpSheet, parsePrice,
   planImport, prixReference, remisePct, resolveLines,
 } from '../../src/lib/opImport.js'
 
@@ -47,7 +47,8 @@ describe('lecture du fichier', () => {
   it('reconnaît les segments de la centrale', () => {
     assert.equal(normSegment('VELO'), 'velo')
     assert.equal(normSegment('ACCESSOIRE DU VELO'), 'accessoires')
-    assert.equal(normSegment('HABILLEMENT'), 'textile')
+    assert.equal(normSegment('HABILLEMENT'), 'habillement')
+    assert.equal(normSegment('textile'), 'habillement') // ancien segment
     assert.equal(normSegment(''), null)
   })
 
@@ -148,7 +149,7 @@ describe('import et réimport', () => {
     assert.equal(plan.find(p => p.data.chrono === '0-191743').line, 8)
     const maillot = plan.find(p => p.data.refFournisseur === '2248840').data
     assert.equal(maillot.horsCatalogue, true)
-    assert.equal(maillot.segment, 'textile')
+    assert.equal(maillot.segment, 'habillement')
   })
 
   it('réimport : met à jour le prix des produits déjà présents et ajoute les nouveaux, sans doublon', () => {
@@ -187,5 +188,31 @@ describe('vélos presque parfaits', () => {
     assert.equal(nomAffiche({ nom: 'CLIFF 700 "PRESQUE PARFAIT"', segment: 'velo_pp' }), 'CLIFF 700 "Presque parfait"')
     assert.equal(nomAffiche({ nom: 'ALLROAD 450', segment: 'velo' }), 'ALLROAD 450')
     assert.equal(nomAffiche({ nom: '', segment: 'velo_pp' }), '')
+  })
+})
+
+describe('segments des OP', () => {
+  it("les 12 libellés de l'Excel commercial", () => {
+    const cases = {
+      'ACCESSOIRES DU CYCLISTE': 'accessoires_cycliste', 'ACCESOIRES DU VÉLO': 'accessoires', 'ACCESSOIRES DU VÉLO': 'accessoires',
+      'CHAUSSURES': 'chaussures', 'HABILLEMENT': 'habillement', 'HOME TRAINER': 'home_trainer', 'LOCATION': 'location',
+      'PIECES DETACHEES VELO': 'pieces_detachees', 'PRESTATION DE SERVICE': 'prestation', 'PROTECTION': 'protection',
+      'VELO': 'velo', 'ASSURANCES': 'assurances', 'OCCASION': 'occasion',
+    }
+    for (const [label, key] of Object.entries(cases)) assert.equal(normSegment(label), key, label)
+  })
+  it("chaque segment se reconnaît lui-même (valeur déjà enregistrée)", () => {
+    for (const key of OP_SEGMENTS) assert.equal(normSegment(key), key, key)
+    for (const key of OP_SEGMENTS) assert.equal(normSegment(SEGMENT_LABELS[key]), key, SEGMENT_LABELS[key])
+    assert.equal(normSegment('velo_pp'), 'velo_pp')
+  })
+})
+
+describe('autre segment', () => {
+  it("segment reconnu ou texte en majuscules", () => {
+    assert.equal(segmentFromInput('chaussure'), 'chaussures')
+    assert.equal(segmentFromInput(' Skate  board '), 'SKATE BOARD')
+    assert.equal(segmentFromInput('Trottinette'), 'trottinette')
+    assert.equal(segmentFromInput('  '), null)
   })
 })

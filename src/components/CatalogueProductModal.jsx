@@ -4,7 +4,8 @@ import { db } from '../lib/firebase'
 import { PACKS } from '../lib/ilv'
 import { BON_PLAN_COLLECTION, bonPlanDocId } from '../lib/bonPlan'
 import { SEGMENT_LABELS, parsePrice } from '../lib/opImport'
-import { CATALOGUE_SEGMENTS, catalogueData, catalogueFormErrors, catalogueFormValues, remiseSur } from '../lib/catalogueForm'
+import { CATALOGUE_SEGMENTS, catalogueData, catalogueFormErrors, catalogueFormValues, effectiveSegment, remiseSur } from '../lib/catalogueForm'
+import { sansPack } from '../lib/ilv'
 import { BIKE_FAMILLES } from '../lib/constants'
 import { packPourFamille } from '../lib/stockImport'
 import BikeBrandSelect from './BikeBrandSelect'
@@ -87,7 +88,8 @@ function SpecialPrice({ checked, onToggle, title, description, color, price, onP
  * Prix bon plan : le vélo est ajouté (ou retiré) de la liste des prix bon plan.
  * produits : base actuelle, pour refuser un chrono déjà utilisé.
  * Sans `produit.id`, c'est un ajout : `produit` peut pré-remplir la fiche (vélo de la liste des prix bon plan
- * pas encore dans la base) ; `start` : 'engage' ou 'bonPlan' pour démarrer avec ce prix spécial activé.
+ * pas encore dans la base) ; `start` : 'engage' ou 'bonPlan' pour démarrer avec ce prix spécial activé,
+ * 'pp' pour un vélo presque parfait.
  */
 export default function CatalogueProductModal({ produit, produits, start, onClose }) {
   const edit = !!produit?.id
@@ -95,7 +97,7 @@ export default function CatalogueProductModal({ produit, produits, start, onClos
   const oldBonPlanId = produit?.chrono ? bonPlanDocId({ chrono: produit.chrono }) : null
   const [form, setForm] = useState(() => ({
     ...catalogueFormValues(produit),
-    ...(start === 'engage' ? { engage: true } : start === 'bonPlan' ? { bonPlan: true } : {}),
+    ...(start === 'engage' ? { engage: true } : start === 'bonPlan' ? { bonPlan: true } : start === 'pp' ? { segment: 'velo_pp', bonPlan: true } : {}),
   }))
   const [bonPlanLoaded, setBonPlanLoaded] = useState(!oldBonPlanId)
   const [hadBonPlan, setHadBonPlan] = useState(false)
@@ -124,8 +126,9 @@ export default function CatalogueProductModal({ produit, produits, start, onClos
   }, [onClose, saving])
 
   const errors = catalogueFormErrors(form, { produits, id: produit?.id })
-  const accessoire = form.segment === 'accessoires'
-  const presqueParfait = form.segment === 'velo_pp'
+  // Pas de pack hors vélos (accessoires, autre segment…)
+  const accessoire = sansPack(effectiveSegment(form))
+  const presqueParfait = effectiveSegment(form) === 'velo_pp'
   // Passage en « Vélos PP » : le prix bon plan devient obligatoire
   useEffect(() => { if (presqueParfait && !form.bonPlan) setForm(f => ({ ...f, bonPlan: true })) }, [presqueParfait, form.bonPlan])
   const shown = submitted ? errors : {}
@@ -205,17 +208,22 @@ export default function CatalogueProductModal({ produit, produits, start, onClos
                   {form.famille && !BIKE_FAMILLES.includes(form.famille) && <option value={form.famille}>{form.famille}</option>}
                 </select>
               </Field>
-              <Field label="Segment">
-                <select className="Input" value={form.segment} onChange={e => set('segment', e.target.value)}>
+              <Field label="Segment" error={shown.segment}>
+                <select className="Input" value={form.autreSegment ? '__autre__' : form.segment}
+                  onChange={e => setForm(f => e.target.value === '__autre__' ? { ...f, autreSegment: true } : { ...f, autreSegment: false, segment: e.target.value })}>
                   <option value="">—</option>
                   {CATALOGUE_SEGMENTS.map(k => <option key={k} value={k}>{SEGMENT_LABELS[k]}</option>)}
+                  <option value="__autre__">Autre segment</option>
                 </select>
+                {form.autreSegment && (
+                  <TextInput {...input('segmentLibre')} invalid={!!shown.segment} className="mt-2" placeholder="Nom du segment" aria-label="Autre segment" autoFocus />
+                )}
               </Field>
             </div>
           </Section>
 
           <Section title={accessoire ? 'Prix' : 'Prix et pack'}
-            hint={accessoire ? 'Accessoire : pas de pack optionnel, l’ILV affiche le prix seul.' : 'Utilisés pour les ILV : le pack est toujours ajouté au prix affiché.'}>
+            hint={accessoire ? 'Hors vélos : pas de pack optionnel, l’ILV affiche le prix seul.' : 'Utilisés pour les ILV : le pack est toujours ajouté au prix affiché.'}>
             <Field label="Prix fort *" error={shown.prixFort} className="w-44">
               <PriceInput {...input('prixFort')} placeholder="Ex. 1499,99" />
             </Field>

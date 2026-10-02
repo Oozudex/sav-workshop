@@ -79,9 +79,11 @@ export function titleName(nom) {
   }).join('-')).join(' ')
 }
 
-// Les accessoires n'ont pas de pack optionnel
+// Pack optionnel réservé aux vélos (neufs et presque parfaits) : les autres segments
+// (accessoires, chaussures, occasion…) sortent leur ILV sans pack. Sans segment : vélo de la base.
 export function sansPack(segment) {
-  return normSegment(segment) === 'accessoires'
+  const s = normSegment(segment)
+  return !!s && s !== 'velo' && s !== 'velo_pp'
 }
 
 export function packPrice(pack, duree = 1) {

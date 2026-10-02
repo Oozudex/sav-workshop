@@ -1,9 +1,15 @@
 // Formulaire produit de la base de données : lecture et contrôle des saisies.
 // Fonctions pures (tests/unit/catalogueForm.test.mjs).
-import { cleanRef, normSegment, parsePrice } from './opImport.js'
+import { SEGMENT_LABELS, cleanRef, normSegment, parsePrice, segmentFromInput } from './opImport.js'
+import { sansPack } from './ilv.js'
 
-// Segments proposés dans le formulaire (mêmes valeurs que le filtre des prix bon plan)
-export const CATALOGUE_SEGMENTS = ['velo_pp', 'velo', 'accessoires']
+// Segments de la base vélos (ILV) : vélo neuf ou presque parfait, ou « Autre segment » saisi à la main
+export const CATALOGUE_SEGMENTS = ['velo', 'velo_pp']
+
+// Segment enregistré : celui de la liste, ou l'autre segment saisi
+export function effectiveSegment(form) {
+  return form.autreSegment ? segmentFromInput(form.segmentLibre) : (form.segment || null)
+}
 
 const euro = v => (v != null ? String(v).replace('.', ',') : '')
 
@@ -17,6 +23,10 @@ export function catalogueFormValues(produit, bonPlan = null) {
     couleur:     produit?.couleur   || '',
     famille:     produit?.famille   || '',
     segment:     CATALOGUE_SEGMENTS.includes(normSegment(produit?.segment)) ? normSegment(produit.segment) : '',
+    // Segment hors liste déjà enregistré (accessoires…) : affiché dans « Autre segment »
+    autreSegment: !!produit?.segment && !CATALOGUE_SEGMENTS.includes(normSegment(produit.segment)),
+    segmentLibre: produit?.segment && !CATALOGUE_SEGMENTS.includes(normSegment(produit.segment))
+      ? (SEGMENT_LABELS[normSegment(produit.segment)] || produit.segment) : '',
     prixFort:    euro(produit?.prixFort),
     pack:        produit?.pack      || '',
     engage:      produit?.prixEngage != null,
@@ -39,8 +49,10 @@ export function catalogueFormErrors(form, { produits = [], id = null } = {}) {
   if (!chrono) errors.chrono = 'Chrono obligatoire'
   else if (produits.some(p => p.id !== id && cleanRef(p.chrono) === chrono)) errors.chrono = 'Ce chrono existe déjà'
   if (prixFort == null) errors.prixFort = 'Prix fort obligatoire'
-  if (!form.pack && form.segment !== 'accessoires') errors.pack = 'Choisis le pack de ce vélo'
-  if (form.segment === 'velo_pp' && !form.bonPlan) errors.prixBonPlan = 'Vélo presque parfait : le prix bon plan est obligatoire'
+  const segment = effectiveSegment(form)
+  if (form.autreSegment && !segment) errors.segment = 'Renseigne le segment'
+  if (!form.pack && !sansPack(segment)) errors.pack = 'Choisis le pack de ce vélo'
+  if (segment === 'velo_pp' && !form.bonPlan) errors.prixBonPlan = 'Vélo presque parfait : le prix bon plan est obligatoire'
   for (const [flag, field, name] of [['engage', 'prixEngage', 'prix engagé'], ['bonPlan', 'prixBonPlan', 'prix bon plan']]) {
     if (!form[flag]) continue
     const prix = parsePrice(form[field])
@@ -52,6 +64,7 @@ export function catalogueFormErrors(form, { produits = [], id = null } = {}) {
 
 // Valeurs du formulaire → document de la base de données
 export function catalogueData(form) {
+  const segment = effectiveSegment(form)
   return {
     chrono:     cleanRef(form.chrono),
     reference:  cleanRef(form.reference) || null,
@@ -59,10 +72,10 @@ export function catalogueData(form) {
     marque:     form.marque.trim().toUpperCase() || null,
     couleur:    form.couleur.trim() || null,
     famille:    form.famille.trim() || null,
-    segment:    form.segment || null,
+    segment,
     prixFort:   parsePrice(form.prixFort),
-    pack:       form.segment === 'accessoires' ? null : form.pack || null, // pas de pack pour les accessoires
-    presqueParfait: form.segment === 'velo_pp',
+    pack:       sansPack(segment) ? null : form.pack || null, // pack optionnel réservé aux vélos
+    presqueParfait: segment === 'velo_pp',
     prixEngage: form.engage ? parsePrice(form.prixEngage) : null,
   }
 }

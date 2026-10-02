@@ -52,7 +52,10 @@ describe('segments', () => {
     assert.equal(normSegment('VELO'), 'velo')
     assert.equal(normSegment('ACCESSOIRE DU VELO'), 'accessoires')
     assert.equal(catalogueFormValues({ segment: 'VELO' }).segment, 'velo')
-    assert.equal(catalogueFormValues({ segment: 'TEXTILE' }).segment, '')
+    // Segment hors liste : repris dans « Autre segment »
+    assert.deepEqual(
+      (({ segment, autreSegment, segmentLibre }) => ({ segment, autreSegment, segmentLibre }))(catalogueFormValues({ segment: 'TEXTILE' })),
+      { segment: '', autreSegment: true, segmentLibre: 'HABILLEMENT' })
     assert.equal(catalogueData({ ...valide, segment: 'velo_pp' }).segment, 'velo_pp')
   })
 })
@@ -63,6 +66,18 @@ describe('accessoires sans pack', () => {
     assert.deepEqual(catalogueFormErrors(accessoire), {})
     assert.equal(catalogueData({ ...accessoire, pack: 'sport' }).pack, null)
     assert.equal(catalogueFormErrors({ ...valide, pack: '' }).pack, 'Choisis le pack de ce vélo')
+  })
+})
+
+describe('autre segment', () => {
+  it('texte libre enregistré en majuscules, sans pack ; obligatoire une fois choisi', () => {
+    const autre = { ...valide, autreSegment: true, segmentLibre: 'Skate board', pack: '' }
+    assert.deepEqual(catalogueFormErrors(autre), {})
+    assert.equal(catalogueData({ ...autre, pack: 'sport' }).segment, 'SKATE BOARD')
+    assert.equal(catalogueData({ ...autre, pack: 'sport' }).pack, null)
+    assert.equal(catalogueFormErrors({ ...autre, segmentLibre: ' ' }).segment, 'Renseigne le segment')
+    // Un segment reconnu reprend sa valeur de liste
+    assert.equal(catalogueData({ ...autre, segmentLibre: 'presque parfait', bonPlan: true, prixBonPlan: '1' }).presqueParfait, true)
   })
 })
 

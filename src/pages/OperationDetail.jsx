@@ -18,10 +18,9 @@ import { formatEuro } from '../lib/orders'
 import { readSheetWithFills } from '../lib/excel'
 import { BON_PLAN_COLLECTION, bonPlanDocId, bonPlanTransfer } from '../lib/bonPlan'
 import {
-  SEGMENT_LABELS, bonPlanPrices, cleanRef, isBonPlanBetter, nomAffiche, normName, parseOpSheet, planImport, prixReference, remisePct, resolveLines,
+  OP_SEGMENTS, SEGMENT_LABELS, bonPlanPrices, segmentFromInput, cleanRef, isBonPlanBetter, nomAffiche, normName, parseOpSheet, planImport, prixReference, remisePct, resolveLines,
 } from '../lib/opImport'
 
-const SEGMENTS = ['velo', 'trottinette', 'roller', 'accessoires', 'textile']
 
 function fmtDate(str) {
   if (!str) return '—'
@@ -40,6 +39,8 @@ function getStatus(op) {
   return { label: 'En cours', key: 'en_cours', pill: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' }
 }
 
+const AUTRE = '__autre__'
+
 function ProduitModal({ produit, onClose, onSave }) {
   const [form, setForm] = useState({
     nom:           produit?.nom           || '',
@@ -48,7 +49,10 @@ function ProduitModal({ produit, onClose, onSave }) {
     refFournisseur:produit?.refFournisseur|| '',
     chrono:        produit?.chrono        || '',
     couleur:       produit?.couleur       || '',
-    segment:       produit?.segment       || SEGMENTS[0],
+    segment:       produit?.segment       || 'velo',
+    // « Autre segment » : segment hors liste, saisi à la main
+    autreSegment:  !!produit?.segment && !OP_SEGMENTS.includes(produit.segment),
+    segmentLibre:  produit?.segment && !OP_SEGMENTS.includes(produit.segment) ? (SEGMENT_LABELS[produit.segment] || produit.segment) : '',
     prixFort:      produit?.prixFort      ?? '',
     prixOp:        produit?.prixOp        ?? '',
   })
@@ -108,9 +112,15 @@ function ProduitModal({ produit, onClose, onSave }) {
             </label>
             <label className="space-y-1">
               <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Segment</span>
-              <select className="Input" value={form.segment} onChange={e => set('segment', e.target.value)}>
-                {SEGMENTS.map(s => <option key={s} value={s}>{SEGMENT_LABELS[s]}</option>)}
+              <select className="Input" value={form.autreSegment ? AUTRE : form.segment}
+                onChange={e => setForm(f => e.target.value === AUTRE ? { ...f, autreSegment: true } : { ...f, autreSegment: false, segment: e.target.value })}>
+                {OP_SEGMENTS.map(s => <option key={s} value={s}>{SEGMENT_LABELS[s]}</option>)}
+                <option value={AUTRE}>Autre segment</option>
               </select>
+              {form.autreSegment && (
+                <input className="Input mt-2" value={form.segmentLibre} onChange={e => set('segmentLibre', e.target.value)}
+                  placeholder="Nom du segment" aria-label="Autre segment" required autoFocus />
+              )}
             </label>
             <div className="space-y-1">
               <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide block">Remise</span>
@@ -663,7 +673,7 @@ export default function OperationDetail() {
       refFournisseur: form.refFournisseur.trim()  || null,
       chrono:         cleanRef(form.chrono)       || null,
       couleur:        form.couleur.trim()         || null,
-      segment:        form.segment,
+      segment:        form.autreSegment ? segmentFromInput(form.segmentLibre) : form.segment,
       prixFort:       form.prixFort !== '' ? Number(form.prixFort) : null,
       prixOp:         form.prixOp   !== '' ? Number(form.prixOp)   : null,
     }
@@ -771,7 +781,9 @@ export default function OperationDetail() {
     rayons.length ? `Rayon${rayons.length > 1 ? 's' : ''} ${rayons.map(r => RAYON_TYPE_LABELS[r] || r).join(', ')}` : 'Tous les rayons',
     op.magasinIds?.length ? `${op.magasinIds.length} magasin${op.magasinIds.length > 1 ? 's' : ''}` : 'Tous les magasins',
   ]
-  const segmentsPresents = SEGMENTS.filter(s => produits.some(p => p.segment === s))
+  // Segments présents dans l'OP, dans l'ordre de la liste (anciens segments à la fin)
+  const segmentsPresents = [...new Set(produits.map(p => p.segment).filter(Boolean))]
+    .sort((a, b) => (OP_SEGMENTS.indexOf(a) + 1 || 99) - (OP_SEGMENTS.indexOf(b) + 1 || 99))
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
@@ -883,7 +895,7 @@ export default function OperationDetail() {
                 </div>
                 {segmentsPresents.length > 1 && (
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    {[['', `Tous (${produits.length})`], ...segmentsPresents.map(s => [s, `${SEGMENT_LABELS[s]} (${produits.filter(p => p.segment === s).length})`])].map(([s, label]) => (
+                    {[['', `Tous (${produits.length})`], ...segmentsPresents.map(s => [s, `${SEGMENT_LABELS[s] || s} (${produits.filter(p => p.segment === s).length})`])].map(([s, label]) => (
                       <button key={s || 'tous'} onClick={() => setFilterSeg(s)}
                         className={['h-8 px-3 rounded-lg text-[11px] font-semibold transition-colors whitespace-nowrap',
                           filterSeg === s ? 'bg-gray-900 text-white dark:bg-white dark:text-black' : 'text-gray-500 dark:text-neutral-400 border border-gray-200 dark:border-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-800'].join(' ')}>
