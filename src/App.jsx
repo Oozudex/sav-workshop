@@ -5,6 +5,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useTheme } from './store/useTheme'
 import Login from './pages/Login'
 import AlertsWatcher from './components/AlertsWatcher'
+import ChangePasswordScreen from './components/ChangePasswordScreen'
 
 // Pages chargées à la demande : chaque route devient un fichier JS séparé
 const Home            = lazy(() => import('./pages/Home'))
@@ -57,11 +58,15 @@ function RoleRoute({ children, roles, acheteurRayons }) {
 export default function App() {
   const initAuth = useAuth(s => s.init)
   const initTheme = useTheme(s => s.init)
+  // Mot de passe donné par le directeur : le rayon doit d'abord choisir le sien
+  const mustChangePassword = useAuth(s => !!s.user && !!s.profile?.motDePasseTemporaire)
   useEffect(() => {
     const unsub = initAuth()
     initTheme()
     return unsub
   }, [initAuth, initTheme])
+
+  if (mustChangePassword) return <ChangePasswordScreen />
 
   return (
     <>

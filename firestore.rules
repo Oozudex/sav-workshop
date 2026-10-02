@@ -3,7 +3,16 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     /* ── Helpers ──────────────────────────────────────────────────────────── */
-    function isSignedIn() { return request.auth != null; }
+    // Connecté, avec une session encore valable : ouverte il y a moins de 24 h et après la dernière
+    // coupure (users/{uid}.sessionsRevokedAt, écrit chaque nuit à 0 h et quand le mot de passe
+    // du rayon change). auth_time = date de la connexion, en secondes (une seconde de tolérance).
+    function isSignedIn() { return request.auth != null && sessionValid(); }
+
+    function sessionValid() {
+      let authMs = request.auth.token.auth_time * 1000;
+      return authMs > (request.time - duration.value(24, 'h')).toMillis() &&
+        authMs + 999 >= userDoc().get('sessionsRevokedAt', timestamp.value(0)).toMillis();
+    }
 
     function userDoc() {
       return exists(/databases/$(database)/documents/users/$(request.auth.uid))
@@ -83,6 +92,10 @@ service cloud.firestore {
           resource.data.role in rayonRoles() &&
           request.resource.data.role in rayonRoles() &&
           inMyStore(resource.data) && inMyStoreNew()) ||
+        // Le rayon a choisi son propre mot de passe (après celui donné par le directeur)
+        (uid == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['motDePasseTemporaire']) &&
+          request.resource.data.motDePasseTemporaire == false) ||
         (uid == request.auth.uid && isDirMag() &&
           resource.data.get('magasinId', null) == null &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['magasinId']) &&

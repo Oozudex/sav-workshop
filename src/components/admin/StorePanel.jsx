@@ -1,9 +1,10 @@
 // Administration → un magasin : ses rayons (un compte de connexion chacun) et l'équipe de chaque rayon
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  addDoc, collection, collectionGroup, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where, writeBatch,
+  addDoc, collection, collectionGroup, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where, writeBatch,
 } from 'firebase/firestore'
-import { db } from '../../lib/firebase'
+import { httpsCallable } from 'firebase/functions'
+import { db, functions } from '../../lib/firebase'
 import { RAYON_TYPES, RAYON_TYPE_LABELS, STAFF_POSTES, STAFF_POSTE_LABELS } from '../../lib/constants'
 import { EMAIL_RE, accountError, afterCreateMessage, createAuthAccount } from '../../lib/accounts'
 import {
@@ -13,6 +14,32 @@ import {
 function fmtDate(ts) {
   const d = ts?.toDate ? ts.toDate() : ts ? new Date(ts) : null
   return d ? d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'
+}
+
+/* ── Nouveau mot de passe du rayon (après le retrait d'un collaborateur) ─── */
+function NewPasswordModal({ result, onClose }) {
+  const [copied, setCopied] = useState(false)
+  async function copy() {
+    try { await navigator.clipboard.writeText(result.compte.password); setCopied(true) } catch { /* presse-papiers refusé */ }
+  }
+  return (
+    <Modal title={`Mot de passe provisoire · ${result.rayon || 'rayon'}`} subtitle={`${result.nom} a été retiré de l’équipe`} onClose={onClose}
+      footer={<button type="button" onClick={onClose} className={BTN_PRIMARY}>C’est noté</button>}>
+      <p className="text-sm text-gray-600 dark:text-neutral-300">
+        Pour la sécurité, le mot de passe du compte du rayon a été changé et tous ses appareils ont été déconnectés.
+        Transmets ce mot de passe provisoire à l’équipe : <strong>il ne sera plus affiché</strong>. À la première connexion, le rayon choisira son propre mot de passe.
+      </p>
+      <div className="rounded-xl border border-gray-200 dark:border-neutral-700 bg-gray-50 dark:bg-neutral-800 p-3 space-y-1.5">
+        {result.compte.email && <p className="text-[11px] text-gray-500 dark:text-neutral-400">Compte : <span className="font-medium text-gray-700 dark:text-neutral-200">{result.compte.email}</span></p>}
+        <div className="flex items-center justify-between gap-3">
+          <span className="font-mono text-lg font-bold tracking-wider text-gray-900 dark:text-white select-all break-all">{result.compte.password}</span>
+          <button type="button" onClick={copy} className={copied ? `${BTN_SECONDARY} !text-emerald-600 dark:!text-emerald-400` : BTN_SECONDARY}>
+            {copied ? '✓ Copié' : 'Copier'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
 }
 
 /* ── Rayon : création / modification ───────────────────────────────────── */
@@ -134,6 +161,8 @@ export default function StorePanel({ magasinId, magasin, directeurs = [], showDi
   const [nom, setNom] = useState('')
   const [poste, setPoste] = useState(STAFF_POSTES[0])
   const [adding, setAdding] = useState(false)
+  const [removing, setRemoving] = useState(null) // id du collaborateur en cours de retrait
+  const [newPassword, setNewPassword] = useState(null) // { nom, rayon, compte: { email, password } }
   const teamRef = useRef(null)
 
   // Sur téléphone, l'équipe est sous la liste des rayons : on y descend quand on choisit un rayon
@@ -192,10 +221,19 @@ export default function StorePanel({ magasinId, magasin, directeurs = [], showDi
     await updateDoc(staffRef(s.rayonId, s.id), { nom: form.nom.trim(), poste: form.poste, actif: form.actif, updatedAt: serverTimestamp() })
   }
 
+  // Retrait par le serveur (Cloud Function) : le mot de passe du compte du rayon est changé
+  // et tous ses appareils sont déconnectés, la personne partie ne peut plus se connecter
   async function removeMember(s) {
-    if (!confirm(`Retirer « ${s.nom} » de l’équipe ?`)) return
-    try { await deleteDoc(staffRef(s.rayonId, s.id)) }
-    catch (err) { setNotice({ tone: 'error', text: accountError(err) }) }
+    const rayon = rayons.find(r => r.id === s.rayonId)
+    if (!confirm(`Retirer « ${s.nom} » de l’équipe ?${rayon?.uid ? `\n\nLe mot de passe du compte « ${rayon.nom || 'du rayon'} » sera changé et tous ses appareils déconnectés.` : ''}`)) return
+    setRemoving(s.id); setNotice(null)
+    try {
+      const { data } = await httpsCallable(functions, 'retirerCollaborateur')({ magasinId, rayonId: s.rayonId, staffId: s.id })
+      if (data?.compte?.password) setNewPassword({ nom: s.nom, rayon: data.rayon || rayon?.nom, compte: data.compte })
+      else setNotice({ tone: 'ok', text: `${s.nom} a été retiré de l’équipe.` })
+    } catch (err) {
+      setNotice({ tone: 'error', text: err?.message || 'Retrait impossible.' })
+    } finally { setRemoving(null) }
   }
 
   const storeDirecteurs = directeurs.filter(d => d.magasinId === magasinId)
@@ -301,7 +339,7 @@ export default function StorePanel({ magasinId, magasin, directeurs = [], showDi
                       </div>
                       <div className="flex items-center gap-0.5 shrink-0">
                         <IconButton icon="edit" label={`Modifier ${s.nom}`} onClick={() => setModal({ type: 'member', item: s })} />
-                        <IconButton icon="delete" danger label={`Retirer ${s.nom}`} onClick={() => removeMember(s)} />
+                        <IconButton icon="delete" danger label={`Retirer ${s.nom}`} onClick={() => removeMember(s)} disabled={!!removing} />
                       </div>
                     </li>
                   ))}
@@ -320,6 +358,7 @@ export default function StorePanel({ magasinId, magasin, directeurs = [], showDi
       {modal?.type === 'member' && (
         <MemberModal member={modal.item} onClose={() => setModal(null)} onSave={form => saveMember(modal.item, form)} />
       )}
+      {newPassword && <NewPasswordModal result={newPassword} onClose={() => setNewPassword(null)} />}
     </div>
   )
 }

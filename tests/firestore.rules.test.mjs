@@ -9,7 +9,7 @@ import {
 } from '@firebase/rules-unit-testing'
 import {
   collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, query,
-  serverTimestamp, setDoc, updateDoc, where,
+  Timestamp, serverTimestamp, setDoc, updateDoc, where,
 } from 'firebase/firestore'
 
 const [host, port] = (process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080').split(':')
@@ -30,7 +30,9 @@ const USERS = {
   inactifA:   { role: 'velo', magasinId: 'A', isActive: false },
 }
 
-const as = uid => env.authenticatedContext(uid).firestore()
+// Connexion il y a une minute (auth_time en secondes), sauf si précisé
+const nowSec = () => Math.floor(Date.now() / 1000)
+const as = (uid, authTime = nowSec() - 60) => env.authenticatedContext(uid, { auth_time: authTime }).firestore()
 
 before(async () => {
   env = await initializeTestEnvironment({
@@ -163,6 +165,28 @@ describe('b2b_tools', () => {
   it("les globaux gèrent tous les identifiants", async () => {
     await assertSucceeds(getDocs(collection(as('acheteur'), 'b2b_tools', 'tool', 'credentials')))
     await assertFails(setDoc(doc(as('dirmagA'), 'b2b_tools', 'tool', 'credentials', 'A'), { password: 'x' }))
+  })
+})
+
+describe('sessions', () => {
+  it("une session de plus de 24 h est refusée", async () => {
+    await assertSucceeds(getDoc(doc(as('veloA'), 'tickets', 'tA')))
+    await assertFails(getDoc(doc(as('veloA', nowSec() - 25 * 3600), 'tickets', 'tA')))
+  })
+  it("une session ouverte avant la coupure (minuit, mot de passe du rayon changé) est refusée", async () => {
+    await env.withSecurityRulesDisabled(c => updateDoc(doc(c.firestore(), 'users', 'veloA'), { sessionsRevokedAt: Timestamp.fromMillis(Date.now() - 30 * 60000) }))
+    await assertFails(getDoc(doc(as('veloA', nowSec() - 3600), 'tickets', 'tA')))
+    await assertSucceeds(getDoc(doc(as('veloA', nowSec() - 60), 'tickets', 'tA')))
+  })
+})
+
+describe('mot de passe temporaire', () => {
+  it("le rayon lève lui-même l'obligation de changer de mot de passe, sans toucher au reste de son profil", async () => {
+    await env.withSecurityRulesDisabled(c => updateDoc(doc(c.firestore(), 'users', 'veloA'), { motDePasseTemporaire: true }))
+    await assertSucceeds(updateDoc(doc(as('veloA'), 'users', 'veloA'), { motDePasseTemporaire: false }))
+    await assertFails(updateDoc(doc(as('veloA'), 'users', 'veloA'), { motDePasseTemporaire: true }))
+    await assertFails(updateDoc(doc(as('veloA'), 'users', 'veloA'), { role: 'directeurmag' }))
+    await assertFails(updateDoc(doc(as('veloB'), 'users', 'veloA'), { motDePasseTemporaire: false }))
   })
 })
 
