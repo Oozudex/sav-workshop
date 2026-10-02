@@ -24,8 +24,8 @@ function dueDateInfo(ymd) {
 // Contenu d'une carte (tableau sur ordinateur, liste sur téléphone)
 export function TicketCardBody({ ticket }) {
   const urgent = ticket.priority === 'Urgent'
-  // Ticket clôturé : la date prévue n'a plus d'intérêt (plus d'alerte « En retard »)
-  const due = ticket.status === 'Closed' ? null : dueDateInfo(ticket.dueDate)
+  // Vélo prêt ou ticket clôturé : la date prévue n'a plus d'intérêt (plus d'alerte « En retard »)
+  const due = ticket.status === 'Closed' || ticket.status === 'Ready' ? null : dueDateInfo(ticket.dueDate)
   const dot = urgent ? 'bg-red-500' : (STATUS_DOT[ticket.status] || 'bg-gray-300')
 
   return (

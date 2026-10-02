@@ -73,11 +73,12 @@ describe('alertes', () => {
     assert.deepEqual(computeAlerts(TICKETS, {}, NOW), [])
     assert.deepEqual(computeAlerts(TICKETS, { maxOpen: { enabled: false, threshold: 0 } }, NOW), [])
   })
-  it('seuil de volume : strictement au-dessus', () => {
-    assert.equal(computeAlerts(TICKETS, { maxOpen: { enabled: true, threshold: 3 } }, NOW).length, 0)
-    const [a] = computeAlerts(TICKETS, { maxOpen: { enabled: true, threshold: 2 } }, NOW)
-    assert.equal(a.value, 3)
-    assert.match(a.message, /3 vélos à l'atelier/)
+  it('seuil de volume : strictement au-dessus, vélos prêts à rendre exclus', () => {
+    assert.equal(computeAlerts(TICKETS, { maxOpen: { enabled: true, threshold: 2 } }, NOW).length, 0)
+    const [a] = computeAlerts(TICKETS, { maxOpen: { enabled: true, threshold: 1 } }, NOW)
+    assert.equal(a.value, 2)
+    assert.deepEqual(a.itemIds.sort(), [openOld.id, openWaiting.id].sort())
+    assert.match(a.message, /2 vélos à l'atelier/)
   })
   it('seuil de durée : liste les tickets concernés', () => {
     const [a] = computeAlerts(TICKETS, { maxOpenDays: { enabled: true, threshold: 10 } }, NOW)

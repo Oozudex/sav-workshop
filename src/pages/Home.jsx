@@ -295,14 +295,14 @@ export default function Home() {
   const [opCount, setOpCount] = useState(null)
   const [transfertCount, setTransfertCount] = useState(null)
 
-  // Compteur tickets actifs (hors Closed)
+  // Compteur tickets actifs (hors Prêt à rendre et Clôturé)
   useEffect(() => {
     if (!profile) return
     let q
     if (effectiveMagasinId) {
-      q = query(collection(db, 'tickets'), where('magasinId', '==', effectiveMagasinId), where('status', '!=', 'Closed'))
+      q = query(collection(db, 'tickets'), where('magasinId', '==', effectiveMagasinId), where('status', 'not-in', ['Ready', 'Closed']))
     } else if (isGlobal) {
-      q = query(collection(db, 'tickets'), where('status', '!=', 'Closed'))
+      q = query(collection(db, 'tickets'), where('status', 'not-in', ['Ready', 'Closed']))
     } else return
     return countOnce(q, setTicketCount)
   }, [profile, effectiveMagasinId, isGlobal])

@@ -193,8 +193,10 @@ export default function Tickets() {
     })
   }
 
-  // Clôture : passe obligatoirement par la fenêtre de récapitulatif (fiche atelier)
-  const [closingTicket, setClosingTicket] = useState(null)
+  // Passage en « Prêt à rendre » : fenêtre de récapitulatif obligatoire (fiche atelier).
+  // Une clôture sans passer par « Prêt à rendre » l'affiche aussi.
+  const [closingTicket, setClosingTicket] = useState(null) // { ticket, status }
+  const needsRecap = (ticket, status) => status === 'Ready' || (status === 'Closed' && ticket.status !== 'Ready')
 
 
   async function handleDragEnd(result) {
@@ -202,7 +204,7 @@ export default function Tickets() {
     if (!destination || source.droppableId === destination.droppableId) return
     const ticket = tickets.find(t => t.id === draggableId)
     if (!ticket) return
-    if (destination.droppableId === 'Closed') { setClosingTicket(ticket); return }
+    if (needsRecap(ticket, destination.droppableId)) { setClosingTicket({ ticket, status: destination.droppableId }); return }
     try { await moveTo(ticket, destination.droppableId) }
     catch (e) { console.error('Drag error', e) }
   }
@@ -244,7 +246,7 @@ export default function Tickets() {
               <span className="text-xs font-medium px-2 py-0.5 rounded-full
                                bg-gray-100 text-gray-500
                                dark:bg-neutral-800 dark:text-neutral-400">
-                {tickets.filter(t => t.status !== 'Closed').length}
+                {tickets.filter(t => t.status !== 'Closed' && t.status !== 'Ready').length}
               </span>
             </div>
 
@@ -399,11 +401,12 @@ export default function Tickets() {
 
       {closingTicket && (
         <CloseTicketDialog
-          ticket={closingTicket}
+          ticket={closingTicket.ticket}
+          nextStatus={closingTicket.status}
           onCancel={() => setClosingTicket(null)}
           onConfirm={async () => {
-            try { await moveTo(closingTicket, 'Closed'); setClosingTicket(null) }
-            catch (e) { setError(e.message || 'Clôture impossible') }
+            try { await moveTo(closingTicket.ticket, closingTicket.status); setClosingTicket(null) }
+            catch (e) { setError(e.message || 'Changement de statut impossible') }
           }}
         />
       )}
@@ -414,8 +417,8 @@ export default function Tickets() {
           role={profile?.role}
           onChangeStatus={status => {
             const t = tickets.find(x => x.id === activeTicket.id) || activeTicket
-            // La clôture passe toujours par le récapitulatif (fiche atelier)
-            if (status === 'Closed') { setClosingTicket(t); return }
+            // Le passage en « Prêt à rendre » passe par le récapitulatif (fiche atelier)
+            if (needsRecap(t, status)) { setClosingTicket({ ticket: t, status }); return }
             moveTo(t, status).catch(e => setError(e.message || 'Changement de statut impossible'))
           }}
           onClose={() => setActiveTicket(null)}

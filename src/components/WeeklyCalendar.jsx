@@ -667,7 +667,8 @@ export default function WeeklyCalendar({ magasinId }) {
     )
     return onSnapshot(q, snap => {
       setTickets(snap.docs
-        .filter(d => d.data().status !== 'Closed')
+        // Vélos prêts ou rendus : plus rien à faire, ils ne chargent pas l'agenda
+        .filter(d => !['Ready', 'Closed'].includes(d.data().status))
         .map(d => {
           const data = d.data()
           return {

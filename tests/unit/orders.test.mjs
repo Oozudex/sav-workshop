@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   ORDER_ALERTS, formatOrderNumber, isOrderOpen, orderFormErrors, orderMatches, orderStatus, orderTotal, parseEuro,
-  remainingToPay,
+  orderQuantity, parseQuantity, remainingToPay,
 } from '../../src/lib/orders.js'
 import { computeAlerts } from '../../src/lib/alerts.js'
 
@@ -31,6 +31,13 @@ describe('formats', () => {
 })
 
 describe('formulaire de commande', () => {
+  it('quantité : entier de 1 à 999, 1 par défaut', () => {
+    assert.equal(parseQuantity('3'), 3)
+    assert.equal(parseQuantity(' 12 '), 12)
+    for (const v of ['0', '-1', '1,5', 'abc', '1000', '']) assert.equal(parseQuantity(v), null, v)
+    assert.equal(orderQuantity({}), 1)
+    assert.equal(orderQuantity({ quantite: 4 }), 4)
+  })
   const ok = { client: 'Marie Dubois', produit: 'Selle Selle Italia', prix: '89,90', fraisPort: '', acompte: '', createur: 'Paul' }
   it('complet : aucune erreur', () => {
     assert.deepEqual(orderFormErrors(ok, { requireCreateur: true }), {})
@@ -48,6 +55,8 @@ describe('formulaire de commande', () => {
   it('client, désignation et vendeur', () => {
     const e = orderFormErrors({ ...ok, client: ' ', produit: '', createur: '' }, { requireCreateur: true })
     assert.deepEqual(Object.keys(e).sort(), ['client', 'createur', 'produit'])
+    assert.equal(orderFormErrors({ ...ok, quantite: '0' }).quantite, 'Quantité invalide.')
+    assert.equal(orderFormErrors({ ...ok, quantite: '2' }).quantite, undefined)
   })
   it('numéros anciens et nouveaux', () => {
     assert.equal(formatOrderNumber('0012'), '#0012')

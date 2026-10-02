@@ -101,12 +101,20 @@ export function remainingToPay(order) {
   return Math.max(0, round2(total - (parseEuro(order.acompte) || 0)))
 }
 
+// Quantité commandée : entier de 1 à 999 (null si invalide) ; les anciennes commandes valent 1
+export function parseQuantity(v) {
+  const n = Number(String(v ?? '').trim())
+  return Number.isInteger(n) && n >= 1 && n <= 999 ? n : null
+}
+export const orderQuantity = order => parseQuantity(order?.quantite) ?? 1
+
 // Erreurs du formulaire de commande, par champ ({} si tout est bon)
 export function orderFormErrors(fields, { requireCreateur = false } = {}) {
   const errors = {}
   const filled = v => v != null && String(v).trim() !== ''
   if (!filled(fields.client)) errors.client = 'Le nom du client est obligatoire.'
   if (!filled(fields.produit)) errors.produit = 'La désignation est obligatoire.'
+  if (filled(fields.quantite) && parseQuantity(fields.quantite) == null) errors.quantite = 'Quantité invalide.'
   if (requireCreateur && !filled(fields.createur)) errors.createur = 'Choisis le vendeur.'
 
   const prix = parseEuro(fields.prix)

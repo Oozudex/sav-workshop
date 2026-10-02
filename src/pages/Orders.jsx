@@ -16,7 +16,7 @@ import { GLOBAL_ROLES, CAN_DELETE_ROLES, ORDER_CLOSED_STATUTS } from '../lib/con
 import {
   ORDER_ALERTS, ORDER_OPEN_STATUSES, ORDER_STATUSES, ORDER_STATUS_META, ORDER_TYPES, ORDER_VISIBLE_DAYS,
   formatEuro, formatOrderNumber, isOrderListed, isWaitingReception, isOrderOpen, orderMatches, orderStatus,
-  orderFormErrors, orderStatusSince, orderTotal, parseEuro, remainingToPay,
+  orderFormErrors, orderQuantity, orderStatusSince, orderTotal, parseEuro, parseQuantity, remainingToPay,
 } from '../lib/orders'
 import { toDate } from '../lib/ticketStats'
 import { useMagasin } from '../store/useMagasin'
@@ -45,12 +45,12 @@ const NEXT_STEP = {
 
 // Champs modifiables, partagés par le formulaire de création et la modification
 const EMPTY_FIELDS = {
-  client: '', tel: '', type: 'piece', ref_produit: '', produit: '',
+  client: '', tel: '', type: 'piece', ref_produit: '', produit: '', quantite: '1',
   fournisseur: '', refFournisseur: '',
   prix: '', fraisPort: '', acompte: '', createur: '',
 }
 const FIELD_LABELS = {
-  client: 'client', tel: 'téléphone', type: 'type', ref_produit: 'référence', produit: 'désignation',
+  client: 'client', tel: 'téléphone', type: 'type', ref_produit: 'référence', produit: 'désignation', quantite: 'quantité',
   fournisseur: 'fournisseur', refFournisseur: 'n° commande fournisseur',
   prix: 'prix de vente', fraisPort: 'frais de port', acompte: 'acompte', createur: 'créé par',
 }
@@ -71,7 +71,7 @@ function cleanFields(f) {
   const text = v => (typeof v === 'string' ? v.trim() : v) || null
   return {
     client: text(f.client), tel: text(f.tel), type: f.type || null,
-    ref_produit: text(f.ref_produit), produit: text(f.produit),
+    ref_produit: text(f.ref_produit), produit: text(f.produit), quantite: parseQuantity(f.quantite) ?? 1,
     fournisseur: text(f.fournisseur), refFournisseur: text(f.refFournisseur),
     prix: parseEuro(f.prix), fraisPort: parseEuro(f.fraisPort), acompte: parseEuro(f.acompte), createur: text(f.createur),
   }
@@ -381,6 +381,7 @@ export default function Orders() {
                     <Th>N° commande</Th>
                     <Th>Client</Th>
                     <Th>Produit</Th>
+                    <Th right>Qté</Th>
                     <Th>Fournisseur</Th>
                     <Th right>Total TTC / reste</Th>
                     <Th>Statut</Th>
@@ -411,6 +412,9 @@ export default function Orders() {
                           </p>
                           {o.ref_produit && <p className="font-mono text-[11px] text-gray-500 dark:text-neutral-400 truncate">{o.ref_produit}</p>}
                         </td>
+                        <td className={`px-3 py-2.5 text-right tabular-nums whitespace-nowrap ${orderQuantity(o) > 1 ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-500 dark:text-neutral-400'}`}>
+                          {orderQuantity(o)}
+                        </td>
                         <td className="px-3 py-2.5 whitespace-nowrap">
                           <p className="text-gray-700 dark:text-neutral-300">{o.fournisseur || '—'}</p>
                           {o.refFournisseur && <p className="font-mono text-[11px] text-gray-500 dark:text-neutral-400">{o.refFournisseur}</p>}
@@ -439,7 +443,7 @@ export default function Orders() {
                   })}
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="px-3 py-8 text-center text-xs text-gray-400 dark:text-neutral-500">
+                      <td colSpan={9} className="px-3 py-8 text-center text-xs text-gray-400 dark:text-neutral-500">
                         Aucune commande{hasFilters || alertKey ? ' pour ces filtres' : tab === 'open' ? ' en cours' : ' terminée'}.
                       </td>
                     </tr>
@@ -544,6 +548,7 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
       `Téléphone : ${order.tel || '—'}`,
       `Produit : ${[order.type && ORDER_TYPES[order.type], order.produit].filter(Boolean).join(' · ') || '—'}`,
       `Réf. produit : ${order.ref_produit || '—'}`,
+      `Quantité : ${orderQuantity(order)}`,
       `Fournisseur : ${order.fournisseur || '—'}${order.refFournisseur ? ` (n° ${order.refFournisseur})` : ''}`,
       `Prix de vente TTC : ${formatEuro(parseEuro(order.prix))}`,
       port ? `Frais de port : ${formatEuro(port)}` : null,
@@ -646,7 +651,8 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
                 <MGrid>
                   <MField label="Type"><MVal>{ORDER_TYPES[order.type]}</MVal></MField>
                   <MField label="Référence"><MVal mono>{order.ref_produit}</MVal></MField>
-                  <MField label="Désignation" span2><MVal>{order.produit}</MVal></MField>
+                  <MField label="Désignation"><MVal>{order.produit}</MVal></MField>
+                  <MField label="Quantité"><MVal>{orderQuantity(order)}</MVal></MField>
                 </MGrid>
               </MCard>
               <MCard title="Fournisseur">
@@ -858,9 +864,15 @@ function OrderFields({ fields, setFields, staff, errors = {}, autoFocus = false 
           <FField label="Référence">
             <input className="Input font-mono" value={fields.ref_produit} onChange={e => set('ref_produit', e.target.value)} />
           </FField>
-          <FField label="Désignation" required span2 error={errors.produit}>
-            <input className={`Input ${bad('produit')}`} placeholder="Nom complet du produit" value={fields.produit} onChange={e => set('produit', e.target.value)} />
-          </FField>
+          <div className="col-span-full grid grid-cols-[1fr_5.5rem] gap-x-3 sm:gap-x-5">
+            <FField label="Désignation" required error={errors.produit}>
+              <input className={`Input ${bad('produit')}`} placeholder="Nom complet du produit" value={fields.produit} onChange={e => set('produit', e.target.value)} />
+            </FField>
+            <FField label="Quantité" error={errors.quantite}>
+              <input className={`Input text-right tabular-nums ${bad('quantite')}`} type="number" inputMode="numeric" min="1" max="999" step="1"
+                value={fields.quantite} onChange={e => set('quantite', e.target.value)} />
+            </FField>
+          </div>
         </MGrid>
       </MCard>
 
@@ -915,6 +927,7 @@ function OrderCard({ order: o, magasin, onOpen, onChangeStatut }) {
       </div>
       <p className="text-xs text-gray-700 dark:text-neutral-300 line-clamp-2 break-words">
         {o.type && <span className="mr-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-neutral-500">{ORDER_TYPES[o.type]}</span>}
+        {orderQuantity(o) > 1 && <span className="font-semibold text-gray-900 dark:text-white">{orderQuantity(o)} × </span>}
         {o.produit || '—'}
         {o.fournisseur && <span className="text-gray-400 dark:text-neutral-500"> · {o.fournisseur}</span>}
       </p>

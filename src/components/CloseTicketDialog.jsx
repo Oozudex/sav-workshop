@@ -33,10 +33,11 @@ async function copyText(text, textarea) {
 }
 
 /**
- * Procédure de clôture : le vendeur doit copier le récapitulatif (n° SAV, n° de série,
- * commentaires) pour le reporter dans la fiche atelier avant de pouvoir clôturer.
+ * Passage en « Prêt à rendre » (ou clôture directe sans ce passage) : le vendeur doit copier
+ * le récapitulatif (n° SAV, n° de série, commentaires) pour le reporter dans la fiche atelier.
  */
-export default function CloseTicketDialog({ ticket, onCancel, onConfirm }) {
+export default function CloseTicketDialog({ ticket, nextStatus = 'Ready', onCancel, onConfirm }) {
+  const toReady = nextStatus === 'Ready'
   const [message, setMessage] = useState(null)
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState(false)
@@ -74,11 +75,11 @@ export default function CloseTicketDialog({ ticket, onCancel, onConfirm }) {
           <span aria-hidden className="h-9 w-9 shrink-0 rounded-full grid place-items-center bg-amber-400 text-amber-950 text-lg font-bold">!</span>
           <div>
             <h2 id="close-ticket-title" className="text-sm font-bold text-amber-900 dark:text-amber-200">
-              Avant de clôturer le ticket {ticket.ticketNumber}
+              {toReady ? 'Avant de passer en prêt à rendre' : 'Avant de clôturer'} le ticket {ticket.ticketNumber}
             </h2>
             <p className="text-xs text-amber-800 dark:text-amber-300 mt-0.5">
               Copie ce récapitulatif et colle-le dans la <strong>fiche atelier</strong> du logiciel du magasin :
-              après la clôture, les données du client seront effacées sous 14 jours.
+              après la clôture du ticket, les données du client seront effacées sous 14 jours.
             </p>
           </div>
         </div>
@@ -101,7 +102,7 @@ export default function CloseTicketDialog({ ticket, onCancel, onConfirm }) {
             <p className={`text-xs ${copyError ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-neutral-400'}`}>
               {copyError
                 ? 'La copie a échoué : sélectionne le texte et copie-le avec Ctrl+C / Cmd+C, puis réessaie.'
-                : copied ? 'Colle-le maintenant dans la fiche atelier.' : 'Étape obligatoire pour pouvoir clôturer.'}
+                : copied ? 'Colle-le maintenant dans la fiche atelier.' : 'Étape obligatoire pour continuer.'}
             </p>
           </div>
         </div>
@@ -115,7 +116,7 @@ export default function CloseTicketDialog({ ticket, onCancel, onConfirm }) {
             title={copied ? '' : "Copie d'abord le récapitulatif"}
             className="h-9 px-4 rounded-lg text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed
                        bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
-            {closing ? 'Clôture…' : 'Fermer et clôturer le ticket'}
+            {closing ? 'Enregistrement…' : toReady ? 'Passer en prêt à rendre' : 'Fermer et clôturer le ticket'}
           </button>
         </div>
       </div>

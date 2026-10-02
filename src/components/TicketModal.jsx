@@ -318,13 +318,21 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onChangeS
                     {/* ── Commentaires (en haut, pleine largeur) ── */}
                     <div className="md:col-span-12">
                         <Card title="Commentaires" action={comments.length > 0 && <CopyBtn onClick={copyComments} label="Copier l'historique" />}>
-                            <form onSubmit={submitComment} className="space-y-1.5 mb-3">
-                                <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                            <form onSubmit={submitComment} className="space-y-2 mb-3">
+                                <textarea
+                                    value={commentText}
+                                    onChange={e => setCommentText(e.target.value)}
+                                    placeholder="Ajouter un commentaire…"
+                                    rows={3}
+                                    className="Input text-sm !h-auto resize-y min-h-[4.5rem] leading-relaxed"
+                                    onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitComment() } }}
+                                />
+                                <div className="flex flex-wrap items-center gap-2">
                                     {users.length > 0 ? (
                                         <select
                                             value={commentAuthor}
                                             onChange={e => { setCommentAuthor(e.target.value); setAuthorError(false) }}
-                                            className={`h-9 px-2 rounded-xl border text-xs font-medium bg-white dark:bg-neutral-800 text-gray-700 dark:text-neutral-200 shrink-0 w-full sm:w-32 ${authorError ? 'border-red-400 dark:border-red-500' : 'border-gray-200 dark:border-neutral-700'}`}
+                                            className={`h-9 px-2 rounded-xl border text-xs font-medium bg-white dark:bg-neutral-800 text-gray-700 dark:text-neutral-200 flex-1 sm:flex-none sm:w-40 min-w-0 ${authorError ? 'border-red-400 dark:border-red-500' : 'border-gray-200 dark:border-neutral-700'}`}
                                         >
                                             <option value="">— Auteur</option>
                                             {users.map(u => <option key={u.id} value={u.nom}>{u.nom}</option>)}
@@ -334,27 +342,21 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onChangeS
                                             value={commentAuthor}
                                             onChange={e => { setCommentAuthor(e.target.value); setAuthorError(false) }}
                                             placeholder="Votre nom"
-                                            className={`Input h-9 sm:!w-32 shrink-0 ${authorError ? 'border-red-400 dark:border-red-500' : ''}`}
+                                            className={`Input h-9 !w-auto flex-1 sm:flex-none sm:!w-40 min-w-0 ${authorError ? 'border-red-400 dark:border-red-500' : ''}`}
                                         />
                                     )}
-                                    <div className="flex gap-2 flex-1 min-w-0">
-                                    <input
-                                        value={commentText}
-                                        onChange={e => setCommentText(e.target.value)}
-                                        placeholder="Ajouter un commentaire…"
-                                        className="Input flex-1 h-9 min-w-0"
-                                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment() } }}
-                                    />
+                                    <span className="hidden sm:inline text-[11px] text-gray-400 dark:text-neutral-500">
+                                        Entrée : nouvelle ligne · Ctrl/⌘ + Entrée : envoyer
+                                    </span>
                                     <button
                                         type="submit"
                                         disabled={!commentText.trim() || sendingComment}
-                                        className="h-9 px-4 rounded-xl bg-gray-900 text-white text-sm font-medium shrink-0
+                                        className="h-9 px-4 rounded-xl bg-gray-900 text-white text-sm font-medium shrink-0 sm:ml-auto
                                                    hover:bg-gray-700 disabled:opacity-40 transition-colors
                                                    dark:bg-white dark:text-black dark:hover:bg-gray-100"
                                     >
                                         Envoyer
                                     </button>
-                                    </div>
                                 </div>
                                 {authorError && (
                                     <p className="text-xs text-red-500 dark:text-red-400">Veuillez sélectionner la personne qui a écrit le commentaire.</p>
@@ -391,10 +393,10 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onChangeS
                                             </div>
                                             {editingCommentId === c.id ? (
                                                 <div className="space-y-1.5">
-                                                    <textarea rows={2} className="Input text-sm" value={editingText} autoFocus
+                                                    <textarea rows={3} className="Input text-sm !h-auto resize-y leading-relaxed" value={editingText} autoFocus
                                                         onChange={e => setEditingText(e.target.value)}
                                                         onKeyDown={e => {
-                                                            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveComment(c) }
+                                                            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); saveComment(c) }
                                                             if (e.key === 'Escape') { e.stopPropagation(); setEditingCommentId(null) }
                                                         }} />
                                                     <div className="flex gap-2">

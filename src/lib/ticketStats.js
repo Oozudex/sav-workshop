@@ -188,8 +188,8 @@ export const TICKET_ALERTS = {
     {
       key: 'maxOpen', kind: 'count', unit: 'vélos', defaultThreshold: 15,
       label: "Vélos à l'atelier en même temps",
-      help: 'Tickets en cours, tous statuts sauf Clôturé.',
-      measure: open => open,
+      help: 'Tickets en cours, hors Prêt à rendre et Clôturé.',
+      measure: open => open.filter(t => t.status !== 'Ready'),
       message: (n, s) => `${n} vélos à l'atelier (seuil : ${s})`,
     },
     {
