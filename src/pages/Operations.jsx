@@ -1383,6 +1383,7 @@ export default function Operations() {
 
   const [ops, setOps] = useState([])
   const [bonPlanList, setBonPlanList] = useState([])
+  const [bonPlansLoaded, setBonPlansLoaded] = useState(false)
   const [engageList, setEngageList] = useState([])
   const [catalogueList, setCatalogueList] = useState([])
   const [ilv, setIlv] = useState(null)
@@ -1412,7 +1413,7 @@ export default function Operations() {
   useEffect(() => {
     if (!searchUsed) return
     return onSnapshot(collection(db, BON_PLAN_COLLECTION),
-      snap => setBonPlanList(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      snap => { setBonPlanList(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setBonPlansLoaded(true) },
       () => setBonPlanError(true))
   }, [searchUsed])
 
@@ -1432,8 +1433,8 @@ export default function Operations() {
   }, [searchUsed])
 
   const promoIndex = useMemo(
-    () => buildPromoIndex({ ops: visibleOps, produits: opProduits.produits, bonPlanList, engageList, catalogue: catalogueList }),
-    [visibleOps, opProduits.produits, bonPlanList, engageList, catalogueList],
+    () => buildPromoIndex({ ops: visibleOps, produits: opProduits.produits, bonPlanList, engageList, catalogue: catalogueList, bonPlansLoaded }),
+    [visibleOps, opProduits.produits, bonPlanList, engageList, catalogueList, bonPlansLoaded],
   )
   const searchResults = useMemo(() => searchPromos(promoIndex, search), [promoIndex, search])
 

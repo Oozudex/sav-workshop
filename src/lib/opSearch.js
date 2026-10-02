@@ -64,7 +64,8 @@ function groupKey(p) {
  * `produits` : produits des OP (avec `opId`) ; `bonPlanList` : collection des prix bon plan ;
  * `engageList` : produits de la base de données en prix engagé.
  */
-export function buildPromoIndex({ ops, produits, bonPlanList = [], engageList = [], catalogue = [], today = todayStr() }) {
+// bonPlansLoaded : la liste des prix bon plan est chargée, elle fait foi (un bon plan retiré n'existe plus)
+export function buildPromoIndex({ ops, produits, bonPlanList = [], engageList = [], catalogue = [], bonPlansLoaded = false, today = todayStr() }) {
   const opsById = new Map(ops.map(o => [o.id, o]))
   const bonPlanActuel = bonPlanPrices(bonPlanList)
   // Prix fort des vélos, pour les produits d'OP importés sans prix fort
@@ -93,7 +94,8 @@ export function buildPromoIndex({ ops, produits, bonPlanList = [], engageList = 
     if (!op || raw.prixOp == null) continue
     // Comparaison avec le prix bon plan actuel (il a pu changer depuis l'import de l'OP)
     const actuel = bonPlanActuel.get(bonPlanKey(raw))
-    const p = withPrixFort(actuel != null ? { ...raw, prixBonPlan: actuel } : raw, prixFortByChrono)
+    const prixBonPlan = actuel != null ? actuel : bonPlansLoaded ? null : raw.prixBonPlan ?? null
+    const p = withPrixFort({ ...raw, prixBonPlan }, prixFortByChrono)
     const status = opStatus(op, today)
     if (status === 'terminee') continue
     const g = groupFor(p)

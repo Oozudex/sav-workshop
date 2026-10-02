@@ -154,3 +154,21 @@ describe('bon plan actuel', () => {
     assert.equal(g.ops[0].bonPlanBetter, false)
   })
 })
+
+describe('bon plan retiré après l\'import', () => {
+  it("la copie enregistrée avec le produit n'est plus prise en compte", () => {
+    const base = {
+      ops: [{ id: 'op', nom: 'OP', dateDebut: '2026-09-20', dateFin: '2026-09-30' }],
+      produits: [{ id: 'p', opId: 'op', nom: 'CROSSOVER XV LTD', chrono: '0-261552', prixFort: 2099.99, prixOp: 1599.99, prixBonPlan: 1599.99 }],
+      bonPlanList: [],
+      today: '2026-09-25',
+    }
+    // Liste des bons plans chargée : le bon plan n'existe plus
+    const [g] = searchPromos(buildPromoIndex({ ...base, bonPlansLoaded: true }), 'crossover')
+    assert.equal(g.ops[0].bonPlanSame, false)
+    assert.equal(g.ops[0].prixRef, 2099.99)
+    // Pas encore chargée : on garde la copie
+    const [g2] = searchPromos(buildPromoIndex(base), 'crossover')
+    assert.equal(g2.ops[0].bonPlanSame, true)
+  })
+})

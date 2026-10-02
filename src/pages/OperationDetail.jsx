@@ -662,18 +662,24 @@ export default function OperationDetail() {
     return onSnapshot(q, snap => setProduits(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [id])
 
-  // Prix bon plan actuels des produits de l'OP (ils ont pu changer depuis l'import)
-  const [bonPlansActuels, setBonPlansActuels] = useState(new Map())
+  // Prix bon plan en vigueur des produits de l'OP, suivis en direct : un bon plan modifié ou retiré
+  // après l'import l'emporte sur la copie enregistrée avec le produit. null : pas encore chargé.
+  const [bonPlansActuels, setBonPlansActuels] = useState(null)
   const bonPlanIds = [...new Set(produits.map(p => bonPlanDocId(p)).filter(Boolean))].sort().join(',')
   useEffect(() => {
-    if (!bonPlanIds) return
+    if (!bonPlanIds) { setBonPlansActuels(new Map()); return }
     const ids = bonPlanIds.split(',')
-    let cancelled = false
-    Promise.all(Array.from({ length: Math.ceil(ids.length / 30) }, (_, i) =>
-      getDocs(query(collection(db, BON_PLAN_COLLECTION), where(documentId(), 'in', ids.slice(i * 30, i * 30 + 30))))))
-      .then(snaps => !cancelled && setBonPlansActuels(new Map(snaps.flatMap(s => s.docs.map(d => [d.id, d.data()])))))
-      .catch(() => {})
-    return () => { cancelled = true }
+    const chunks = Array.from({ length: Math.ceil(ids.length / 30) }, (_, i) => ids.slice(i * 30, i * 30 + 30))
+    const parChunk = new Map()
+    const unsubs = chunks.map((chunk, i) => onSnapshot(
+      query(collection(db, BON_PLAN_COLLECTION), where(documentId(), 'in', chunk)),
+      snap => {
+        parChunk.set(i, snap.docs.map(d => [d.id, d.data()]))
+        if (parChunk.size === chunks.length) setBonPlansActuels(new Map([...parChunk.values()].flat()))
+      },
+      () => {},
+    ))
+    return () => unsubs.forEach(u => u())
   }, [bonPlanIds])
 
   // Prix forts de la base vélos : un fichier d'OP sans colonne « Prix fort » les reprend d'ici
@@ -691,10 +697,13 @@ export default function OperationDetail() {
   }, [chronos])
 
   const produitsAffiches = useMemo(() => produits.map(p => {
-    const bp = bonPlansActuels.get(bonPlanDocId(p))
+    const docId = bonPlanDocId(p)
+    const bp = docId ? bonPlansActuels?.get(docId) : null
     const prixForts = new Map(prixFortsBase)
     if (!prixForts.get(cleanRef(p.chrono)) && bp?.prixFort > 0) prixForts.set(cleanRef(p.chrono), bp.prixFort)
-    return withPrixFort(bp?.prixBonPlan != null ? { ...p, prixBonPlan: bp.prixBonPlan } : p, prixForts)
+    // Bon plan retiré depuis l'import : plus de prix bon plan (la copie du produit est ignorée)
+    const prixBonPlan = bonPlansActuels && docId ? (bp?.prixBonPlan ?? null) : (p.prixBonPlan ?? null)
+    return withPrixFort({ ...p, prixBonPlan }, prixForts)
   }), [produits, bonPlansActuels, prixFortsBase])
 
   async function handleSaveProduit(form) {

@@ -20,7 +20,8 @@ export async function enrichIlvSources(sources) {
   const bonPlans = new Map(await Promise.all(sources.map(async s => {
     const id = bonPlanDocId(s)
     const snap = id ? await getDoc(doc(db, BON_PLAN_COLLECTION, id)) : null
-    return [s.key, snap?.exists() ? snap.data() : null]
+    // undefined : pas de bon plan possible (ni chrono ni réf.) ; null : aucun bon plan en vigueur
+    return [s.key, !id ? undefined : snap.exists() ? snap.data() : null]
   })))
   return sources.map(s => {
     const cat = catalogue.get(cleanRef(s.chrono)) || {}
@@ -36,7 +37,8 @@ export async function enrichIlvSources(sources) {
       prixFort:    s.prixFort ?? cat.prixFort ?? bp?.prixFort ?? null,
       pack:        cat.pack || s.pack || null,
       prixEngage:  cat.prixEngage ?? null,
-      prixBonPlan: bp?.prixBonPlan ?? s.prixBonPlan ?? null,
+      // Le bon plan en vigueur l'emporte sur le prix enregistré avec le produit (il a pu être retiré)
+      prixBonPlan: bp === undefined ? s.prixBonPlan ?? null : bp?.prixBonPlan ?? null,
     }
   })
 }
