@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  OP_SEGMENTS, SEGMENT_LABELS, bonPlanPrices, isBlueFill, segmentFromInput, isBonPlanBetter, isPresqueParfait, nomAffiche, normSegment, parseOpSheet, parsePrice,
+  OP_SEGMENTS, SEGMENT_LABELS, withPrixFort, bonPlanPrices, isBlueFill, segmentFromInput, isBonPlanBetter, isPresqueParfait, nomAffiche, normSegment, parseOpSheet, parsePrice,
   planImport, prixReference, remisePct, resolveLines,
 } from '../../src/lib/opImport.js'
 
@@ -214,5 +214,14 @@ describe('autre segment', () => {
     assert.equal(segmentFromInput(' Skate  board '), 'SKATE BOARD')
     assert.equal(segmentFromInput('Trottinette'), 'trottinette')
     assert.equal(segmentFromInput('  '), null)
+  })
+})
+
+describe('prix fort manquant dans l\'OP', () => {
+  it("repris de la base vélos par le chrono, sans écraser celui du fichier", () => {
+    const base = new Map([['0-261552', 2099.99]])
+    assert.equal(withPrixFort({ chrono: '0-261552', prixFort: null, prixOp: 1599.99 }, base).prixFort, 2099.99)
+    assert.equal(withPrixFort({ chrono: '0-261552', prixFort: 1999.99 }, base).prixFort, 1999.99)
+    assert.equal(withPrixFort({ chrono: '9-999', prixFort: null }, base).prixFort, null)
   })
 })

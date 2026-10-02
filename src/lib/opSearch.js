@@ -1,7 +1,7 @@
 // Opérations commerciales : visibilité selon le profil et recherche « ce vélo est-il en remise ? »
 // pour les vendeurs. Fonctions pures (tests/unit/opSearch.test.mjs).
 import { RAYON_TYPES } from './constants.js'
-import { bonPlanKey, bonPlanPrices, cleanRef, isBonPlanBetter, isBonPlanSame, latestBonPlans, normName, parsePrice, prixReference, remisePct } from './opImport.js'
+import { bonPlanKey, bonPlanPrices, cleanRef, isBonPlanBetter, isBonPlanSame, withPrixFort, latestBonPlans, normName, parsePrice, prixReference, remisePct } from './opImport.js'
 
 // Date du jour au format des OP (AAAA-MM-JJ, heure locale)
 export function todayStr(now = new Date()) {
@@ -64,9 +64,12 @@ function groupKey(p) {
  * `produits` : produits des OP (avec `opId`) ; `bonPlanList` : collection des prix bon plan ;
  * `engageList` : produits de la base de données en prix engagé.
  */
-export function buildPromoIndex({ ops, produits, bonPlanList = [], engageList = [], today = todayStr() }) {
+export function buildPromoIndex({ ops, produits, bonPlanList = [], engageList = [], catalogue = [], today = todayStr() }) {
   const opsById = new Map(ops.map(o => [o.id, o]))
   const bonPlanActuel = bonPlanPrices(bonPlanList)
+  // Prix fort des vélos, pour les produits d'OP importés sans prix fort
+  const prixFortByChrono = new Map([...bonPlanList, ...engageList, ...catalogue]
+    .filter(x => x.chrono && x.prixFort > 0).map(x => [cleanRef(x.chrono), x.prixFort]))
   const groups = new Map()
   const byChrono = new Map()
 
@@ -90,7 +93,7 @@ export function buildPromoIndex({ ops, produits, bonPlanList = [], engageList = 
     if (!op || raw.prixOp == null) continue
     // Comparaison avec le prix bon plan actuel (il a pu changer depuis l'import de l'OP)
     const actuel = bonPlanActuel.get(bonPlanKey(raw))
-    const p = actuel != null ? { ...raw, prixBonPlan: actuel } : raw
+    const p = withPrixFort(actuel != null ? { ...raw, prixBonPlan: actuel } : raw, prixFortByChrono)
     const status = opStatus(op, today)
     if (status === 'terminee') continue
     const g = groupFor(p)
@@ -186,7 +189,8 @@ export function opTiming(op, today = todayStr()) {
  * à la fin de l'OP (ou déjà passés) et produits dont le bon plan est déjà plus avantageux.
  */
 export function opSummary(produits) {
-  const remises = produits.map(p => (isBonPlanBetter(p) ? null : remisePct(p))).filter(r => r != null && r > 0)
+  // Remise max : hors produits dont le bon plan est déjà strictement moins cher (le prix OP ne sert pas)
+  const remises = produits.map(p => (isBonPlanBetter(p) && !isBonPlanSame(p) ? null : remisePct(p))).filter(r => r != null && r > 0)
   return {
     produits: produits.length,
     modeles: new Set(produits.map(p => normName(p.nom))).size,

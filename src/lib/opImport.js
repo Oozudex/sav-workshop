@@ -271,6 +271,14 @@ export function isBonPlanBetter(p) {
   return p.prixBonPlan != null && p.prixOp != null && p.prixBonPlan <= p.prixOp
 }
 
+// Prix fort manquant dans le produit de l'OP (fichier sans cette colonne) : celui de la base vélos,
+// sinon celui du prix bon plan. prixFortByChrono : Map chrono → prix fort.
+export function withPrixFort(p, prixFortByChrono) {
+  if (p.prixFort != null) return p
+  const prixFort = prixFortByChrono.get(cleanRef(p.chrono))
+  return prixFort > 0 ? { ...p, prixFort } : p
+}
+
 // Prix OP égal au prix bon plan déjà en place : aucune remise en plus (ni prix barré ni pourcentage)
 export function isBonPlanSame(p) {
   return p.prixBonPlan != null && p.prixOp != null && Math.abs(p.prixBonPlan - p.prixOp) < 0.005
@@ -342,7 +350,7 @@ export function planImport(resolved, { selected = {}, bonPlan = {}, bonPlans = n
         refFournisseur: line.refFournisseur || null,
         chrono,
         couleur:        m?.couleur || line.couleur || null,
-        prixFort:       line.prixFort ?? null,
+        prixFort:       line.prixFort ?? (m?.prixFort > 0 ? m.prixFort : null), // sinon celui de la base vélos
         prixOp:         line.prixOp ?? null,
         prixBonPlan:    bonPlans.get(bonPlanKey({ chrono, refFournisseur: line.refFournisseur })) ?? null,
         passeBonPlan:  !!bonPlan[i],

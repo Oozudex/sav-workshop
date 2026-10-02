@@ -1271,7 +1271,7 @@ function OpPromoLine({ s, allCouleurs, onOpenOp, onIlv }) {
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <Prices barre={s.bonPlanSame ? null : s.prixRef} prix={s.prixOp} remise={s.bonPlanSame ? null : s.remise}
+          <Prices barre={s.prixRef} prix={s.prixOp} remise={s.remise}
             strong={enCours ? 'text-amber-700 dark:text-amber-300' : 'text-green-700 dark:text-green-300'} />
           <IlvButton onClick={() => onIlv({ sources: s.produits.map(opProductSource), preferredType: 'promo' })} />
         </div>
@@ -1384,6 +1384,7 @@ export default function Operations() {
   const [ops, setOps] = useState([])
   const [bonPlanList, setBonPlanList] = useState([])
   const [engageList, setEngageList] = useState([])
+  const [catalogueList, setCatalogueList] = useState([])
   const [ilv, setIlv] = useState(null)
   const [bonPlanError, setBonPlanError] = useState(false)
   const [modal, setModal] = useState(null) // null | {} | {id,...}
@@ -1422,9 +1423,17 @@ export default function Operations() {
       () => setBonPlanError(true))
   }, [searchUsed])
 
+  // Prix forts de la base vélos : les produits d'OP importés sans prix fort le reprennent d'ici
+  useEffect(() => {
+    if (!searchUsed) return
+    getDocs(collection(db, 'catalogue_produits'))
+      .then(snap => setCatalogueList(snap.docs.map(d => ({ chrono: d.get('chrono'), prixFort: d.get('prixFort') }))))
+      .catch(() => setBonPlanError(true))
+  }, [searchUsed])
+
   const promoIndex = useMemo(
-    () => buildPromoIndex({ ops: visibleOps, produits: opProduits.produits, bonPlanList, engageList }),
-    [visibleOps, opProduits.produits, bonPlanList, engageList],
+    () => buildPromoIndex({ ops: visibleOps, produits: opProduits.produits, bonPlanList, engageList, catalogue: catalogueList }),
+    [visibleOps, opProduits.produits, bonPlanList, engageList, catalogueList],
   )
   const searchResults = useMemo(() => searchPromos(promoIndex, search), [promoIndex, search])
 

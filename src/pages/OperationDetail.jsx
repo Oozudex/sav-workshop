@@ -19,7 +19,7 @@ import { formatEuro } from '../lib/orders'
 import { readSheetWithFills } from '../lib/excel'
 import { BON_PLAN_COLLECTION, bonPlanDocId, bonPlanTransfer } from '../lib/bonPlan'
 import {
-  OP_SEGMENTS, SEGMENT_LABELS, bonPlanPrices, segmentFromInput, cleanRef, isBonPlanBetter, isBonPlanSame, nomAffiche, normName, parseOpSheet, planImport, prixReference, remisePct, resolveLines,
+  OP_SEGMENTS, SEGMENT_LABELS, bonPlanPrices, segmentFromInput, cleanRef, isBonPlanBetter, isBonPlanSame, nomAffiche, withPrixFort, normName, parseOpSheet, planImport, prixReference, remisePct, resolveLines,
 } from '../lib/opImport'
 
 
@@ -199,9 +199,9 @@ function LinePrices({ p }) {
   return (
     <div className={['space-y-0.5 whitespace-nowrap', better ? 'opacity-60' : ''].join(' ')}>
       <div className="flex items-baseline gap-1.5">
-        {ref != null && !same && <span className="text-gray-400 dark:text-neutral-500 line-through">{fmtPrice(ref)}</span>}
+        {ref != null && ref > p.prixOp && <span className="text-gray-400 dark:text-neutral-500 line-through">{fmtPrice(ref)}</span>}
         <span className="font-semibold text-gray-900 dark:text-white">{fmtPrice(p.prixOp)}</span>
-        {rem != null && !better && !same && <span className="text-emerald-600 dark:text-emerald-400 font-semibold">-{rem}%</span>}
+        {rem > 0 && <span className="text-emerald-600 dark:text-emerald-400 font-semibold">-{rem}%</span>}
       </div>
       {p.prixBonPlan != null && (
         <p className={`text-[10px] ${better ? 'text-orange-600 dark:text-orange-400' : 'text-blue-600 dark:text-blue-400'}`}>
@@ -503,12 +503,10 @@ function PriceCell({ p, compact }) {
   return (
     <div className="space-y-0.5">
       <div className="flex items-baseline gap-2 flex-wrap">
-        {/* Prix barré : la référence légale ; si le bon plan est au même prix ou moins cher, le prix fort (sans remise affichée) */}
-        {better || same
-          ? p.prixFort != null && p.prixFort > p.prixOp && <span className="text-gray-400 dark:text-neutral-500 line-through">{formatEuro(p.prixFort)}</span>
-          : ref != null && <span className="text-gray-400 dark:text-neutral-500 line-through">{formatEuro(ref)}</span>}
+        {/* Prix barré : le prix bon plan s'il est plus cher que l'OP (référence légale), sinon le prix fort */}
+        {ref != null && ref > p.prixOp && <span className="text-gray-400 dark:text-neutral-500 line-through">{formatEuro(ref)}</span>}
         <span className={`font-bold whitespace-nowrap ${compact ? 'text-xs' : 'text-sm'} ${better ? 'text-gray-400 dark:text-neutral-500' : 'text-gray-900 dark:text-white'}`}>{formatEuro(p.prixOp)}</span>
-        {rem > 0 && !better && !same && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">-{rem} %</span>}
+        {rem > 0 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">-{rem} %</span>}
       </div>
       {better && (
         <p className="text-[11px] font-semibold text-orange-600 dark:text-orange-400">Bon plan déjà moins cher ({formatEuro(p.prixBonPlan)})</p>
@@ -673,14 +671,31 @@ export default function OperationDetail() {
     let cancelled = false
     Promise.all(Array.from({ length: Math.ceil(ids.length / 30) }, (_, i) =>
       getDocs(query(collection(db, BON_PLAN_COLLECTION), where(documentId(), 'in', ids.slice(i * 30, i * 30 + 30))))))
-      .then(snaps => !cancelled && setBonPlansActuels(new Map(snaps.flatMap(s => s.docs.map(d => [d.id, d.get('prixBonPlan')])))))
+      .then(snaps => !cancelled && setBonPlansActuels(new Map(snaps.flatMap(s => s.docs.map(d => [d.id, d.data()])))))
       .catch(() => {})
     return () => { cancelled = true }
   }, [bonPlanIds])
+
+  // Prix forts de la base vélos : un fichier d'OP sans colonne « Prix fort » les reprend d'ici
+  const [prixFortsBase, setPrixFortsBase] = useState(new Map())
+  const chronos = [...new Set(produits.map(p => cleanRef(p.chrono)).filter(Boolean))].sort().join(',')
+  useEffect(() => {
+    if (!chronos) return
+    const list = chronos.split(',')
+    let cancelled = false
+    Promise.all(Array.from({ length: Math.ceil(list.length / 30) }, (_, i) =>
+      getDocs(query(collection(db, 'catalogue_produits'), where('chrono', 'in', list.slice(i * 30, i * 30 + 30))))))
+      .then(snaps => !cancelled && setPrixFortsBase(new Map(snaps.flatMap(s => s.docs.map(d => [cleanRef(d.get('chrono')), d.get('prixFort')])))))
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [chronos])
+
   const produitsAffiches = useMemo(() => produits.map(p => {
-    const actuel = bonPlansActuels.get(bonPlanDocId(p))
-    return actuel != null ? { ...p, prixBonPlan: actuel } : p
-  }), [produits, bonPlansActuels])
+    const bp = bonPlansActuels.get(bonPlanDocId(p))
+    const prixForts = new Map(prixFortsBase)
+    if (!prixForts.get(cleanRef(p.chrono)) && bp?.prixFort > 0) prixForts.set(cleanRef(p.chrono), bp.prixFort)
+    return withPrixFort(bp?.prixBonPlan != null ? { ...p, prixBonPlan: bp.prixBonPlan } : p, prixForts)
+  }), [produits, bonPlansActuels, prixFortsBase])
 
   async function handleSaveProduit(form) {
     const data = {
