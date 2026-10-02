@@ -22,6 +22,7 @@ const PAGE_TITLES = {
   '/operations': 'Opérations Commerciales',
   '/flocage': 'Flocage',
   '/obut': 'Commandes OBUT',
+  '/todo': 'Todo list',
 }
 
 export default function Navbar() {

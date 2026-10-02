@@ -21,6 +21,7 @@ const OperationDetail = lazy(() => import('./pages/OperationDetail'))
 const Flocage         = lazy(() => import('./pages/Flocage'))
 const Transfert       = lazy(() => import('./pages/Transfert'))
 const Obut            = lazy(() => import('./pages/Obut'))
+const Todo            = lazy(() => import('./pages/Todo'))
 
 // Écran d'attente (session en cours de vérification, page en téléchargement)
 function PageLoader() {
@@ -77,6 +78,7 @@ export default function App() {
           <Route path="/" element={<PrivateRoute><Home /></PrivateRoute>} />
           <Route path="/tickets" element={<PrivateRoute><Tickets /></PrivateRoute>} />
           <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
+          <Route path="/todo" element={<PrivateRoute><Todo /></PrivateRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
           <Route
             path="/settings"

@@ -245,6 +245,32 @@ service cloud.firestore {
       allow delete: if isSignedIn() && isAdmin();
     }
 
+    /* ── Todo list, tâches récurrentes et mot du soir (par rayon d'un magasin) ── */
+    // Un rayon gère sa liste ; le directeur toutes celles de son magasin ; acheteurs et direction toutes.
+    function canTodo(data) {
+      return isGlobal() || (isLocalUser() && data.get('magasinId', null) == magasinId() &&
+        (isDirMag() || role() == data.get('rayon', null)));
+    }
+    match /todos/{todoId} {
+      // resource == null : document pas encore créé (tâche automatique créée une seule fois)
+      allow read:   if isSignedIn() && (resource == null || canTodo(resource.data));
+      allow create: if isSignedIn() && canTodo(request.resource.data);
+      allow update: if isSignedIn() && canTodo(resource.data) && canTodo(request.resource.data);
+      allow delete: if isSignedIn() && canTodo(resource.data);
+    }
+    match /todo_recurrences/{recId} {
+      allow read:   if isSignedIn() && (resource == null || canTodo(resource.data));
+      allow create: if isSignedIn() && canTodo(request.resource.data);
+      allow update: if isSignedIn() && canTodo(resource.data) && canTodo(request.resource.data);
+      allow delete: if isSignedIn() && canTodo(resource.data);
+    }
+    match /mots_du_soir/{motId} {
+      allow read:   if isSignedIn() && (resource == null || canTodo(resource.data));
+      allow create, update: if isSignedIn() && canTodo(request.resource.data) &&
+        (resource == null || canTodo(resource.data));
+      allow delete: if isSignedIn() && canTodo(resource.data);
+    }
+
     /* ── Calendrier ─────────────────────────────────────────────────────── */
     match /calendar_events/{eventId} {
       allow read: if isSignedIn() && (

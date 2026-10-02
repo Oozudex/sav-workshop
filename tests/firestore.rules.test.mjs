@@ -190,6 +190,39 @@ describe('mot de passe temporaire', () => {
   })
 })
 
+describe('todo list', () => {
+  it("un rayon gère sa liste, pas celle des autres rayons ni des autres magasins", async () => {
+    const t = { magasinId: 'A', rayon: 'velo', titre: 'Ranger la réserve', fait: false }
+    await assertSucceeds(setDoc(doc(as('veloA'), 'todos', 't1'), t))
+    await assertSucceeds(getDoc(doc(as('veloA'), 'todos', 't1')))
+    await assertSucceeds(updateDoc(doc(as('veloA'), 'todos', 't1'), { fait: true }))
+    await assertFails(getDoc(doc(as('chaussureA'), 'todos', 't1')))
+    await assertFails(getDoc(doc(as('veloB'), 'todos', 't1')))
+    await assertFails(setDoc(doc(as('chaussureA'), 'todos', 't2'), t))
+    await assertFails(updateDoc(doc(as('veloA'), 'todos', 't1'), { rayon: 'chaussure' }))
+  })
+  it("le directeur gère toutes les listes de son magasin", async () => {
+    await assertSucceeds(setDoc(doc(as('dirmagA'), 'todos', 't3'), { magasinId: 'A', rayon: 'chaussure', titre: 'X' }))
+    await assertSucceeds(getDoc(doc(as('dirmagA'), 'todos', 't3')))
+    await assertFails(setDoc(doc(as('dirmagA'), 'todos', 't4'), { magasinId: 'B', rayon: 'velo', titre: 'X' }))
+  })
+  it("une tâche automatique pas encore créée peut être lue (création unique)", async () => {
+    await assertSucceeds(getDoc(doc(as('veloA'), 'todos', 'op_debut_x_A_velo')))
+  })
+  it("requête de la liste d'un rayon", async () => {
+    await assertSucceeds(getDocs(query(collection(as('veloA'), 'todos'), where('magasinId', '==', 'A'), where('rayon', '==', 'velo'))))
+    await assertFails(getDocs(query(collection(as('veloA'), 'todos'), where('magasinId', '==', 'A'))))
+    await assertSucceeds(getDocs(query(collection(as('dirmagA'), 'todos'), where('magasinId', '==', 'A'))))
+  })
+  it("mot du soir du rayon", async () => {
+    const m = { magasinId: 'A', rayon: 'velo', texte: 'Livraison demain 9 h', auteur: 'Thomas' }
+    await assertSucceeds(setDoc(doc(as('veloA'), 'mots_du_soir', 'A_velo'), m))
+    await assertSucceeds(getDoc(doc(as('veloA'), 'mots_du_soir', 'A_velo')))
+    await assertFails(getDoc(doc(as('chaussureA'), 'mots_du_soir', 'A_velo')))
+    await assertFails(setDoc(doc(as('chaussureA'), 'mots_du_soir', 'A_velo'), { ...m, rayon: 'chaussure' }))
+  })
+})
+
 describe('réglages de l\'application', () => {
   it("tout le monde lit le lien de la procédure SAV, seuls les administrateurs le modifient", async () => {
     await assertSucceeds(setDoc(doc(as('admin'), 'app_settings', 'sav'), { procedureUrl: 'https://drive.google.com/x' }))

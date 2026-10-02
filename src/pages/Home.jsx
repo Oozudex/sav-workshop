@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import WeeklyCalendar from '../components/WeeklyCalendar'
 import InfosBanner from '../components/InfosBanner'
+import TodoWidget from '../components/todo/TodoWidget'
 import { useAuth } from '../store/useAuth'
 import { useShallow } from 'zustand/react/shallow'
 import { useMagasin } from '../store/useMagasin'
@@ -365,11 +366,11 @@ export default function Home() {
       <main className="flex-1 flex flex-col lg:flex-row lg:items-start">
 
         {/* Colonne gauche : outils */}
-        <div className={['lg:shrink-0 flex flex-col p-4 sm:p-6 lg:overflow-hidden transition-[width] duration-300 ease-in-out',
-          calendarExpanded ? 'lg:w-1/5' : 'lg:w-2/5',
+        <div className={['lg:shrink-0 flex flex-col p-4 sm:p-6 lg:pr-3 lg:overflow-hidden transition-[width] duration-300 ease-in-out',
+          calendarExpanded ? 'lg:w-1/5' : 'lg:w-[28%]',
         ].join(' ')}>
           <InfosBanner magasinId={effectiveMagasinId} />
-          <div className={['grid gap-2 sm:gap-4 grid-cols-3', calendarExpanded ? 'lg:grid-cols-1' : 'lg:grid-cols-2'].join(' ')}>
+          <div className={['grid gap-2 sm:gap-3 grid-cols-3', calendarExpanded ? 'lg:grid-cols-1' : 'lg:grid-cols-2'].join(' ')}>
             {visibleSections.map(s => {
               const c = COLOR[s.color]
               return (
@@ -378,7 +379,7 @@ export default function Home() {
                   onClick={() => !s.soon && (s.external ? window.open(s.path, '_blank', 'noopener,noreferrer') : navigate(s.path))}
                   disabled={s.soon}
                   className={[
-                    'relative group flex flex-col items-center text-center lg:items-start lg:text-left gap-2 lg:gap-4 p-3 sm:p-4 lg:p-6 rounded-2xl border transition-all',
+                    'relative group flex flex-col items-center text-center lg:items-start lg:text-left gap-2 lg:gap-3 p-3 sm:p-4 rounded-2xl border transition-all',
                     'bg-white dark:bg-neutral-900',
                     'border-gray-200 dark:border-neutral-800',
                     s.soon
@@ -391,19 +392,19 @@ export default function Home() {
                       {counts[s.path]}
                     </span>
                   )}
-                  <div className={`p-2 lg:p-3 rounded-xl ${c.bg}`}>
+                  <div className={`p-2 rounded-xl ${c.bg}`}>
                     <span className={c.icon}>{s.icon}</span>
                   </div>
                   <div className="flex-1">
                     <p className="text-xs lg:text-sm font-semibold text-gray-900 dark:text-white leading-snug">
                       {s.label}
                     </p>
-                    <p className="hidden lg:block text-xs text-gray-400 dark:text-neutral-500 mt-1 leading-relaxed">
+                    <p className="hidden xl:block text-[11px] text-gray-400 dark:text-neutral-500 mt-1 leading-snug">
                       {s.description}
                     </p>
                   </div>
                   <span className={[
-                    'hidden lg:flex w-full h-8 items-center justify-center rounded-lg text-xs font-semibold transition-colors',
+                    'hidden lg:flex w-full h-7 items-center justify-center rounded-lg text-[11px] font-semibold transition-colors',
                     s.soon
                       ? 'bg-gray-100 text-gray-400 dark:bg-neutral-800 dark:text-neutral-500'
                       : `text-white ${c.btn}`,
@@ -414,6 +415,11 @@ export default function Home() {
               )
             })}
           </div>
+        </div>
+
+        {/* Colonne du milieu : todo list du rayon (masquée quand le calendrier est agrandi) */}
+        <div className={['lg:shrink-0 px-4 pb-4 sm:px-6 sm:pb-6 lg:px-3 lg:py-6 lg:w-[24%] lg:sticky lg:top-12', calendarExpanded ? 'lg:hidden' : ''].join(' ')}>
+          <TodoWidget profile={profile} magasinId={effectiveMagasinId} />
         </div>
 
         {/* Séparateur vertical + bouton expand */}
@@ -436,8 +442,7 @@ export default function Home() {
         </div>
 
         {/* Colonne droite : calendrier */}
-        <div className={['lg:shrink-0 lg:sticky lg:top-12 lg:h-[calc(100vh-3rem)] flex flex-col px-4 pb-4 sm:px-6 sm:pb-6 lg:p-6 transition-[width] duration-300 ease-in-out',
-          calendarExpanded ? 'lg:w-4/5' : 'lg:w-3/5',
+        <div className={['lg:flex-1 lg:min-w-0 lg:sticky lg:top-12 lg:h-[calc(100vh-3rem)] flex flex-col px-4 pb-4 sm:px-6 sm:pb-6 lg:p-6 lg:pl-5 transition-[width] duration-300 ease-in-out',
         ].join(' ')}>
           <WeeklyCalendar magasinId={effectiveMagasinId} />
         </div>
