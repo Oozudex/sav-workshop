@@ -106,11 +106,9 @@ function TodoItem({ t, today, staff, onToggle, onAssign, onRemove }) {
 }
 
 /* ── Mot du soir ── */
-function MotDuSoir({ mot, staff, onSave, onVu, compact }) {
+function MotDuSoir({ mot, onSave, onVu, compact }) {
   const [writing, setWriting] = useState(false)
   const [texte, setTexte] = useState('')
-  const [auteur, setAuteur] = useState('')
-  const [lecteur, setLecteur] = useState('')
   const [saving, setSaving] = useState(false)
   // Disparaît dès qu'un collègue l'a lu
   const recent = motRecent(mot) && !mot.vuPar?.length
@@ -119,31 +117,23 @@ function MotDuSoir({ mot, staff, onSave, onVu, compact }) {
 
   async function publish(e) {
     e.preventDefault()
-    if (!texte.trim() || !auteur) return
+    if (!texte.trim()) return
     setSaving(true)
-    try { await onSave(texte, auteur); setWriting(false); setTexte('') } finally { setSaving(false) }
+    try { await onSave(texte); setWriting(false); setTexte('') } finally { setSaving(false) }
   }
 
   return (
     <div className="space-y-2">
       {recent && (
         <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 dark:border-indigo-500/30 dark:bg-indigo-500/10 p-3">
-          <p className="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">🌙 Mot de {mot.auteur} · {quand}</p>
+          <p className="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">🌙 Mot du soir · {quand}</p>
           <p className="mt-1 text-sm text-gray-800 dark:text-neutral-100 whitespace-pre-wrap break-words">{mot.texte}</p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <span className="text-[10px] text-indigo-600/80 dark:text-indigo-300/80">Disparaît une fois lu</span>
-            {staff.length > 0 && (
-              <span className="inline-flex items-center gap-1 ml-auto">
-                <select value={lecteur} onChange={e => setLecteur(e.target.value)} aria-label="Qui l’a lu ?" className={`${selectCls} !h-7 text-[11px]`}>
-                  <option value="">Qui l’a lu ?</option>
-                  {staff.map(s => <option key={s.id} value={s.nom}>{s.nom}</option>)}
-                </select>
-                <button type="button" disabled={!lecteur} onClick={() => { onVu(lecteur); setLecteur('') }}
-                  className="h-7 px-2.5 rounded-lg text-[11px] font-semibold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40">
-                  Lu 👍
-                </button>
-              </span>
-            )}
+            <button type="button" onClick={onVu}
+              className="ml-auto h-7 px-2.5 rounded-lg text-[11px] font-semibold bg-indigo-600 text-white hover:bg-indigo-700">
+              Lu 👍
+            </button>
           </div>
         </div>
       )}
@@ -154,12 +144,8 @@ function MotDuSoir({ mot, staff, onSave, onVu, compact }) {
             placeholder="Ex. Livraison Nakamura à 9 h, le vélo de M. Durand est prêt à rendre…"
             className="Input text-sm resize-y leading-relaxed" />
           <div className="flex flex-wrap items-center gap-2">
-            <select value={auteur} onChange={e => setAuteur(e.target.value)} aria-label="Qui écrit ?" className={`${selectCls} flex-1`}>
-              <option value="">— Qui écrit ?</option>
-              {staff.map(s => <option key={s.id} value={s.nom}>{s.nom}</option>)}
-            </select>
-            <button type="button" onClick={() => setWriting(false)} className="h-8 px-3 rounded-lg text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-neutral-800">Annuler</button>
-            <button type="submit" disabled={!texte.trim() || !auteur || saving}
+            <button type="button" onClick={() => setWriting(false)} className="ml-auto h-8 px-3 rounded-lg text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-neutral-800">Annuler</button>
+            <button type="submit" disabled={!texte.trim() || saving}
               className="h-8 px-3 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40">
               {saving ? '…' : 'Laisser le mot'}
             </button>
@@ -239,7 +225,7 @@ export default function TodoPanel({ data, magasinId, rayon, compact = false }) {
           {semaine.slice(0, 5).map((r, i) => `${['🥇', '🥈', '🥉'][i] || '·'} ${r.nom} (${r.total})`).join('  ')}
         </p>
       )}
-      <MotDuSoir mot={mot} staff={staff} onSave={data.saveMot} onVu={data.motVu} compact={compact} />
+      <MotDuSoir mot={mot} onSave={data.saveMot} onVu={data.motVu} compact={compact} />
 
       <form onSubmit={add} className="flex gap-2">
         <input value={titre} onChange={e => setTitre(e.target.value)} placeholder="Ajouter une tâche…" aria-label="Nouvelle tâche"

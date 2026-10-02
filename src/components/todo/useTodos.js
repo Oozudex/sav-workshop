@@ -119,10 +119,11 @@ export function useTodos(magasinId, rayon) {
     }),
     toggleRecurrence: r => updateDoc(doc(db, RECURRENCE_COLLECTION, r.id), { actif: r.actif === false }),
     removeRecurrence: r => deleteDoc(doc(db, RECURRENCE_COLLECTION, r.id)),
-    saveMot: (texte, auteur) => setDoc(doc(db, MOT_COLLECTION, motDocId(magasinId, rayon)), {
-      magasinId, rayon, texte: texte.trim(), auteur, at: serverTimestamp(), vuPar: [], createdBy: user?.uid || null,
+    saveMot: texte => setDoc(doc(db, MOT_COLLECTION, motDocId(magasinId, rayon)), {
+      magasinId, rayon, texte: texte.trim(), at: serverTimestamp(), vuPar: [], createdBy: user?.uid || null,
     }),
-    motVu: nom => updateDoc(doc(db, MOT_COLLECTION, motDocId(magasinId, rayon)), { vuPar: arrayUnion(nom) }),
+    // Lu par un collègue : le mot disparaît (vuPar non vide)
+    motVu: () => updateDoc(doc(db, MOT_COLLECTION, motDocId(magasinId, rayon)), { vuPar: arrayUnion(user?.uid || 'lu') }),
   }), [magasinId, rayon, user?.uid])
 
   return {
