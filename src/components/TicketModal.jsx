@@ -12,6 +12,7 @@ import { BIKE_TYPES, PRIORITIES, CAN_DELETE_ROLES, STATUSES, STATUS_LABELS } fro
 import { STATUS_DOT } from './TicketCard'
 import { useStaff } from '../lib/useStaff'
 import { commentExcerpt, withCommentEdited, withCommentRemoved } from '../lib/ticketHistory'
+import BikeBrandSelect from './BikeBrandSelect'
 
 export default function TicketModal({ ticket, role, onClose, onDelete, onChangeStatus }) {
     const overlayRef = useRef(null)
@@ -428,7 +429,7 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onChangeS
                                 </Field>
                                 <Field label="Marque">
                                     {editing
-                                        ? <input className="Input" value={draft.bikeBrand || ''} onChange={e => onChange('bikeBrand', e.target.value)} />
+                                        ? <BikeBrandSelect value={draft.bikeBrand || ''} onChange={v => onChange('bikeBrand', v)} />
                                         : <Val>{ticket.bikeBrand}</Val>}
                                 </Field>
                                 <Field label="Modèle">

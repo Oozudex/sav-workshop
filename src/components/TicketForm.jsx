@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { BIKE_TYPES, PRIORITIES } from '../lib/constants'
+import BikeBrandSelect from './BikeBrandSelect'
 
 const INITIAL = {
   customerName: '', customerPhone: '',
@@ -101,7 +102,7 @@ export default function TicketForm({ onSubmit, onClose, users = [], initialValue
                   </select>
                 </Field>
                 <Field label="Marque">
-                  <input className="Input" value={form.bikeBrand} onChange={e => set('bikeBrand', e.target.value)} />
+                  <BikeBrandSelect value={form.bikeBrand} onChange={v => set('bikeBrand', v)} />
                 </Field>
                 <Field label="Modèle">
                   <input className="Input" value={form.bikeModel} onChange={e => set('bikeModel', e.target.value)} />

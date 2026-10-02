@@ -13,6 +13,8 @@ export const STATUS_LABELS = {
 export const ORDER_CLOSED_STATUTS = ['retiree', 'annulee', 'livree']
 
 export const BIKE_TYPES = ['VTT', 'Route', 'Gravel', 'Urbain', 'Enfant', 'Électrique']
+// Marques proposées à la création d'un ticket ; « Autre marque » permet de la saisir
+export const BIKE_BRANDS = ['NAKAMURA', 'BH', 'SUPERIOR', 'ROCK MACHINE', 'GRANVILLE', 'SUNN', 'SCRAPPER', 'Q-BIKES']
 export const PRIORITIES = ['Normal', 'Urgent']
 
 // ── Rayons ────────────────────────────────────────────────────────────────────
