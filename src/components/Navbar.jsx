@@ -74,15 +74,14 @@ export default function Navbar() {
 
         {/* Left : home icon + brand ou back arrow + titre (tronqué sur petit écran) */}
         <div className="flex items-center gap-1 sm:gap-2 min-w-0">
+          {/* Symbole Intersport : retour à l'accueil (pastille blanche en thème sombre, pour garder le bleu lisible) */}
           <button
             onClick={() => navigate('/')}
             title="Accueil"
-            className="h-8 w-8 shrink-0 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100
-                       dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors"
+            aria-label="Accueil"
+            className="h-8 w-8 shrink-0 grid place-items-center rounded-lg hover:bg-gray-100 dark:bg-white dark:hover:bg-white/90 transition-colors"
           >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955a1.126 1.126 0 011.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
-            </svg>
+            <img src="/brand/intersport-symbole.webp" alt="" className="h-[22px] w-auto" />
           </button>
           {isHome ? (
             <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">

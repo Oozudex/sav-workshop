@@ -58,3 +58,26 @@ body {
 .animate-fade-in {
     animation: fade-in 0.2s ease-out;
 }
+/* Page de connexion : entrée du logo, balle rouge qui tombe et rebondit, symbole qui flotte */
+@keyframes login-rise {
+    from { opacity: 0; transform: translateY(18px); }
+    to   { opacity: 1; transform: none; }
+}
+@keyframes login-drop {
+    0%   { transform: translateY(-120vh); }
+    55%  { transform: translateY(0) scale(1.06, .9); }
+    68%  { transform: translateY(-12%) scale(.97, 1.04); }
+    80%  { transform: translateY(0) scale(1.03, .96); }
+    90%  { transform: translateY(-3%); }
+    100% { transform: translateY(0); }
+}
+@keyframes login-float {
+    0%, 100% { transform: translate(0, 0) rotate(-8deg); }
+    50%      { transform: translate(14px, -22px) rotate(-5deg); }
+}
+.login-rise  { animation: login-rise .8s cubic-bezier(.2, .8, .2, 1) both; }
+.login-drop  { animation: login-drop 1.4s cubic-bezier(.35, 0, .25, 1) .15s both; }
+.login-float { animation: login-float 14s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+    .login-rise, .login-drop, .login-float { animation: none; }
+}
