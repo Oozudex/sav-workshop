@@ -166,6 +166,18 @@ describe('b2b_tools', () => {
   })
 })
 
+describe('réglages de l\'application', () => {
+  it("tout le monde lit le lien de la procédure SAV, seuls les administrateurs le modifient", async () => {
+    await assertSucceeds(setDoc(doc(as('admin'), 'app_settings', 'sav'), { procedureUrl: 'https://drive.google.com/x' }))
+    await assertSucceeds(getDoc(doc(as('veloA'), 'app_settings', 'sav')))
+    await assertSucceeds(setDoc(doc(as('admin'), 'app_settings', 'commandes'), { procedureUrl: 'https://drive.google.com/y' }))
+    await assertSucceeds(getDoc(doc(as('veloA'), 'app_settings', 'commandes')))
+    await assertFails(setDoc(doc(as('dirgen'), 'app_settings', 'sav'), { procedureUrl: 'https://autre' }))
+    await assertFails(setDoc(doc(as('veloA'), 'app_settings', 'sav'), { procedureUrl: 'https://autre' }))
+    await assertFails(setDoc(doc(as('admin'), 'app_settings', 'sav'), { procedureUrl: 'https://x', autre: true }))
+  })
+})
+
 describe('services', () => {
   it("seuls les administrateurs gèrent les services", async () => {
     await assertSucceeds(getDoc(doc(as('veloA'), 'services', 'svc')))

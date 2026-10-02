@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import AlertSettingsModal from '../components/AlertSettingsModal'
 import OrderStatsModal from '../components/OrderStatsModal'
+import ProcedureButton from '../components/ProcedureButton'
 import { useAuth } from '../store/useAuth'
 import { useShallow } from 'zustand/react/shallow'
 import { useAlerts } from '../store/useAlerts'
@@ -300,6 +301,8 @@ export default function Orders() {
                   )}
                 </button>
               )}
+              {/* Procédure des commandes (lien Google Drive renseigné par les administrateurs) */}
+              <ProcedureButton settingId="commandes" isAdmin={!!profile?.isAdmin} user={user} />
               <button
                 onClick={() => setShowForm(true)}
                 disabled={!effectiveMagasinId}

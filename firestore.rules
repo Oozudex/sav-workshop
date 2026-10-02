@@ -224,6 +224,14 @@ service cloud.firestore {
       }
     }
 
+    /* ── Réglages de l'application (lien de la procédure SAV…) ────────────── */
+    match /app_settings/{settingId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isAdmin() &&
+        request.resource.data.keys().hasOnly(['procedureUrl', 'updatedAt', 'updatedBy']);
+      allow delete: if isSignedIn() && isAdmin();
+    }
+
     /* ── Calendrier ─────────────────────────────────────────────────────── */
     match /calendar_events/{eventId} {
       allow read: if isSignedIn() && (

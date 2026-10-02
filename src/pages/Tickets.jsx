@@ -13,6 +13,7 @@ import {
 import { DragDropContext } from '@hello-pangea/dnd'
 import TicketModal from '../components/TicketModal'
 import CloseTicketDialog from '../components/CloseTicketDialog'
+import ProcedureButton from '../components/ProcedureButton'
 import { withStatusChange } from '../lib/ticketHistory'
 import TicketStatsModal from '../components/TicketStatsModal'
 import AlertSettingsModal from '../components/AlertSettingsModal'
@@ -359,17 +360,20 @@ export default function Tickets() {
               </>
             )}
 
-            {/* New */}
-            <button
-              onClick={() => setShowForm(true)}
-              disabled={!effectiveMagasinId}
-              title={effectiveMagasinId ? '' : 'Sélectionne un magasin pour créer un ticket'}
-              className="disabled:opacity-50 order-2 sm:order-none ml-auto sm:ml-0 h-8 px-4 rounded-lg bg-gray-900 text-white text-xs font-semibold
-                         hover:bg-gray-700 transition-colors
-                         dark:bg-white dark:text-black dark:hover:bg-gray-100"
-            >
-              + Nouveau ticket
-            </button>
+            {/* Procédure (lien Google Drive renseigné par les administrateurs) et nouveau ticket */}
+            <div className="order-2 sm:order-none ml-auto sm:ml-0 flex items-center gap-2">
+              <ProcedureButton settingId="sav" isAdmin={!!profile?.isAdmin} user={user} />
+              <button
+                onClick={() => setShowForm(true)}
+                disabled={!effectiveMagasinId}
+                title={effectiveMagasinId ? '' : 'Sélectionne un magasin pour créer un ticket'}
+                className="disabled:opacity-50 h-8 px-4 rounded-lg bg-gray-900 text-white text-xs font-semibold
+                           hover:bg-gray-700 transition-colors
+                           dark:bg-white dark:text-black dark:hover:bg-gray-100"
+              >
+                + Nouveau ticket
+              </button>
+            </div>
           </div>
         </div>
 
