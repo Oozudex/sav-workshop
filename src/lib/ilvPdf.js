@@ -319,27 +319,41 @@ function drawPromo(ctx, ilv) {
 const DRAW = { normal: drawNormal, promo: drawPromo, bonplan: drawBonPlan, engage: drawEngage }
 
 /**
- * Crée le PDF d'une ILV (résultat de buildIlv).
+ * Crée le PDF d'une ou plusieurs ILV (résultats de buildIlv), une page chacune.
+ * Polices, badges et logos sont intégrés une seule fois pour tout le document.
  * load(path) → Promise<ArrayBuffer|Uint8Array|null> : lit un fichier de public/ilv/ (null s'il n'existe pas).
  */
-export async function renderIlvPdf(ilv, load) {
+export async function renderIlvPages(ilvs, load, title) {
   const doc = await PDFDocument.create()
   doc.registerFontkit(fontkit)
-  doc.setTitle(`ILV ${ilv.type} ${ilv.refLine}`)
+  doc.setTitle(title || (ilvs.length === 1 ? `ILV ${ilvs[0].type} ${ilvs[0].refLine}` : `${ilvs.length} ILV`))
   doc.setCreator('Atelier SAV')
-  const page = doc.addPage([W * PT, H * PT])
 
-  const fontEntries = await Promise.all(FONTS_BY_TYPE[ilv.type].map(async k =>
-    [k, await doc.embedFont(await load(FONTS[k]), { subset: true })]))
-  const wanted = { normal: ['oney', 'oney3', 'oney4', 'oney3t', 'oney4t'], promo: ['promo'], bonplan: ['bonplan'], engage: ['engage', 'slogan'] }[ilv.type]
-  const imageEntries = await Promise.all(wanted.map(async k => [k, await doc.embedPng(await load(IMAGES[k]))]))
-  const logoPath = brandLogoPath(ilv.marque)
-  const logoBytes = logoPath ? await load(logoPath) : null
-  if (logoBytes) imageEntries.push(['marque', await doc.embedPng(logoBytes)])
+  const fonts = new Map(), images = new Map(), logos = new Map()
+  const font = k => { if (!fonts.has(k)) fonts.set(k, load(FONTS[k]).then(b => doc.embedFont(b, { subset: true }))); return fonts.get(k) }
+  const image = k => { if (!images.has(k)) images.set(k, load(IMAGES[k]).then(b => doc.embedPng(b))); return images.get(k) }
+  const logo = path => {
+    if (!logos.has(path)) logos.set(path, load(path).then(b => (b ? doc.embedPng(b) : null)))
+    return logos.get(path)
+  }
+  const wanted = { normal: ['oney', 'oney3', 'oney4', 'oney3t', 'oney4t'], promo: ['promo'], bonplan: ['bonplan'], engage: ['engage', 'slogan'] }
 
-  const ctx = makeCtx(doc, page, Object.fromEntries(fontEntries), Object.fromEntries(imageEntries))
-  DRAW[ilv.type](ctx, ilv)
+  for (const ilv of ilvs) {
+    const page = doc.addPage([W * PT, H * PT])
+    const fontEntries = await Promise.all(FONTS_BY_TYPE[ilv.type].map(async k => [k, await font(k)]))
+    const imageEntries = await Promise.all(wanted[ilv.type].map(async k => [k, await image(k)]))
+    const logoPath = brandLogoPath(ilv.marque)
+    const logoImage = logoPath ? await logo(logoPath) : null
+    if (logoImage) imageEntries.push(['marque', logoImage])
+    const ctx = makeCtx(doc, page, Object.fromEntries(fontEntries), Object.fromEntries(imageEntries))
+    DRAW[ilv.type](ctx, ilv)
+  }
   return doc.save()
+}
+
+// PDF d'une seule ILV
+export function renderIlvPdf(ilv, load) {
+  return renderIlvPages([ilv], load)
 }
 
 // Chargement depuis le site (dossier public/ilv/), gardé en mémoire pour les ILV suivantes

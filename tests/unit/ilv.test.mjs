@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  buildIlv, fmtEuroCents, fmtPoint, fmtRemise, ilvTypesFor, oneyAllowed, oneyMonthly, packPrice, titleName,
+  buildIlv, fmtEuroCents, opIlvBatch, fmtPoint, fmtRemise, ilvTypesFor, oneyAllowed, oneyMonthly, packPrice, titleName,
 } from '../../src/lib/ilv.js'
 
 // Mêmes données que les ILV Piivo de référence (Allroad 450, pack sport)
@@ -108,5 +108,22 @@ describe('accessoires', () => {
 describe('référence', () => {
   it('sans référence, on affiche la réf. fournisseur ou le chrono', () => {
     assert.equal(buildIlv({ ...ALLROAD, reference: null, chrono: '0-228749', type: 'normal' }).refLine, 'Réf. :  0-228749 / Allroad 450')
+  })
+})
+
+describe('toutes les ILV d\'une OP', () => {
+  const op = { prixOp: 1299.99, dateDebut: '2026-09-19', dateFin: '2026-10-04' }
+  it('prix promo par défaut, prix engagé prioritaire, produits incomplets mis de côté', () => {
+    const items = [
+      { ...ALLROAD, ...op, key: 'a' },
+      { ...ALLROAD, ...op, key: 'b', prixEngage: 1199.99 },
+      { ...ALLROAD, ...op, key: 'c', pack: null },
+      { ...ALLROAD, ...op, key: 'd', segment: 'accessoires', pack: null, nom: 'CASQUE' },
+    ]
+    const { ilvs, skipped } = opIlvBatch(items, { duree: 2 })
+    assert.deepEqual(ilvs.map(x => [x.item.key, x.ilv.type]), [['a', 'promo'], ['b', 'engage'], ['d', 'promo']])
+    assert.equal(ilvs[0].ilv.lines.at(-1), 'PRIX PACK OPTIONNEL : 63.98€')
+    assert.equal(ilvs[2].ilv.packLine, null)
+    assert.deepEqual(skipped.map(x => [x.item.key, x.reason]), [['c', 'Pack optionnel non renseigné pour ce produit.']])
   })
 })

@@ -11,6 +11,7 @@ import {
 import { GLOBAL_ROLES, RAYON_TYPE_LABELS } from '../lib/constants'
 import { OpModal } from './Operations'
 import IlvDialog from '../components/IlvDialog'
+import IlvBatchDialog from '../components/IlvBatchDialog'
 import ActionsMenu from '../components/ActionsMenu'
 import { deleteOperation, opFormData } from '../lib/opActions'
 import { opRayons, opSummary, opTiming } from '../lib/opSearch'
@@ -621,19 +622,26 @@ export default function OperationDetail() {
   const [showImport, setShowImport] = useState(false)
   const [transfer,   setTransfer]   = useState({ busy: false, error: '' })
   const [ilv,        setIlv]        = useState(null)
+  const [ilvBatch,   setIlvBatch]   = useState(null) // sources de toutes les ILV de l'OP
+
+  // Produit de l'OP → source d'ILV
+  const ilvSource = v => ({
+    key: v.id, label: [v.couleur, v.reference, v.chrono].filter(Boolean).join(' · ') || v.nom,
+    chrono: v.chrono, refFournisseur: v.refFournisseur, nom: v.nom, marque: v.marque, reference: v.reference,
+    couleur: v.couleur, segment: v.segment, prixFort: v.prixFort ?? null, prixOp: v.prixOp, prixBonPlan: v.prixBonPlan ?? null,
+    dateDebut: op.dateDebut, dateFin: op.dateFin,
+  })
 
   // Déclinaisons d'un produit de l'OP → sources d'ILV (prix promo par défaut)
   function openIlv(group, p) {
-    setIlv({
-      initialKey: p.id,
-      preferredType: 'promo',
-      sources: group.map(v => ({
-        key: v.id, label: [v.couleur, v.reference, v.chrono].filter(Boolean).join(' · ') || v.nom,
-        chrono: v.chrono, refFournisseur: v.refFournisseur, nom: v.nom, marque: v.marque, reference: v.reference,
-        couleur: v.couleur, segment: v.segment, prixFort: v.prixFort ?? null, prixOp: v.prixOp, prixBonPlan: v.prixBonPlan ?? null,
-        dateDebut: op.dateDebut, dateFin: op.dateFin,
-      })),
-    })
+    setIlv({ initialKey: p.id, preferredType: 'promo', sources: group.map(ilvSource) })
+  }
+
+  // Toutes les ILV de l'OP, dans l'ordre de la liste (nom puis couleur)
+  function openIlvBatch() {
+    const list = produitsAffiches.filter(p => p.prixOp != null)
+      .sort((a, b) => nomAffiche(a).localeCompare(nomAffiche(b), 'fr') || (a.couleur || '').localeCompare(b.couleur || '', 'fr'))
+    setIlvBatch(list.map(ilvSource))
   }
 
   useEffect(() => {
@@ -805,8 +813,17 @@ export default function OperationDetail() {
                 <p className="text-sm text-gray-500 dark:text-neutral-400">{infos.join(' · ')}</p>
                 {op.description && <p className="text-sm text-gray-600 dark:text-neutral-400 pt-1">{op.description}</p>}
               </div>
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                {/* Toutes les ILV de l'OP en un seul PDF (pour tout le monde) */}
+                {produits.some(p => p.prixOp != null) && (
+                  <button onClick={openIlvBatch} title="Un seul PDF avec une ILV par produit, prêt à imprimer"
+                    className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg text-xs font-semibold border border-gray-200 dark:border-neutral-700 text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800">
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+                    Toutes les ILV
+                  </button>
+                )}
               {canCreate && (
-                <div className="flex items-center gap-2 shrink-0">
+                <>
                   {produits.length > 0 && (
                     <button onClick={() => setShowImport(true)}
                       className="h-9 px-3 rounded-lg text-xs font-medium border border-gray-200 dark:border-neutral-700 text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800">
@@ -821,8 +838,9 @@ export default function OperationDetail() {
                     { label: 'Modifier l’OP', onClick: () => setModal({ editOp: true }) },
                     { label: 'Supprimer l’OP', onClick: handleDeleteOp, danger: true },
                   ]} />
-                </div>
+                </>
               )}
+              </div>
             </div>
 
             {produits.length > 0 && (
@@ -962,6 +980,7 @@ export default function OperationDetail() {
         <ImportModal opId={id} produits={produits} onClose={() => setShowImport(false)} />
       )}
       {ilv && <IlvDialog {...ilv} onClose={() => setIlv(null)} />}
+      {ilvBatch && <IlvBatchDialog sources={ilvBatch} nom={op.nom} onClose={() => setIlvBatch(null)} />}
     </div>
   )
 }

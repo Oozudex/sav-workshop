@@ -185,3 +185,20 @@ export function buildIlv(p, { duree = 1, oney = null } = {}) {
       return { error: 'Modèle d’ILV inconnu.' }
   }
 }
+
+/**
+ * ILV de tous les produits d'une OP, chacun avec son modèle prioritaire (prix engagé, sinon prix promo)
+ * et le pack d'un an ou de deux ans. Les produits incomplets (pack ou prix manquant) sont mis de côté.
+ * Renvoie { ilvs: [{ item, ilv }], skipped: [{ item, reason }] }.
+ */
+export function opIlvBatch(items, { duree = 1 } = {}) {
+  const ilvs = [], skipped = []
+  for (const item of items) {
+    const type = ilvTypesFor(item)[0]
+    if (!type) { skipped.push({ item, reason: 'Prix manquant.' }); continue }
+    const ilv = buildIlv({ ...item, type, pack: sansPack(item.segment) ? null : item.pack || null }, { duree })
+    if (ilv.error) skipped.push({ item, reason: ilv.error })
+    else ilvs.push({ item, ilv })
+  }
+  return { ilvs, skipped }
+}
