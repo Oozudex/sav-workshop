@@ -72,3 +72,36 @@ export function reschedulePrefill(ev) {
     rescheduledFrom: ev?.date || null,
   }
 }
+
+// ── OP du calendrier : une barre par OP sur toute sa durée, comme Google Agenda ──
+// Dates 'YYYY-MM-DD' comptées en UTC : pas de décalage au changement d'heure
+const utc = s => { const [y, m, d] = s.split('-').map(Number); return Date.UTC(y, m - 1, d) }
+const addDaysStr = (s, n) => new Date(utc(s) + n * 86400000).toISOString().slice(0, 10)
+const daysBetween = (a, b) => Math.round((utc(b) - utc(a)) / 86400000)
+
+/**
+ * Barres des OP pour la semaine qui commence le lundi weekStart ('YYYY-MM-DD').
+ * → [{ op, col (0 = lundi), span (jours), lane (ligne), avant, apres }] ; avant / apres : l'OP
+ * commence avant la semaine ou continue après. Les OP sont rangées sur le moins de lignes possible,
+ * les plus anciennes puis les plus longues en haut.
+ */
+export function opWeekBars(ops, weekStart) {
+  const weekEnd = addDaysStr(weekStart, 6)
+  const bars = ops
+    .filter(op => op.dateDebut && op.dateFin && op.dateDebut <= weekEnd && op.dateFin >= weekStart)
+    .map(op => {
+      const debut = op.dateDebut < weekStart ? weekStart : op.dateDebut
+      const fin = op.dateFin > weekEnd ? weekEnd : op.dateFin
+      return { op, col: daysBetween(weekStart, debut), span: daysBetween(debut, fin) + 1, avant: op.dateDebut < weekStart, apres: op.dateFin > weekEnd }
+    })
+    .sort((a, b) => a.op.dateDebut.localeCompare(b.op.dateDebut) || b.op.dateFin.localeCompare(a.op.dateFin)
+      || String(a.op.nom || '').localeCompare(String(b.op.nom || ''), 'fr'))
+  const lanes = [] // dernière colonne occupée par ligne
+  for (const bar of bars) {
+    let lane = lanes.findIndex(last => last < bar.col)
+    if (lane === -1) lane = lanes.length
+    lanes[lane] = bar.col + bar.span - 1
+    bar.lane = lane
+  }
+  return bars
+}

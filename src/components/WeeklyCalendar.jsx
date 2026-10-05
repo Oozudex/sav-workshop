@@ -11,7 +11,7 @@ import { GLOBAL_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
 import { safeUrl } from '../lib/security'
 import { isOpVisibleFor } from '../lib/opSearch'
 import {
-  absencesFor, canMarkPresence, formatPhone, phoneDigits, rdvClientErrors, rdvToCheck, reschedulePrefill, ticketPrefill,
+  absencesFor, canMarkPresence, formatPhone, opWeekBars, phoneDigits, rdvClientErrors, rdvToCheck, reschedulePrefill, ticketPrefill,
 } from '../lib/calendarEvents'
 import CalendarSettings from './CalendarSettings'
 import Portal from './Portal'
@@ -548,6 +548,33 @@ function PlanningLine({ name, times, isCp, isEco }) {
   )
 }
 
+// OP de la semaine : une barre par OP sur toute sa durée (comme Google Agenda), coupée aux bords
+// de la semaine avec une flèche quand elle commence avant ou continue après
+const fmtJourMois = s => s ? `${s.slice(8, 10)}/${s.slice(5, 7)}` : ''
+function OpBand({ bars, onOpen, className = '' }) {
+  if (!bars.length) return null
+  return (
+    <div className={`grid grid-cols-7 gap-y-1 py-1 ${className}`}>
+      {bars.map(({ op, col, span, lane, avant, apres }) => {
+        const dates = `du ${fmtJourMois(op.dateDebut)} au ${fmtJourMois(op.dateFin)}`
+        return (
+          <button key={op.id} type="button" onClick={() => onOpen(op)}
+            title={[op.globale ? 'OP Animation' : 'Opération commerciale', op.nom, dates].join('\n')}
+            style={{ gridColumn: `${col + 1} / span ${span}`, gridRow: lane + 1 }}
+            className={['h-6 min-w-0 flex items-center gap-1 px-2 text-[11px] font-semibold text-left transition hover:brightness-95 dark:hover:brightness-125',
+              op.globale ? 'bg-amber-500 text-white dark:bg-amber-500/80' : 'bg-amber-100 text-amber-900 dark:bg-amber-500/25 dark:text-amber-100',
+              avant ? 'rounded-l-none' : 'rounded-l-md ml-1', apres ? 'rounded-r-none' : 'rounded-r-md mr-1'].join(' ')}>
+            {avant && <span aria-hidden="true" className="opacity-70">‹</span>}
+            <span className="truncate">{op.globale && <span className="font-bold">Animation · </span>}{op.nom}</span>
+            {span >= 4 && <span className="ml-auto shrink-0 text-[10px] font-medium opacity-70 hidden lg:inline">{dates}</span>}
+            {apres && <span aria-hidden="true" className={`opacity-70 ml-auto ${span >= 4 ? 'lg:ml-0' : ''}`}>›</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 function LegendItem({ active, onClick, dot, label }) {
   return (
     <button onClick={onClick} title={active ? `Masquer : ${label}` : `Afficher : ${label}`}
@@ -571,7 +598,7 @@ export default function WeeklyCalendar({ magasinId }) {
   const [calendarView, setCalendarView] = useState('store') // 'store' | 'personal'
   const [events, setEvents] = useState([])
   const [tickets, setTickets] = useState([])
-  const [opEvents, setOpEvents] = useState([])
+  const [ops, setOps] = useState([])
   const [flocageEvents, setFlocageEvents] = useState([])
   const [activeFilters, setActiveFilters] = useState(new Set(Object.keys(EVENT_TYPES)))
   const [modal, setModal] = useState(null)
@@ -610,48 +637,14 @@ export default function WeeklyCalendar({ magasinId }) {
     return onSnapshot(q, snap => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [magasinId, isPersonal, user.uid, days[0].getTime()])
 
-  /* Chargement des OPs commerciales qui chevauchent la semaine */
+  /* Chargement des OP (standard et animation) qui chevauchent la semaine : affichées en barres */
   useEffect(() => {
-    if (isPersonal) { setOpEvents([]); return }
-    const start = toDateStr(days[0])
+    if (isPersonal) { setOps([]); return }
     const end = toDateStr(days[6])
-    const q = query(
-      collection(db, 'op_commerciales'),
-      where('dateFin', '>=', start),
-    )
-    return onSnapshot(q, snap => {
-      const generated = []
-      for (const d of snap.docs) {
-        const op = { id: d.id, ...d.data() }
-        if (op.dateDebut > end) continue
-
-        if (!isOpVisibleFor(op, profile, magasinId)) continue // même règle que la page OP
-
-        if (op.dateDebut >= start && op.dateDebut <= end) {
-          generated.push({
-            id: `op_${op.id}_start`,
-            type: 'op_commerciale',
-            title: op.nom,
-            label: 'Début d’OP',
-            date: op.dateDebut,
-            opId: op.id,
-            _opPin: true,
-          })
-        }
-        if (op.dateFin >= start && op.dateFin <= end) {
-          generated.push({
-            id: `op_${op.id}_end`,
-            type: 'op_commerciale',
-            title: op.nom,
-            label: 'Fin d’OP',
-            date: op.dateFin,
-            opId: op.id,
-            _opPin: true,
-          })
-        }
-      }
-      setOpEvents(generated)
-    })
+    const q = query(collection(db, 'op_commerciales'), where('dateFin', '>=', toDateStr(days[0])))
+    return onSnapshot(q, snap => setOps(snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(op => op.dateDebut <= end && isOpVisibleFor(op, profile, magasinId)))) // même règle que la page OP
   }, [isPersonal, magasinId, profile, days[0].getTime()])
 
   /* Chargement des tickets avec dueDate dans la semaine */
@@ -735,7 +728,7 @@ export default function WeeklyCalendar({ magasinId }) {
 
   /* Fusion events + tickets + OPs + flocages, filtrage par rôle */
   const allEvents = useMemo(() => {
-    const merged = [...events, ...tickets, ...opEvents, ...flocageEvents]
+    const merged = [...events, ...tickets, ...flocageEvents]
     return merged.filter(ev => {
       if (!activeFilters.has(ev.type)) return false
 
@@ -763,7 +756,11 @@ export default function WeeklyCalendar({ magasinId }) {
       }
       return true
     })
-  }, [events, tickets, opEvents, flocageEvents, activeFilters, isRayonRole, profile, user])
+  }, [events, tickets, flocageEvents, activeFilters, isRayonRole, profile, user])
+
+  /* Barres des OP de la semaine (masquées avec le filtre « Op. commerciale ») */
+  const opBars = useMemo(() => (activeFilters.has('op_commerciale') ? opWeekBars(ops, toDateStr(days[0])) : []),
+    [ops, activeFilters, days])
 
   /* Events groupés par date (hors planning_shift, géré séparément) */
   const byDate = useMemo(() => {
@@ -965,6 +962,8 @@ export default function WeeklyCalendar({ magasinId }) {
     return { count, quota: Number(quota) }
   }
 
+  const openOp = op => navigate(`/operations/${op.id}`)
+
   function openEvent(ev, dateStr) {
     if (ev.type === 'ticket_rendu') { navigate(`/tickets?open=${ev.ticketId}`); return }
     if (ev.opId) { navigate(`/operations/${ev.opId}`); return }
@@ -1069,7 +1068,19 @@ export default function WeeklyCalendar({ magasinId }) {
         </div>
       </div>
 
-      {/* Téléphone : liste des jours de la semaine */}
+      {/* Téléphone : OP de la semaine en barres, puis liste des jours */}
+      {opBars.length > 0 && (
+        <div className="md:hidden px-2 pt-2 pb-1 border-b border-gray-100 dark:border-neutral-800">
+          <div className="grid grid-cols-7">
+            {days.map((day, i) => (
+              <span key={i} className={['text-center text-[10px] font-semibold uppercase', isToday(day) ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-neutral-500'].join(' ')}>
+                {DAYS_FR[i].charAt(0)}{day.getDate()}
+              </span>
+            ))}
+          </div>
+          <OpBand bars={opBars} onOpen={openOp} />
+        </div>
+      )}
       <div className="md:hidden divide-y divide-gray-100 dark:divide-neutral-800">
         {days.map((day, i) => {
           const dateStr = toDateStr(day)
@@ -1104,18 +1115,15 @@ export default function WeeklyCalendar({ magasinId }) {
         })}
       </div>
 
-      {/* Ordinateur : grille hebdomadaire */}
-      <div className="hidden md:grid flex-1 min-h-0 grid-cols-7 divide-x divide-gray-100 dark:divide-neutral-800 overflow-hidden">
-        {days.map((day, i) => {
-          const dateStr = toDateStr(day)
-          const dayEvents = byDate[dateStr] || []
-          const today = isToday(day)
-          const quotaInfo = getDayQuotaInfo(dateStr)
-
-          return (
-            <div key={dateStr} className={['flex flex-col min-w-0 overflow-hidden', today ? 'bg-gray-50/70 dark:bg-neutral-800/30' : ''].join(' ')}>
-              {/* En-tête du jour */}
-              <div className="flex flex-col items-center py-2 border-b border-gray-100 dark:border-neutral-800 gap-0.5">
+      {/* Ordinateur : grille hebdomadaire (en-têtes des jours, barres des OP, événements) */}
+      <div className="hidden md:flex flex-1 min-h-0 flex-col">
+        <div className="grid grid-cols-7 divide-x divide-gray-100 dark:divide-neutral-800 border-b border-gray-100 dark:border-neutral-800">
+          {days.map((day, i) => {
+            const dateStr = toDateStr(day)
+            const today = isToday(day)
+            const quotaInfo = getDayQuotaInfo(dateStr)
+            return (
+              <div key={dateStr} className={['flex flex-col items-center py-2 gap-0.5', today ? 'bg-gray-50/70 dark:bg-neutral-800/30' : ''].join(' ')}>
                 <span className="text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">
                   {DAYS_FR[i]}
                 </span>
@@ -1139,10 +1147,21 @@ export default function WeeklyCalendar({ magasinId }) {
                   </span>
                 )}
               </div>
+            )
+          })}
+        </div>
 
-              {/* Événements (le planning de l'équipe est dans la bande du bas) */}
-              <div
-                className="flex-1 p-1.5 space-y-1 overflow-y-auto cursor-pointer group"
+        {/* OP de la semaine : une barre par OP sur toute sa durée */}
+        <OpBand bars={opBars} onOpen={openOp} className="shrink-0 max-h-[35%] overflow-y-auto border-b border-gray-100 dark:border-neutral-800" />
+
+        <div className="grid flex-1 min-h-0 grid-cols-7 divide-x divide-gray-100 dark:divide-neutral-800 overflow-hidden">
+          {days.map(day => {
+            const dateStr = toDateStr(day)
+            const dayEvents = byDate[dateStr] || []
+            return (
+              // Événements (le planning de l'équipe est dans la bande du bas)
+              <div key={dateStr}
+                className={['min-w-0 p-1.5 space-y-1 overflow-y-auto cursor-pointer group', isToday(day) ? 'bg-gray-50/70 dark:bg-neutral-800/30' : ''].join(' ')}
                 onClick={() => setModal({ event: null, date: dateStr })}
               >
                 {dayEvents.map(ev => (
@@ -1154,9 +1173,9 @@ export default function WeeklyCalendar({ magasinId }) {
                   </div>
                 )}
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
 
       {/* Ordinateur : horaires de l'équipe en bas, alignés sur les jours */}

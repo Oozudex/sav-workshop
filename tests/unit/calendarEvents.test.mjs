@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  absencesFor, canMarkPresence, formatPhone, rdvClientErrors, rdvToCheck, reschedulePrefill, ticketPrefill,
+  absencesFor, canMarkPresence, formatPhone, opWeekBars, rdvClientErrors, rdvToCheck, reschedulePrefill, ticketPrefill,
 } from '../../src/lib/calendarEvents.js'
 
 const OK = { customerName: 'Marie Dubois', customerPhone: '06 12 34 56 78', description: 'Freins avant qui frottent et vitesses qui sautent' }
@@ -65,5 +65,29 @@ describe('présence au RDV', () => {
   it("prépare la reprogrammation", () => {
     const p = reschedulePrefill(rdv('a', '2026-09-29', { customerName: ' Marie Dubois ', description: 'Freins', rayonType: 'velo' }))
     assert.deepEqual(p, { type: 'rdv_client', customerName: 'Marie Dubois', customerPhone: '06 12 34 56 78', description: 'Freins', rayonType: 'velo', rescheduledFrom: '2026-09-29' })
+  })
+})
+
+describe('OP du calendrier', () => {
+  const op = (id, dateDebut, dateFin) => ({ id, nom: id, dateDebut, dateFin })
+  const LUNDI = '2026-10-05'
+  it('une barre sur toute la durée, coupée aux bords de la semaine', () => {
+    const [b] = opWeekBars([op('a', '2026-09-28', '2026-10-15')], LUNDI)
+    assert.deepEqual({ col: b.col, span: b.span, avant: b.avant, apres: b.apres, lane: b.lane }, { col: 0, span: 7, avant: true, apres: true, lane: 0 })
+    const [c] = opWeekBars([op('c', '2026-10-07', '2026-10-09')], LUNDI)
+    assert.deepEqual({ col: c.col, span: c.span, avant: c.avant, apres: c.apres }, { col: 2, span: 3, avant: false, apres: false })
+  })
+  it('ignore les OP hors de la semaine et range les barres sur le moins de lignes possible', () => {
+    const bars = opWeekBars([
+      op('hors', '2026-10-12', '2026-10-20'),
+      op('lundi-mardi', '2026-10-05', '2026-10-06'),
+      op('mercredi', '2026-10-07', '2026-10-07'),
+      op('longue', '2026-10-01', '2026-10-31'),
+    ], LUNDI)
+    assert.deepEqual(bars.map(b => [b.op.id, b.lane]), [['longue', 0], ['lundi-mardi', 1], ['mercredi', 1]])
+  })
+  it('passage à l’heure d’hiver sans décalage', () => {
+    const [b] = opWeekBars([op('a', '2026-10-25', '2026-10-27')], '2026-10-19')
+    assert.deepEqual([b.col, b.span], [6, 1])
   })
 })
