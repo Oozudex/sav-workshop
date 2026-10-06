@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 // Écran aux couleurs Intersport (connexion, choix du mot de passe) : fond bleu, logo blanc,
 // balle rouge qui rebondit et symbole en filigrane, puis une carte blanche pour le formulaire.
 
@@ -39,6 +39,9 @@ export function PasswordInput({ value, onChange, autoComplete, autoFocus = false
 }
 
 export default function BrandScreen({ title, subtitle, children }) {
+  // Titre de l'onglet (RGAA 8.6)
+  useEffect(() => { document.title = `${title} · Groupe Nivault` }, [title])
+
   return (
     <div className="relative min-h-screen overflow-hidden flex items-center justify-center px-4 py-10 text-white"
       style={{ background: `radial-gradient(120% 90% at 20% 0%, #2353b3 0%, ${BLEU} 45%, #0c2766 100%)` }}>
@@ -55,19 +58,19 @@ export default function BrandScreen({ title, subtitle, children }) {
         <div className="login-rise flex flex-col items-center text-center mb-7">
           <img src="/brand/intersport-engages-blanc.webp" alt="Intersport — Engagés sport"
             className="w-64 sm:w-80 h-auto drop-shadow-[0_8px_24px_rgba(0,0,0,.25)]" />
-          <p className="mt-4 text-sm font-medium text-white/75">Groupe Nivault · Outils des magasins</p>
+          <p className="mt-4 text-sm font-medium text-white/90">Groupe Nivault · Outils des magasins</p>
         </div>
 
         {/* Carte */}
-        <div className="login-rise rounded-3xl bg-white text-gray-900 shadow-2xl shadow-black/30 p-6 sm:p-7" style={{ animationDelay: '.15s' }}>
+        <main className="login-rise rounded-3xl bg-white text-gray-900 shadow-2xl shadow-black/30 p-6 sm:p-7" style={{ animationDelay: '.15s' }}>
           <div className="mb-5">
             <h1 className="text-xl font-bold tracking-tight">{title}</h1>
             {subtitle && <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>}
           </div>
           {children}
-        </div>
+        </main>
 
-        <p className="login-rise text-center text-[11px] text-white/50 mt-6" style={{ animationDelay: '.3s' }}>
+        <p className="login-rise text-center text-[11px] text-white/80 mt-6" style={{ animationDelay: '.3s' }}>
           © {new Date().getFullYear()} Groupe Nivault
         </p>
       </div>

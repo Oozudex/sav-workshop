@@ -39,18 +39,18 @@ export default function KanbanBoard({ tickets, onOpen }) {
                 : 'bg-white text-gray-600 border-gray-200 dark:bg-neutral-900 dark:text-neutral-300 dark:border-neutral-700'].join(' ')}>
             <span className={`h-2 w-2 rounded-full ${STATUS_DOT[s]}`} />
             {STATUS_LABELS[s]}
-            <span className={current === s ? 'opacity-70' : 'text-gray-400 dark:text-neutral-500'}>{grouped[s].length}</span>
+            <span className={current === s ? 'opacity-70' : 'text-gray-500 dark:text-neutral-400'}>{grouped[s].length}</span>
           </button>
         ))}
       </div>
       {current === 'Closed' && (
-        <p className="text-[11px] leading-snug text-gray-400 dark:text-neutral-500">
+        <p className="text-[11px] leading-snug text-gray-500 dark:text-neutral-400">
           Affichés 14 jours, puis les données du client sont effacées : le ticket ne sert plus qu'aux statistiques.
         </p>
       )}
       {grouped[current].length === 0 ? (
         <div className="rounded-xl border border-dashed py-10 text-center border-gray-300 dark:border-neutral-700">
-          <p className="text-xs text-gray-400 dark:text-neutral-500">Aucun ticket « {STATUS_LABELS[current]} »</p>
+          <p className="text-xs text-gray-500 dark:text-neutral-400">Aucun ticket « {STATUS_LABELS[current]} »</p>
         </div>
       ) : (
         <div className="space-y-2">

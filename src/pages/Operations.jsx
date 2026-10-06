@@ -23,6 +23,8 @@ import { PP_MENTION, SEGMENT_LABELS, cleanRef, isPresqueParfait, nomAffiche, nom
 import { safeUrl } from '../lib/security'
 import { downloadWorkbook, readSheetRows } from '../lib/excel'
 import { catalogueExportTable, parseStockSheet, planStockImport, stockImportData, stockSummary } from '../lib/stockImport'
+import Dialog from '../components/Dialog'
+import RequiredHint from '../components/RequiredHint'
 
 const getStatus = op => opStatus(op)
 
@@ -81,17 +83,19 @@ export function OpModal({ op, onClose, onSave }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <Dialog onClose={onClose} className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-lg rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
           <span className="text-sm font-semibold text-gray-900 dark:text-white">
             {op?.id ? 'Modifier l\'opération' : 'Nouvelle opération'}
           </span>
-          <button onClick={onClose} className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          <button aria-label="Fermer" onClick={onClose} className="h-8 w-8 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
         <form onSubmit={handleSave} className="p-5 space-y-4">
+
+          <RequiredHint />
 
           {/* Type : Standard / Globale */}
           <div className="flex items-center gap-2 p-3 rounded-xl border border-gray-200 dark:border-neutral-700 bg-gray-50 dark:bg-neutral-800/50">
@@ -103,37 +107,37 @@ export function OpModal({ op, onClose, onSave }) {
             </button>
             <button type="button" onClick={() => { set('globale', true); set('rayonType', '') }}
               className={['flex-1 h-8 rounded-lg text-xs font-semibold transition-colors',
-                form.globale ? 'bg-amber-500 text-white' : 'text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-700',
+                form.globale ? 'bg-amber-500 text-gray-900' : 'text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-700',
               ].join(' ')}>
               OP Animation
             </button>
           </div>
           {form.globale && (
-            <p className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-500/20">
+            <p className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-500/20">
               Une OP Animation s’affiche en bandeau en haut de la page OP pendant toute sa durée, pour les rayons et magasins choisis.
             </p>
           )}
 
           <label className="block space-y-1">
-            <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Nom de l'opération *</span>
+            <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Nom de l'opération *</span>
             <input className="Input" value={form.nom} onChange={e => set('nom', e.target.value)} placeholder="Ex: OP CENTRALE - ASSURANCES" autoFocus />
           </label>
           <div className="grid grid-cols-2 gap-3">
             <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Date de début *</span>
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Date de début *</span>
               <input type="date" className="Input" value={form.dateDebut} onChange={e => set('dateDebut', e.target.value)} />
             </label>
             <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Date de fin *</span>
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Date de fin *</span>
               <input type="date" className="Input" value={form.dateFin} min={form.dateDebut || undefined} onChange={e => set('dateFin', e.target.value)} />
             </label>
           </div>
-          {dateError && <p className="text-xs text-red-500 -mt-2">{dateError}</p>}
+          {dateError && <p role="alert" className="text-xs text-red-600 -mt-2">{dateError}</p>}
 
           {/* Lien (OP Animation uniquement) */}
           {form.globale && (
             <label className="block space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Lien (optionnel)</span>
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Lien (optionnel)</span>
               <input type="url" className="Input" value={form.lien} onChange={e => set('lien', e.target.value)} placeholder="https://…" />
             </label>
           )}
@@ -141,8 +145,8 @@ export function OpModal({ op, onClose, onSave }) {
           {/* Rayons (multi-sélection) */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Rayons concernés</span>
-              <span className="text-[11px] text-gray-400 dark:text-neutral-500">
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Rayons concernés</span>
+              <span className="text-[11px] text-gray-500 dark:text-neutral-400">
                 {form.rayonTypes.length === 0 ? 'Tous' : `${form.rayonTypes.length} sélectionné${form.rayonTypes.length > 1 ? 's' : ''}`}
               </span>
             </div>
@@ -172,8 +176,8 @@ export function OpModal({ op, onClose, onSave }) {
           {magasins.length > 0 && (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Magasins concernés</span>
-                <span className="text-[11px] text-gray-400 dark:text-neutral-500">
+                <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Magasins concernés</span>
+                <span className="text-[11px] text-gray-500 dark:text-neutral-400">
                   {form.magasinIds.length === 0 ? 'Tous' : `${form.magasinIds.length} sélectionné${form.magasinIds.length > 1 ? 's' : ''}`}
                 </span>
               </div>
@@ -200,10 +204,10 @@ export function OpModal({ op, onClose, onSave }) {
           )}
 
           <label className="block space-y-1">
-            <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Description</span>
+            <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Description</span>
             <textarea className="Input resize-none h-16 text-xs" value={form.description} onChange={e => set('description', e.target.value)} />
           </label>
-          {saveError && <p className="text-xs text-red-500">{saveError}</p>}
+          {saveError && <p role="alert" className="text-xs text-red-600">{saveError}</p>}
           <div className="flex justify-end gap-2 pt-1">
             <button type="button" onClick={onClose}
               className="h-8 px-3 rounded-lg text-xs border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800">
@@ -216,7 +220,7 @@ export function OpModal({ op, onClose, onSave }) {
           </div>
         </form>
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -237,7 +241,7 @@ function ImportSummary({ rows, report }) {
           <div key={label} className="rounded-xl border border-gray-200 dark:border-neutral-700 px-3 py-2">
             <p className="text-lg font-bold text-gray-900 dark:text-white tabular-nums">{n}</p>
             <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 leading-tight">{label}</p>
-            <p className="text-[10px] text-gray-400 dark:text-neutral-500 leading-tight">{hint}</p>
+            <p className="text-[10px] text-gray-500 dark:text-neutral-400 leading-tight">{hint}</p>
           </div>
         ))}
       </div>
@@ -286,7 +290,7 @@ function ImportChanges({ plan, baseCount }) {
             {plan.bonPlansRetires.length > 0 && ` avec ${plan.bonPlansRetires.length} prix bon plan`}
           </summary>
           <ul className="mt-1.5 max-h-32 overflow-y-auto space-y-0.5 text-gray-600 dark:text-neutral-300">
-            {plan.retires.map(e => <li key={e.id}><span className="font-mono text-gray-400">{e.chrono}</span> {e.nom}{e.couleur ? ` · ${e.couleur}` : ''}</li>)}
+            {plan.retires.map(e => <li key={e.id}><span className="font-mono text-gray-500 dark:text-neutral-400">{e.chrono}</span> {e.nom}{e.couleur ? ` · ${e.couleur}` : ''}</li>)}
           </ul>
         </details>
       )}
@@ -295,7 +299,7 @@ function ImportChanges({ plan, baseCount }) {
           <summary className="cursor-pointer text-gray-700 dark:text-neutral-200 font-semibold">{plan.prixChanges.length} prix fort modifié{plan.prixChanges.length > 1 ? 's' : ''}</summary>
           <ul className="mt-1.5 max-h-32 overflow-y-auto space-y-0.5 text-gray-600 dark:text-neutral-300">
             {plan.prixChanges.map(p => (
-              <li key={p.chrono}>{p.nom}{p.couleur ? ` · ${p.couleur}` : ''} : <span className="line-through text-gray-400">{euro(p.ancienPrix)}</span> → <span className="font-semibold">{euro(p.prixFort)}</span></li>
+              <li key={p.chrono}>{p.nom}{p.couleur ? ` · ${p.couleur}` : ''} : <span className="line-through text-gray-500 dark:text-neutral-400">{euro(p.ancienPrix)}</span> → <span className="font-semibold">{euro(p.prixFort)}</span></li>
             ))}
           </ul>
         </details>
@@ -371,12 +375,12 @@ function CatalogueImportModal({ produits, bonPlanDocs, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <Dialog onClose={onClose} className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-2xl rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800 shrink-0">
           <span className="text-sm font-semibold text-gray-900 dark:text-white">Importer l’état de stock des vélos</span>
-          <button onClick={onClose} className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          <button aria-label="Fermer" onClick={onClose} className="h-8 w-8 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
         <div className="p-5 space-y-4 overflow-y-auto flex-1">
@@ -384,14 +388,14 @@ function CatalogueImportModal({ produits, bonPlanDocs, onClose }) {
             <div>
               <p className="text-xs text-gray-500 dark:text-neutral-400 mb-3">
                 Importez l’état de stock Excel des vélos (une ligne par magasin). Un vélo par chrono ; les vélos sans stock sont écartés.<br />
-                <span className="font-mono text-[11px] text-gray-400">Famille, Sous-Famille, Modèle, Marque, Réf, Chrono, Couleur, QtStkFin, PV Mag</span>
+                <span className="font-mono text-[11px] text-gray-500 dark:text-neutral-400">Famille, Sous-Famille, Modèle, Marque, Réf, Chrono, Couleur, QtStkFin, PV Mag</span>
               </p>
               <label className="flex flex-col items-center gap-3 border-2 border-dashed border-gray-200 dark:border-neutral-700 rounded-xl p-8 cursor-pointer hover:border-gray-400 dark:hover:border-neutral-500 transition-colors">
-                <svg className="h-8 w-8 text-gray-300 dark:text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
-                <span className="text-xs text-gray-400 dark:text-neutral-500">Cliquez pour choisir un fichier</span>
+                <svg aria-hidden="true" className="h-8 w-8 text-gray-500 dark:text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+                <span className="text-xs text-gray-500 dark:text-neutral-400">Cliquez pour choisir un fichier</span>
                 <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
               </label>
-              {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+              {error && <p role="alert" className="mt-2 text-xs text-red-600">{error}</p>}
             </div>
           ) : (
             <div className="space-y-3">
@@ -400,7 +404,7 @@ function CatalogueImportModal({ produits, bonPlanDocs, onClose }) {
                   <strong className="text-gray-700 dark:text-neutral-300">{rows.length} produits</strong> dans <span className="font-mono">{fileName}</span>
                 </span>
                 <button onClick={() => { setRows(null); setReport(null); setFileName(''); if (fileRef.current) fileRef.current.value = '' }}
-                  className="text-xs text-gray-400 hover:text-gray-600 underline">Changer</button>
+                  className="text-xs text-gray-500 dark:text-neutral-400 hover:text-gray-600 underline">Changer</button>
               </div>
               <ImportSummary rows={plan?.produits || rows} report={report} />
               {!baseVide && plan && <ImportChanges plan={plan} baseCount={produits.length} />}
@@ -409,7 +413,7 @@ function CatalogueImportModal({ produits, bonPlanDocs, onClose }) {
                   <thead>
                     <tr className="bg-gray-50 dark:bg-neutral-800/50 border-b border-gray-200 dark:border-neutral-700">
                       {['Chrono', 'Nom', 'Couleur', 'Famille', 'Prix fort', 'Pack', 'Stock'].map(h => (
-                        <th key={h} className={`px-3 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap ${['Prix fort', 'Stock'].includes(h) ? 'text-right' : 'text-left'}`}>{h}</th>
+                        <th key={h} className={`px-3 py-2 text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide whitespace-nowrap ${['Prix fort', 'Stock'].includes(h) ? 'text-right' : 'text-left'}`}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -418,14 +422,14 @@ function CatalogueImportModal({ produits, bonPlanDocs, onClose }) {
                       <tr key={i} className="border-b last:border-0 border-gray-100 dark:border-neutral-800">
                         <td className="px-3 py-2 font-mono text-gray-500 dark:text-neutral-400 whitespace-nowrap">{r.chrono}</td>
                         <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">
-                          <NomVelo v={r} />{r.marque && <span className="font-normal text-gray-400"> · {r.marque}</span>}
+                          <NomVelo v={r} />{r.marque && <span className="font-normal text-gray-500 dark:text-neutral-400"> · {r.marque}</span>}
                         </td>
                         <td className="px-3 py-2 text-gray-500 dark:text-neutral-400 whitespace-nowrap">{r.couleur || '—'}</td>
                         <td className="px-3 py-2 text-gray-500 dark:text-neutral-400">{r.famille || '—'}</td>
                         <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-gray-700 dark:text-neutral-300">{r.prixFort != null ? `${r.prixFort.toFixed(2).replace('.', ',')} €` : '—'}</td>
                         <td className="px-3 py-2 whitespace-nowrap">
-                          {familleSansPack(r.famille) ? <span className="text-gray-300 dark:text-neutral-600" title="Jouet : pas de pack">—</span> : r.pack ? <span className="text-gray-700 dark:text-neutral-300">{PACK_COURT[r.pack]}</span> : <span className="text-amber-600 dark:text-amber-400">À choisir</span>}
-                          {r.packRepris && <span className="ml-1 text-[9px] text-gray-400" title="Pack repris d’un vélo du même modèle déjà dans la base">repris</span>}
+                          {familleSansPack(r.famille) ? <span className="text-gray-500 dark:text-neutral-400" title="Jouet : pas de pack">—</span> : r.pack ? <span className="text-gray-700 dark:text-neutral-300">{PACK_COURT[r.pack]}</span> : <span className="text-amber-700 dark:text-amber-400">À choisir</span>}
+                          {r.packRepris && <span className="ml-1 text-[9px] text-gray-500 dark:text-neutral-400" title="Pack repris d’un vélo du même modèle déjà dans la base">repris</span>}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums text-gray-500 dark:text-neutral-400">{r.stock}</td>
                       </tr>
@@ -433,7 +437,7 @@ function CatalogueImportModal({ produits, bonPlanDocs, onClose }) {
                   </tbody>
                 </table>
                 {rows.length > 30 && (
-                  <div className="px-3 py-2 text-[11px] text-gray-400 bg-gray-50 dark:bg-neutral-800/30 border-t border-gray-100 dark:border-neutral-800">… et {rows.length - 30} autres</div>
+                  <div className="px-3 py-2 text-[11px] text-gray-500 dark:text-neutral-400 bg-gray-50 dark:bg-neutral-800/30 border-t border-gray-100 dark:border-neutral-800">… et {rows.length - 30} autres</div>
                 )}
               </div>
             </div>
@@ -446,9 +450,9 @@ function CatalogueImportModal({ produits, bonPlanDocs, onClose }) {
             {importing ? 'Import…' : baseVide ? `Importer ${rows?.length || 0} vélos` : 'Mettre à jour la base'}
           </button>
         </div>
-        {rows && error && <p className="px-5 pb-3 text-xs text-red-500 text-right">{error}</p>}
+        {rows && error && <p className="px-5 pb-3 text-xs text-red-600 text-right">{error}</p>}
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -495,7 +499,7 @@ function IlvButton({ onClick, title = 'Télécharger l’ILV', disabled }) {
   return (
     <button onClick={onClick} title={title} disabled={disabled}
       className="h-7 px-2 inline-flex items-center gap-1 rounded-lg text-[11px] font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 dark:text-neutral-300 dark:border-neutral-700 dark:hover:bg-neutral-800 whitespace-nowrap disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-transparent">
-      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+      <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
       ILV
     </button>
   )
@@ -525,7 +529,7 @@ function Pagination({ page, pageCount, total, onPage }) {
           <button type="button" onClick={() => onPage(page - 1)} disabled={page === 1} aria-label="Page précédente"
             className={`${btn} text-gray-600 hover:bg-gray-100 dark:text-neutral-300 dark:hover:bg-neutral-800`}>‹</button>
           {pageNumbers(page, pageCount).map((p, i) => p === '…'
-            ? <span key={`e${i}`} className="px-1 text-xs text-gray-400">…</span>
+            ? <span key={`e${i}`} className="px-1 text-xs text-gray-500 dark:text-neutral-400">…</span>
             : (
               <button key={p} type="button" onClick={() => onPage(p)} aria-current={p === page ? 'page' : undefined}
                 className={`${btn} ${p === page ? 'bg-gray-900 text-white dark:bg-white dark:text-black' : 'text-gray-600 hover:bg-gray-100 dark:text-neutral-300 dark:hover:bg-neutral-800'}`}>
@@ -712,7 +716,7 @@ function ProduitsSection({ canCreate, mode }) {
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-base font-semibold text-gray-900 dark:text-white">{texts.titre(canCreate)}</h2>
-          <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">{loading ? 'Chargement…' : texts.sousTitre(rows.length, canCreate)}</p>
+          <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">{loading ? 'Chargement…' : texts.sousTitre(rows.length, canCreate)}</p>
         </div>
         {canCreate && (
           <div className="flex flex-wrap items-center gap-2">
@@ -720,7 +724,7 @@ function ProduitsSection({ canCreate, mode }) {
               <button onClick={exportExcel} disabled={exporting || filtered.length === 0}
                 title={`Exporte ${filtered.length === rows.length ? 'toute la liste' : `les ${filtered.length} vélos affichés (filtres compris)`} au format Excel`}
                 className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg text-xs font-medium border border-gray-200 dark:border-neutral-700 text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors disabled:opacity-50">
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+                <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
                 {exporting ? 'Export…' : filtered.length === rows.length ? <>Exporter<span className="hidden sm:inline"> Excel</span></> : `Exporter (${filtered.length})`}
               </button>
             )}
@@ -740,15 +744,15 @@ function ProduitsSection({ canCreate, mode }) {
       </div>
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 104.5 4.5a7.5 7.5 0 0012.15 12.15z" /></svg>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher par nom, référence, chrono, couleur…"
+          <svg aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 dark:text-neutral-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 104.5 4.5a7.5 7.5 0 0012.15 12.15z" /></svg>
+          <input value={search} onChange={e => setSearch(e.target.value)} aria-label="Rechercher" placeholder="Rechercher par nom, référence, chrono, couleur…"
             className="w-full h-9 pl-9 pr-4 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-white/10" />
         </div>
         {[[segments, segment, setSegment, 'Tous les segments', segmentLabel, 'Segment'], [marques, marque, setMarque, 'Toutes les marques', m => m, 'Marque']]
           .filter(([list]) => list.length > 1)
           .map(([list, value, setValue, all, label, aria]) => (
             <select key={aria} value={value} onChange={e => setValue(e.target.value)} aria-label={aria}
-              className={['h-9 pl-3 pr-7 rounded-xl border text-xs outline-none cursor-pointer',
+              className={['h-9 pl-3 pr-7 rounded-xl border text-xs outline-none focus-visible:ring-2 focus-visible:ring-black/80 dark:focus-visible:ring-white/70 cursor-pointer',
                 value ? 'border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-black' : 'border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-gray-700 dark:text-neutral-300'].join(' ')}>
               <option value="">{all}</option>
               {list.map(x => <option key={x} value={x}>{label(x)}</option>)}
@@ -769,18 +773,18 @@ function ProduitsSection({ canCreate, mode }) {
         </div>
       )}
       {loading ? (
-        <div className="text-center py-12 text-sm text-gray-400">Chargement…</div>
+        <div className="text-center py-12 text-sm text-gray-500 dark:text-neutral-400">Chargement…</div>
       ) : error ? (
-        <div className="text-center py-12 text-sm text-red-500">Impossible de charger la liste. Recharge la page.</div>
+        <div className="text-center py-12 text-sm text-red-600">Impossible de charger la liste. Recharge la page.</div>
       ) : rows.length === 0 ? (
-        <div className="text-center py-12 text-sm text-gray-400 dark:text-neutral-500">{texts.vide(canCreate)}</div>
+        <div className="text-center py-12 text-sm text-gray-500 dark:text-neutral-400">{texts.vide(canCreate)}</div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-12 text-sm text-gray-400 dark:text-neutral-500">Aucun vélo ne correspond.</div>
+        <div className="text-center py-12 text-sm text-gray-500 dark:text-neutral-400">Aucun vélo ne correspond.</div>
       ) : (
         <div ref={listRef} className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 overflow-x-auto scroll-mt-16">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-gray-100 dark:border-neutral-800 bg-gray-50/50 dark:bg-neutral-800/30 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+              <tr className="border-b border-gray-100 dark:border-neutral-800 bg-gray-50/50 dark:bg-neutral-800/30 text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">
                 <th className="px-3 sm:px-4 py-3 text-left">Produit</th>
                 <th className="px-3 sm:px-4 py-3 text-left hidden sm:table-cell">Réf. / chrono</th>
                 <th className="px-3 sm:px-4 py-3 text-left hidden md:table-cell">Marque</th>
@@ -803,26 +807,26 @@ function ProduitsSection({ canCreate, mode }) {
                       <p className="font-medium text-gray-900 dark:text-white">
                         <NomVelo v={v} />
                       </p>
-                      <p className="text-[11px] text-gray-400 dark:text-neutral-500">{v.couleur || 'Sans couleur'}<span className="md:hidden">{v.marque ? ` · ${v.marque}` : ''}</span></p>
+                      <p className="text-[11px] text-gray-500 dark:text-neutral-400">{v.couleur || 'Sans couleur'}<span className="md:hidden">{v.marque ? ` · ${v.marque}` : ''}</span></p>
                       {!prixSpecial && <div className="sm:hidden mt-1 flex flex-wrap gap-1">{badges(r)}</div>}
                     </td>
                     <td className="px-3 sm:px-4 py-2.5 hidden sm:table-cell font-mono">
                       <p className="text-gray-700 dark:text-neutral-300 whitespace-nowrap">{v.reference || '—'}</p>
-                      <p className="text-[10px] text-gray-400 dark:text-neutral-500 max-w-[11rem] break-words">{v.chrono || '—'}</p>
+                      <p className="text-[10px] text-gray-500 dark:text-neutral-400 max-w-[11rem] break-words">{v.chrono || '—'}</p>
                     </td>
                     <td className="px-3 sm:px-4 py-2.5 hidden md:table-cell text-gray-500 dark:text-neutral-400">{v.marque || '—'}</td>
                     <td className="px-3 sm:px-4 py-2.5 whitespace-nowrap">
                       {prixSpecial ? <SpecialPrice mode={mode} prixFort={prixFort} r={r} />
-                        : prixFort != null ? formatEuro(prixFort) : <span className="text-amber-600 dark:text-amber-400">à saisir</span>}
+                        : prixFort != null ? formatEuro(prixFort) : <span className="text-amber-700 dark:text-amber-400">à saisir</span>}
                     </td>
-                    <td className="px-3 sm:px-4 py-2.5 hidden md:table-cell whitespace-nowrap">{sansPack(v.segment, v.famille) ? <span className="text-gray-300 dark:text-neutral-600">—</span> : v.pack ? PACK_COURT[v.pack] : <span className="text-amber-600 dark:text-amber-400">à choisir</span>}</td>
+                    <td className="px-3 sm:px-4 py-2.5 hidden md:table-cell whitespace-nowrap">{sansPack(v.segment, v.famille) ? <span className="text-gray-500 dark:text-neutral-400">—</span> : v.pack ? PACK_COURT[v.pack] : <span className="text-amber-700 dark:text-amber-400">à choisir</span>}</td>
                     {!prixSpecial && <td className="px-3 sm:px-4 py-2.5 hidden sm:table-cell"><div className="flex flex-col items-start gap-1">{badges(r)}</div></td>}
                     <td className="pl-1 pr-3 sm:px-4 py-2.5" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
                         {canCreate && (
                           <button onClick={() => open(r)} aria-label={`Modifier ${v.nom}`} title="Modifier"
-                            className="h-7 w-7 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800">
-                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                            className="h-7 w-7 grid place-items-center rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-400 dark:hover:text-neutral-200 dark:hover:bg-neutral-800">
+                            <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                           </button>
                         )}
                         <IlvButton disabled={ilvOff} title={ilvOff ? 'Prix fort à compléter par l’acheteur' : 'Télécharger l’ILV'} onClick={() => ilvFor(r)} />
@@ -855,14 +859,14 @@ function SpecialPrice({ mode, prixFort, r }) {
     return (
       <span className="inline-flex items-baseline gap-2">
         {prixFort != null && <span className="text-gray-700 dark:text-neutral-300">{formatEuro(prixFort)}</span>}
-        <span className="text-amber-600 dark:text-amber-400">{engage ? 'prix engagé' : 'bon plan'} à saisir</span>
+        <span className="text-amber-700 dark:text-amber-400">{engage ? 'prix engagé' : 'bon plan'} à saisir</span>
       </span>
     )
   }
   const rem = prixFort > 0 && prix < prixFort ? Math.round((1 - prix / prixFort) * 100) : null
   return (
     <span className="inline-flex items-baseline gap-2">
-      {prixFort != null && prixFort > prix && <span className="text-gray-400 dark:text-neutral-500 line-through">{formatEuro(prixFort)}</span>}
+      {prixFort != null && prixFort > prix && <span className="text-gray-500 dark:text-neutral-400 line-through">{formatEuro(prixFort)}</span>}
       <span className={`text-sm font-bold ${engage ? 'text-blue-800 dark:text-blue-300' : 'text-red-600 dark:text-red-400'}`}>{formatEuro(prix)}</span>
       {rem > 0 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">-{rem} %</span>}
     </span>
@@ -872,9 +876,9 @@ function SpecialPrice({ mode, prixFort, r }) {
 // ── Prix bon plan (carte fidélité) ────────────────────────────────────────────
 
 const BP_STATE = {
-  create: { label: 'Nouveau',     cls: 'text-emerald-600 dark:text-emerald-400 font-semibold' },
+  create: { label: 'Nouveau',     cls: 'text-emerald-700 dark:text-emerald-400 font-semibold' },
   update: { label: 'Mis à jour',  cls: 'text-blue-600 dark:text-blue-400 font-semibold' },
-  same:   { label: 'Inchangé',    cls: 'text-gray-400' },
+  same:   { label: 'Inchangé',    cls: 'text-gray-500 dark:text-neutral-400' },
 }
 
 // Import Excel : un prix par chrono, les prix déjà présents sont remplacés (pas de doublon)
@@ -935,12 +939,12 @@ function BonPlanImportModal({ items, onClose }) {
   const count = a => plan.filter(p => p.action === a).length
 
   return (
-    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <Dialog onClose={onClose} className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-3xl rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800 shrink-0">
           <span className="text-sm font-semibold text-gray-900 dark:text-white">Importer les prix bon plan</span>
-          <button onClick={onClose} aria-label="Fermer" className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          <button onClick={onClose} aria-label="Fermer" className="h-8 w-8 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
         <div className="p-5 space-y-4 overflow-y-auto flex-1">
@@ -951,11 +955,11 @@ function BonPlanImportModal({ items, onClose }) {
                 <p>Un seul prix par chrono : si un chrono a déjà un prix bon plan, il est remplacé.</p>
               </div>
               <label className="flex flex-col items-center gap-3 border-2 border-dashed border-gray-200 dark:border-neutral-700 rounded-xl p-8 cursor-pointer hover:border-gray-400 transition-colors">
-                <svg className="h-8 w-8 text-gray-300 dark:text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
-                <span className="text-xs text-gray-400 dark:text-neutral-500">Cliquez pour choisir un fichier (.xlsx, .xls, .csv)</span>
+                <svg aria-hidden="true" className="h-8 w-8 text-gray-500 dark:text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+                <span className="text-xs text-gray-500 dark:text-neutral-400">Cliquez pour choisir un fichier (.xlsx, .xls, .csv)</span>
                 <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
               </label>
-              {error && <p className="text-xs text-red-500">{error}</p>}
+              {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
             </div>
           ) : (
             <div className="space-y-3">
@@ -964,7 +968,7 @@ function BonPlanImportModal({ items, onClose }) {
                   <strong className="text-gray-700 dark:text-neutral-300">{plan.length} prix</strong> dans <span className="font-mono">{fileName}</span>
                   {' '}· {count('create')} nouveau{count('create') > 1 ? 'x' : ''} · {count('update')} mis à jour · {count('same')} inchangé{count('same') > 1 ? 's' : ''}
                 </span>
-                <button onClick={reset} className="text-xs text-gray-400 hover:text-gray-600 underline">Changer de fichier</button>
+                <button onClick={reset} className="text-xs text-gray-500 dark:text-neutral-400 hover:text-gray-600 underline">Changer de fichier</button>
               </div>
               {parsed.skipped > 0 && (
                 <p className="text-[11px] text-amber-700 dark:text-amber-400">
@@ -976,7 +980,7 @@ function BonPlanImportModal({ items, onClose }) {
                   <thead>
                     <tr className="bg-gray-50 dark:bg-neutral-800/50 border-b border-gray-200 dark:border-neutral-700">
                       {['Nom', 'Marque', 'Chrono', 'Prix fort', 'Prix bon plan', 'Remise', ''].map(h => (
-                        <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{h}</th>
+                        <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -990,7 +994,7 @@ function BonPlanImportModal({ items, onClose }) {
                           <td className="px-3 py-2 font-mono text-gray-700 dark:text-neutral-300">{row.chrono}</td>
                           <td className="px-3 py-2 text-gray-500 dark:text-neutral-400 whitespace-nowrap">{formatEuro(row.prixFort)}</td>
                           <td className="px-3 py-2 font-semibold text-blue-600 dark:text-blue-400 whitespace-nowrap">{formatEuro(row.prixBonPlan)}</td>
-                          <td className="px-3 py-2 text-emerald-600 dark:text-emerald-400">{rem != null ? `-${rem}%` : '—'}</td>
+                          <td className="px-3 py-2 text-emerald-700 dark:text-emerald-400">{rem != null ? `-${rem}%` : '—'}</td>
                           <td className="px-3 py-2 whitespace-nowrap">
                             <span className={BP_STATE[action].cls}>{BP_STATE[action].label}</span>
                             {action === 'update' && prev.prixBonPlan !== row.prixBonPlan && (
@@ -1003,7 +1007,7 @@ function BonPlanImportModal({ items, onClose }) {
                   </tbody>
                 </table>
               </div>
-              {error && <p className="text-xs text-red-500">{error}</p>}
+              {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
             </div>
           )}
         </div>
@@ -1015,7 +1019,7 @@ function BonPlanImportModal({ items, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -1061,17 +1065,18 @@ function AddBonPlanModal({ items, initial, onClose }) {
     }
   }
 
-  const label = 'text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide'
+  const label = 'text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide'
   return (
-    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <Dialog onClose={onClose} className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
           <span className="text-sm font-semibold text-gray-900 dark:text-white">{initial ? 'Modifier le prix bon plan' : 'Ajouter un prix bon plan'}</span>
-          <button onClick={onClose} aria-label="Fermer" className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          <button onClick={onClose} aria-label="Fermer" className="h-8 w-8 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
         <form onSubmit={handleSave} className="p-5 space-y-3">
+          <RequiredHint />
           <div className="grid grid-cols-2 gap-3">
             <label className="col-span-2 space-y-1">
               <span className={label}>Nom</span>
@@ -1103,7 +1108,7 @@ function AddBonPlanModal({ items, initial, onClose }) {
               Ce chrono a déjà un prix bon plan ({formatEuro(prev.prixBonPlan)}) : il sera remplacé.
             </p>
           )}
-          {error && <p className="text-xs text-red-500">{error}</p>}
+          {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
           <div className="flex justify-end gap-2 pt-1">
             <button type="button" onClick={onClose} className="h-8 px-3 rounded-lg text-xs border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800">Annuler</button>
             <button type="submit" disabled={saving || !valid}
@@ -1113,7 +1118,7 @@ function AddBonPlanModal({ items, initial, onClose }) {
           </div>
         </form>
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -1151,17 +1156,17 @@ function OpCard({ op, canCreate, onOpen, onEdit, onDelete }) {
           <span className={`h-2 w-2 rounded-full ${STATUS_DOT[getStatus(op)]}`} />
           {opTiming(op)}
         </span>
-        {op.globale && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500 text-white">Animation</span>}
+        {op.globale && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500 text-gray-900">Animation</span>}
       </div>
       <h3 className="text-sm font-semibold text-gray-900 dark:text-white leading-snug">{op.nom}</h3>
-      <p className="text-[11px] text-gray-400 dark:text-neutral-500">Du {fmtDate(op.dateDebut)} au {fmtDate(op.dateFin)}</p>
+      <p className="text-[11px] text-gray-500 dark:text-neutral-400">Du {fmtDate(op.dateDebut)} au {fmtDate(op.dateFin)}</p>
       {op.description && <p className="text-xs text-gray-500 dark:text-neutral-400 leading-relaxed line-clamp-2">{op.description}</p>}
       <div className="flex flex-wrap gap-1">
         {(rayons.length ? rayons.map(r => RAYON_TYPE_LABELS[r] || r) : ['Tous les rayons']).map(r => (
-          <span key={r} className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-500 dark:bg-neutral-800 dark:text-neutral-400">{r}</span>
+          <span key={r} className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-400">{r}</span>
         ))}
         {op.magasinIds?.length > 0 && (
-          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-500 dark:bg-neutral-800 dark:text-neutral-400">
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-400">
             {op.magasinIds.length} magasin{op.magasinIds.length > 1 ? 's' : ''}
           </span>
         )}
@@ -1179,16 +1184,16 @@ function OpCard({ op, canCreate, onOpen, onEdit, onDelete }) {
           {canCreate && (
             <>
               <button onClick={e => { e.stopPropagation(); onEdit() }} aria-label={`Modifier ${op.nom}`}
-                className="h-7 w-7 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                className="h-7 w-7 grid place-items-center rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-400 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
+                <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
               </button>
               <button onClick={e => { e.stopPropagation(); onDelete() }} aria-label={`Supprimer ${op.nom}`}
-                className="h-7 w-7 grid place-items-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:text-neutral-500 dark:hover:text-red-400 dark:hover:bg-red-500/10 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M8 6V4.8A1.8 1.8 0 019.8 3h4.4A1.8 1.8 0 0116 4.8V6m3 0l-1 13a2 2 0 01-2 1.8H8A2 2 0 016 19L5 6M10 10v7M14 10v7" /></svg>
+                className="h-7 w-7 grid place-items-center rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 dark:text-neutral-400 dark:hover:text-red-400 dark:hover:bg-red-500/10 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
+                <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M8 6V4.8A1.8 1.8 0 019.8 3h4.4A1.8 1.8 0 0116 4.8V6m3 0l-1 13a2 2 0 01-2 1.8H8A2 2 0 016 19L5 6M10 10v7M14 10v7" /></svg>
               </button>
             </>
           )}
-          <span className="text-xs text-gray-400 group-hover:text-gray-700 dark:group-hover:text-neutral-200 transition-colors">→</span>
+          <span className="text-xs text-gray-500 dark:text-neutral-400 group-hover:text-gray-700 dark:group-hover:text-neutral-200 transition-colors">→</span>
         </div>
       </div>
     </div>
@@ -1233,7 +1238,7 @@ function Chip({ className, children }) {
 function Prices({ barre, prix, remise, strong }) {
   return (
     <div className="flex items-baseline gap-2 whitespace-nowrap">
-      {barre != null && <span className="text-xs text-gray-400 dark:text-neutral-500 line-through">{formatEuro(barre)}</span>}
+      {barre != null && <span className="text-xs text-gray-500 dark:text-neutral-400 line-through">{formatEuro(barre)}</span>}
       <span className={`text-base font-bold ${strong}`}>{formatEuro(prix)}</span>
       {remise != null && remise > 0 && (
         <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">-{remise}%</span>
@@ -1259,8 +1264,8 @@ function OpPromoLine({ s, allCouleurs, onOpenOp, onIlv }) {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2 min-w-0 flex-wrap">
           <Chip className={enCours
-            ? 'bg-amber-500 text-white dark:bg-amber-400 dark:text-amber-950'
-            : 'bg-green-600 text-white dark:bg-green-500 dark:text-green-950'}>
+            ? 'bg-amber-500 text-gray-900 dark:bg-amber-400 dark:text-amber-950'
+            : 'bg-green-700 text-white dark:bg-green-500 dark:text-green-950'}>
             {enCours ? 'En OP' : 'OP à venir'}
           </Chip>
           <button onClick={() => onOpenOp(s.op.id)} className="text-xs font-semibold text-gray-900 dark:text-white hover:underline truncate">
@@ -1293,7 +1298,7 @@ function PromoResults({ results, term, loading, error, onOpenOp, onIlv }) {
   const MAX = 30
   if (error) {
     return (
-      <div className="rounded-2xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 py-6 text-center text-sm text-red-600 dark:text-red-400">
+      <div className="rounded-2xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 py-6 text-center text-sm text-red-700 dark:text-red-400">
         La recherche est indisponible pour le moment. Vérifie la connexion et recharge la page.
       </div>
     )
@@ -1302,17 +1307,17 @@ function PromoResults({ results, term, loading, error, onOpenOp, onIlv }) {
     return (
       <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 py-10 px-4 text-center space-y-1">
         {loading
-          ? <p className="text-sm text-gray-400 dark:text-neutral-500">Recherche…</p>
+          ? <p className="text-sm text-gray-500 dark:text-neutral-400">Recherche…</p>
           : <>
               <p className="text-sm font-semibold text-gray-700 dark:text-neutral-300">Aucune remise en cours ou à venir pour « {term} »</p>
-              <p className="text-xs text-gray-400 dark:text-neutral-500">Ni en OP, ni en bon plan. Essaie avec la réf. fournisseur ou une partie du nom.</p>
+              <p className="text-xs text-gray-500 dark:text-neutral-400">Ni en OP, ni en bon plan. Essaie avec la réf. fournisseur ou une partie du nom.</p>
             </>}
       </div>
     )
   }
   return (
     <div className="space-y-3">
-      <p className="text-[11px] text-gray-400 dark:text-neutral-500">
+      <p className="text-[11px] text-gray-500 dark:text-neutral-400">
         {results.length} produit{results.length > 1 ? 's' : ''}{results.length > MAX && ` : les ${MAX} premiers sont affichés, précise la recherche`}
       </p>
       {results.slice(0, MAX).map(g => (
@@ -1320,7 +1325,7 @@ function PromoResults({ results, term, loading, error, onOpenOp, onIlv }) {
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-gray-900 dark:text-white">{g.nom}</p>
-              <p className="text-[11px] text-gray-400 dark:text-neutral-500">
+              <p className="text-[11px] text-gray-500 dark:text-neutral-400">
                 {g.marque}
                 {g.refs.length > 0 && <span className="font-mono"> · {g.refs.join(', ')}</span>}
               </p>
@@ -1479,8 +1484,9 @@ export default function Operations() {
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
       <Navbar />
 
-      <main className="flex-1 p-4 sm:p-6">
+      <main id="contenu" tabIndex={-1} className="focus:outline-none flex-1 p-4 sm:p-6">
         <div className="max-w-5xl mx-auto space-y-6">
+          <h1 className="sr-only">Opérations commerciales</h1>
 
           {/* Choix du bloc : opérations ou listes de prix */}
           <div className="flex items-center justify-between gap-3">
@@ -1507,7 +1513,7 @@ export default function Operations() {
               {opGlobales.map(op => (
                 <div key={op.id}
                   className="relative rounded-xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 px-4 py-3 flex items-center gap-4">
-                  <span className="shrink-0 text-amber-500 text-lg">🌐</span>
+                  <span className="shrink-0 text-amber-700 text-lg">🌐</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wide">{op.nom}</p>
                     {op.description && (
@@ -1528,18 +1534,18 @@ export default function Operations() {
                       </a>
                     )}
                   </div>
-                  <div className="shrink-0 text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                  <div className="shrink-0 text-[11px] text-amber-700 dark:text-amber-400 font-medium">
                     {fmtDate(op.dateDebut)} → {fmtDate(op.dateFin)}
                   </div>
                   {canCreate && (
                     <div className="flex items-center gap-1 shrink-0">
-                      <button onClick={() => setModal(op)}
-                        className="h-6 w-6 grid place-items-center rounded-lg text-amber-400 hover:text-amber-700 hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-colors">
-                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                      <button onClick={() => setModal(op)} aria-label={`Modifier l’opération « ${op.nom} »`}
+                        className="h-6 w-6 grid place-items-center rounded-lg text-amber-700 hover:text-amber-700 hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-colors">
+                        <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                       </button>
-                      <button onClick={() => handleDelete(op)}
-                        className="h-6 w-6 grid place-items-center rounded-lg text-amber-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-500/10 transition-colors">
-                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M8 6V4.8A1.8 1.8 0 019.8 3h4.4A1.8 1.8 0 0116 4.8V6m3 0l-1 13a2 2 0 01-2 1.8H8A2 2 0 016 19L5 6M10 10v7M14 10v7" /></svg>
+                      <button onClick={() => handleDelete(op)} aria-label={`Supprimer l’opération « ${op.nom} »`}
+                        className="h-6 w-6 grid place-items-center rounded-lg text-amber-700 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-500/10 transition-colors">
+                        <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M8 6V4.8A1.8 1.8 0 019.8 3h4.4A1.8 1.8 0 0116 4.8V6m3 0l-1 13a2 2 0 01-2 1.8H8A2 2 0 016 19L5 6M10 10v7M14 10v7" /></svg>
                       </button>
                     </div>
                   )}
@@ -1550,7 +1556,7 @@ export default function Operations() {
 
           {/* Recherche des remises (liste des OP) : les listes de prix ont leur propre recherche */}
           {vueListeOp && <div className="relative">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-neutral-500 pointer-events-none"
+            <svg aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 dark:text-neutral-400 pointer-events-none"
               fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 104.5 4.5a7.5 7.5 0 0012.15 12.15z" />
             </svg>
@@ -1558,13 +1564,13 @@ export default function Operations() {
               ref={searchRef}
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Un vélo est-il en remise ? Nom, réf. fournisseur, chrono, couleur…"
+              aria-label="Rechercher une remise" placeholder="Un vélo est-il en remise ? Nom, réf. fournisseur, chrono, couleur…"
               className="w-full h-9 pl-9 pr-4 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-neutral-500 outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-white/10"
             />
             {search && (
-              <button onClick={() => setSearch('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 h-5 w-5 grid place-items-center rounded text-gray-400 hover:text-gray-600 dark:text-neutral-500 dark:hover:text-neutral-300">
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              <button aria-label="Fermer" onClick={() => setSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 h-5 w-5 grid place-items-center rounded text-gray-500 hover:text-gray-600 dark:text-neutral-400 dark:hover:text-neutral-300">
+                <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             )}
           </div>}
@@ -1594,12 +1600,12 @@ export default function Operations() {
                     className={['h-9 px-4 inline-flex items-center gap-1.5 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap shrink-0',
                       section === s.key
                         ? (ACTIVE[s.key] || 'border-gray-900 text-gray-900 dark:border-white dark:text-white')
-                        : 'border-transparent text-gray-400 dark:text-neutral-500 hover:text-gray-700 dark:hover:text-neutral-300',
+                        : 'border-transparent text-gray-500 dark:text-neutral-400 hover:text-gray-700 dark:hover:text-neutral-300',
                     ].join(' ')}>
                     {s.dot && <span aria-hidden className={`h-2 w-2 rounded-full ${s.dot}`} />}
                     {s.label}
                     {s.count > 0 && (
-                      <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-gray-100 text-gray-500 dark:bg-neutral-800 dark:text-neutral-400">
+                      <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-400">
                         {s.count}
                       </span>
                     )}
@@ -1617,7 +1623,7 @@ export default function Operations() {
             {/* Liste des OPs (sections standard) */}
             {['en_cours', 'a_venir', 'terminee'].includes(section) && (
               grouped[section].length === 0 ? (
-                <div className="text-center py-16 text-sm text-gray-400 dark:text-neutral-500">
+                <div className="text-center py-16 text-sm text-gray-500 dark:text-neutral-400">
                   Aucune opération {section === 'en_cours' ? 'en cours' : section === 'a_venir' ? 'à venir' : 'terminée'}.
                   {canCreate && section !== 'terminee' && ' Cliquez sur "+ Nouvelle OP" pour commencer.'}
                 </div>

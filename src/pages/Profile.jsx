@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../store/useAuth'
 import { useShallow } from 'zustand/react/shallow'
@@ -5,6 +6,8 @@ import { useShallow } from 'zustand/react/shallow'
 export default function Profile() {
     const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
     const navigate = useNavigate()
+    // Titre de l'onglet (RGAA 8.6)
+    useEffect(() => { document.title = 'Mon profil · Groupe Nivault' }, [])
 
     return (
         <div className="min-h-screen flex flex-col">
@@ -12,7 +15,7 @@ export default function Profile() {
             <div className="border-b border-gray-200 bg-white/90 backdrop-blur
                       dark:border-neutral-800 dark:bg-neutral-900/90">
                 <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-                    <div className="font-heading text-xl">Profil</div>
+                    <h1 className="font-heading text-xl">Profil</h1>
                     <button
                         onClick={() => navigate('/')}
                         className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50
@@ -23,7 +26,7 @@ export default function Profile() {
                 </div>
             </div>
 
-            <main className="flex-1">
+            <main id="contenu" tabIndex={-1} className="focus:outline-none flex-1">
                 <div className="max-w-6xl mx-auto p-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <Card title="Identité">

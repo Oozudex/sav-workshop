@@ -21,6 +21,8 @@ import { BON_PLAN_COLLECTION, bonPlanDocId, bonPlanTransfer } from '../lib/bonPl
 import {
   OP_SEGMENTS, SEGMENT_LABELS, bonPlanPrices, segmentFromInput, cleanRef, isBonPlanBetter, isBonPlanSame, nomAffiche, withPrixFort, normName, parseOpSheet, planImport, prixReference, remisePct, resolveLines,
 } from '../lib/opImport'
+import Dialog from '../components/Dialog'
+import RequiredHint from '../components/RequiredHint'
 
 
 function fmtDate(str) {
@@ -75,44 +77,45 @@ function ProduitModal({ produit, onClose, onSave }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <Dialog onClose={onClose} className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-lg rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
           <span className="text-sm font-semibold text-gray-900 dark:text-white">
             {produit?.id ? 'Modifier le produit' : 'Ajouter un produit'}
           </span>
-          <button onClick={onClose} className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          <button aria-label="Fermer" onClick={onClose} className="h-8 w-8 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
         <form onSubmit={handleSave} className="p-5 space-y-4">
+          <RequiredHint />
           <div className="grid grid-cols-2 gap-3">
             <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Nom du produit *</span>
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Nom du produit *</span>
               <input className="Input" value={form.nom} onChange={e => set('nom', e.target.value)} autoFocus />
             </label>
             <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Marque</span>
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Marque</span>
               <input className="Input" value={form.marque} onChange={e => set('marque', e.target.value)} />
             </label>
             <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Réf. produit</span>
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Réf. produit</span>
               <input className="Input" value={form.reference} onChange={e => set('reference', e.target.value)} />
             </label>
             <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Réf. fournisseur</span>
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Réf. fournisseur</span>
               <input className="Input" value={form.refFournisseur} onChange={e => set('refFournisseur', e.target.value)} />
             </label>
             <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Chrono</span>
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Chrono</span>
               <input className="Input" value={form.chrono} onChange={e => set('chrono', e.target.value)} />
             </label>
             <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Couleur</span>
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Couleur</span>
               <input className="Input" value={form.couleur} onChange={e => set('couleur', e.target.value)} />
             </label>
             <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Segment</span>
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Segment</span>
               <select className="Input" value={form.autreSegment ? AUTRE : form.segment}
                 onChange={e => setForm(f => e.target.value === AUTRE ? { ...f, autreSegment: true } : { ...f, autreSegment: false, segment: e.target.value })}>
                 {OP_SEGMENTS.map(s => <option key={s} value={s}>{SEGMENT_LABELS[s]}</option>)}
@@ -124,19 +127,19 @@ function ProduitModal({ produit, onClose, onSave }) {
               )}
             </label>
             <div className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide block">Remise</span>
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide block">Remise</span>
               <div className={['h-10 flex items-center px-3 rounded-xl text-sm font-bold',
-                rem != null ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-gray-50 text-gray-400 dark:bg-neutral-800 dark:text-neutral-500',
+                rem != null ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-gray-50 text-gray-500 dark:bg-neutral-800 dark:text-neutral-400',
               ].join(' ')}>
                 {rem != null ? `-${rem}%` : '—'}
               </div>
             </div>
             <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Prix fort (€)</span>
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Prix fort (€)</span>
               <input type="number" step="0.01" min="0" className="Input" value={form.prixFort} onChange={e => set('prixFort', e.target.value)} />
             </label>
             <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Prix OP (€)</span>
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Prix OP (€)</span>
               <input type="number" step="0.01" min="0" className="Input" value={form.prixOp} onChange={e => set('prixOp', e.target.value)} />
             </label>
           </div>
@@ -163,7 +166,7 @@ function ProduitModal({ produit, onClose, onSave }) {
           </div>
         </form>
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -173,7 +176,7 @@ const LINE_STATUS = {
   found:   { label: 'En stock',          pill: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' },
   check:   { label: 'À vérifier',        pill: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' },
   outside: { label: 'Hors base vélos',   pill: 'bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-300' },
-  missing: { label: 'Pas en stock',      pill: 'bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400' },
+  missing: { label: 'Pas en stock',      pill: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400' },
 }
 const MATCH_LABELS = { chrono: 'par chrono', ref: 'par référence', modele: 'par réf. fournisseur' }
 
@@ -184,7 +187,7 @@ function Check({ checked, onChange, disabled, color = 'blue', label }) {
       <input type="checkbox" className="sr-only" checked={checked} onChange={onChange} disabled={disabled} aria-label={label} />
       <span className={['h-4 w-4 rounded border-2 flex items-center justify-center transition-colors shrink-0',
         checked ? on : 'border-gray-300 dark:border-neutral-600 hover:border-blue-400'].join(' ')}>
-        {checked && <svg className={`h-2.5 w-2.5 ${color === 'blue' ? 'text-white' : 'text-white dark:text-black'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+        {checked && <svg aria-hidden="true" className={`h-2.5 w-2.5 ${color === 'blue' ? 'text-white' : 'text-white dark:text-black'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
       </span>
     </label>
   )
@@ -199,12 +202,12 @@ function LinePrices({ p }) {
   return (
     <div className={['space-y-0.5 whitespace-nowrap', better ? 'opacity-60' : ''].join(' ')}>
       <div className="flex items-baseline gap-1.5">
-        {ref != null && ref > p.prixOp && <span className="text-gray-400 dark:text-neutral-500 line-through">{fmtPrice(ref)}</span>}
+        {ref != null && ref > p.prixOp && <span className="text-gray-500 dark:text-neutral-400 line-through">{fmtPrice(ref)}</span>}
         <span className="font-semibold text-gray-900 dark:text-white">{fmtPrice(p.prixOp)}</span>
-        {rem > 0 && <span className="text-emerald-600 dark:text-emerald-400 font-semibold">-{rem}%</span>}
+        {rem > 0 && <span className="text-emerald-700 dark:text-emerald-400 font-semibold">-{rem}%</span>}
       </div>
       {p.prixBonPlan != null && (
-        <p className={`text-[10px] ${better ? 'text-orange-600 dark:text-orange-400' : 'text-blue-600 dark:text-blue-400'}`}>
+        <p className={`text-[10px] ${better ? 'text-orange-700 dark:text-orange-400' : 'text-blue-600 dark:text-blue-400'}`}>
           {same ? `Même prix que le bon plan · prix fort ${fmtPrice(p.prixFort)}`
             : better ? `Bon plan déjà à ${fmtPrice(p.prixBonPlan)} : plus avantageux que l'OP`
             : `Bon plan ${fmtPrice(p.prixBonPlan)} · prix fort ${fmtPrice(p.prixFort)}`}
@@ -311,14 +314,14 @@ function ImportModal({ opId, produits, onClose }) {
   const reimport = produits.length > 0
 
   return (
-    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <Dialog onClose={onClose} className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-6xl rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800 shrink-0">
           <span className="text-sm font-semibold text-gray-900 dark:text-white">
             {reimport ? 'Réimporter le fichier de l\'OP' : 'Importer le fichier de l\'OP'}
           </span>
-          <button onClick={onClose} aria-label="Fermer" className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          <button onClick={onClose} aria-label="Fermer" className="h-8 w-8 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
@@ -328,7 +331,7 @@ function ImportModal({ opId, produits, onClose }) {
               <div className="text-xs text-gray-500 dark:text-neutral-400 space-y-1.5">
                 <p>
                   Colonnes lues : <span className="font-mono text-[11px] text-gray-600 dark:text-neutral-300">Nom, Marque, Réf fournisseur, Segment, Prix fort, Prix op</span>
-                  <span className="text-gray-400"> (et si présentes : Référence, Chrono, Couleur, Famille).</span>
+                  <span className="text-gray-500 dark:text-neutral-400"> (et si présentes : Référence, Chrono, Couleur, Famille).</span>
                 </p>
                 <p>Les vélos sont retrouvés dans la base par leur réf. fournisseur ou leur chrono. Les autres articles (textile, accessoires) sont importés sans vérifier le stock.</p>
                 <p>Les lignes <span className="px-1 rounded bg-cyan-200 text-cyan-900 dark:bg-cyan-500/30 dark:text-cyan-200">surlignées en bleu</span> passeront en prix bon plan à la fin de l'OP.</p>
@@ -341,22 +344,22 @@ function ImportModal({ opId, produits, onClose }) {
               <label className={['flex flex-col items-center gap-3 border-2 border-dashed rounded-xl p-8 transition-colors',
                 base ? 'border-gray-200 dark:border-neutral-700 cursor-pointer hover:border-gray-400 dark:hover:border-neutral-500' : 'border-gray-100 dark:border-neutral-800 cursor-wait',
               ].join(' ')}>
-                <svg className="h-8 w-8 text-gray-300 dark:text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
-                <span className="text-xs text-gray-400 dark:text-neutral-500">
+                <svg aria-hidden="true" className="h-8 w-8 text-gray-500 dark:text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+                <span className="text-xs text-gray-500 dark:text-neutral-400">
                   {baseError ? 'Base des vélos indisponible' : base ? 'Cliquez pour choisir un fichier (.xlsx, .xls, .csv)' : 'Chargement de la base des vélos…'}
                 </span>
                 <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} disabled={!base} />
               </label>
-              {(error || baseError) && <p className="text-xs text-red-500">{error || baseError}</p>}
+              {(error || baseError) && <p className="text-xs text-red-600">{error || baseError}</p>}
             </div>
           ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-neutral-400">
-                  <svg className="h-4 w-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  <svg aria-hidden="true" className="h-4 w-4 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   <strong className="text-gray-700 dark:text-neutral-300">{lines.length} lignes</strong> dans <span className="font-mono">{fileName}</span>
                 </div>
-                <button onClick={reset} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-neutral-300 underline">Changer de fichier</button>
+                <button onClick={reset} className="text-xs text-gray-500 dark:text-neutral-400 hover:text-gray-600 dark:hover:text-neutral-300 underline">Changer de fichier</button>
               </div>
 
               {/* Résumé */}
@@ -383,9 +386,9 @@ function ImportModal({ opId, produits, onClose }) {
                   <thead>
                     <tr className="bg-gray-50 dark:bg-neutral-800/50 border-b border-gray-200 dark:border-neutral-700">
                       {['Ligne', 'Produit', 'Stock et déclinaisons', 'Prix', ...(reimport ? ['Réimport'] : [])].map(h => (
-                        <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{h}</th>
+                        <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">{h}</th>
                       ))}
-                      <th className="px-3 py-2 text-center text-[10px] font-semibold text-blue-500 uppercase tracking-wide whitespace-nowrap">Bon plan fin d'OP</th>
+                      <th className="px-3 py-2 text-center text-[10px] font-semibold text-blue-600 uppercase tracking-wide whitespace-nowrap">Bon plan fin d'OP</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -400,10 +403,10 @@ function ImportModal({ opId, produits, onClose }) {
                           l.status === 'missing' ? 'bg-red-50/40 dark:bg-red-500/5' : '',
                           bonPlan[i] && l.status !== 'missing' ? 'bg-blue-50/50 dark:bg-blue-500/5' : '',
                         ].join(' ')}>
-                          <td className="px-3 py-2 font-mono text-gray-400">{l.line}</td>
+                          <td className="px-3 py-2 font-mono text-gray-500 dark:text-neutral-400">{l.line}</td>
                           <td className="px-3 py-2 min-w-[180px]">
-                            <p className={['font-medium', l.status === 'missing' ? 'text-gray-400 line-through' : 'text-gray-900 dark:text-white'].join(' ')}>{nomAffiche(l) || '(sans nom)'}</p>
-                            <p className="text-[10px] text-gray-400 dark:text-neutral-500">
+                            <p className={['font-medium', l.status === 'missing' ? 'text-gray-500 dark:text-neutral-400 line-through' : 'text-gray-900 dark:text-white'].join(' ')}>{nomAffiche(l) || '(sans nom)'}</p>
+                            <p className="text-[10px] text-gray-500 dark:text-neutral-400">
                               {[l.marque, SEGMENT_LABELS[l.segment] || l.segment].filter(Boolean).join(' · ')}
                               {l.refFournisseur && <span className="font-mono"> · {l.refFournisseur}</span>}
                             </p>
@@ -412,8 +415,8 @@ function ImportModal({ opId, produits, onClose }) {
                             <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full ${st.pill}`}>
                               {st.label}{l.status === 'found' && ` ${MATCH_LABELS[l.how]}`}
                             </span>
-                            {l.status === 'outside' && <p className="mt-1 text-[10px] text-gray-400">Importé sans vérifier le stock</p>}
-                            {l.status === 'missing' && <p className="mt-1 text-[10px] text-red-500 dark:text-red-400">Introuvable dans la base : non importé</p>}
+                            {l.status === 'outside' && <p className="mt-1 text-[10px] text-gray-500 dark:text-neutral-400">Importé sans vérifier le stock</p>}
+                            {l.status === 'missing' && <p className="mt-1 text-[10px] text-red-600 dark:text-red-400">Introuvable dans la base : non importé</p>}
                             {l.status === 'check' && <p className="mt-1 text-[10px] text-amber-700 dark:text-amber-400">Trouvé seulement par le nom : coche les bonnes déclinaisons</p>}
                             {(l.status === 'found' || l.status === 'check') && (
                               <div className="mt-1.5 space-y-1">
@@ -425,9 +428,9 @@ function ImportModal({ opId, produits, onClose }) {
                                     )}
                                     {m.couleur
                                       ? <span className="text-[10px] font-semibold bg-gray-100 dark:bg-neutral-700 text-gray-600 dark:text-neutral-300 px-1.5 py-0.5 rounded">{m.couleur}</span>
-                                      : <span className="text-[10px] text-gray-300 dark:text-neutral-600 italic">N.B</span>}
+                                      : <span className="text-[10px] text-gray-500 dark:text-neutral-400 italic">N.B</span>}
                                     <span className="font-mono text-[10px] text-gray-500 dark:text-neutral-400">{m.reference || '—'}</span>
-                                    <span className="font-mono text-[10px] text-gray-400 dark:text-neutral-500">{m.chrono || '—'}</span>
+                                    <span className="font-mono text-[10px] text-gray-500 dark:text-neutral-400">{m.chrono || '—'}</span>
                                     {l.status === 'check' && m.nom !== l.nom && <span className="text-[10px] text-gray-500 dark:text-neutral-400">{m.nom}</span>}
                                   </div>
                                 ))}
@@ -437,10 +440,10 @@ function ImportModal({ opId, produits, onClose }) {
                           <td className="px-3 py-2"><LinePrices p={prices} /></td>
                           {reimport && (
                             <td className="px-3 py-2 whitespace-nowrap">
-                              {!entries.length ? <span className="text-gray-300 dark:text-neutral-600">—</span> : (
+                              {!entries.length ? <span className="text-gray-500 dark:text-neutral-400">—</span> : (
                                 <>
-                                  <p className={actions.has('create') ? 'font-semibold text-emerald-600 dark:text-emerald-400'
-                                    : actions.has('update') ? 'font-semibold text-blue-600 dark:text-blue-400' : 'text-gray-400'}>
+                                  <p className={actions.has('create') ? 'font-semibold text-emerald-700 dark:text-emerald-400'
+                                    : actions.has('update') ? 'font-semibold text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-neutral-400'}>
                                     {actions.has('create') ? 'Nouveau' : actions.has('update') ? 'Mis à jour' : 'Inchangé'}
                                   </p>
                                   {changed && <p className="text-[10px] text-gray-500 dark:text-neutral-400">Prix OP {fmtPrice(changed.existing.prixOp)} → {fmtPrice(changed.data.prixOp)}</p>}
@@ -459,7 +462,7 @@ function ImportModal({ opId, produits, onClose }) {
                   </tbody>
                 </table>
               </div>
-              {error && <p className="text-xs text-red-500">{error}</p>}
+              {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
             </div>
           )}
         </div>
@@ -476,19 +479,19 @@ function ImportModal({ opId, produits, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }
 
 // ── Fiche d'une OP : éléments d'affichage ──────────────────────────────────────
 
 function Stat({ label, value, sub, tone }) {
-  const color = { blue: 'text-blue-700 dark:text-blue-300', orange: 'text-orange-600 dark:text-orange-400' }[tone] || 'text-gray-900 dark:text-white'
+  const color = { blue: 'text-blue-700 dark:text-blue-300', orange: 'text-orange-700 dark:text-orange-400' }[tone] || 'text-gray-900 dark:text-white'
   return (
     <div>
-      <dt className="text-[11px] text-gray-400 dark:text-neutral-500">{label}</dt>
+      <dt className="text-[11px] text-gray-500 dark:text-neutral-400">{label}</dt>
       <dd className={`text-base font-bold ${color}`}>{value}</dd>
-      {sub && <dd className="text-[11px] text-gray-400 dark:text-neutral-500">{sub}</dd>}
+      {sub && <dd className="text-[11px] text-gray-500 dark:text-neutral-400">{sub}</dd>}
     </div>
   )
 }
@@ -504,12 +507,12 @@ function PriceCell({ p, compact }) {
     <div className="space-y-0.5">
       <div className="flex items-baseline gap-2 flex-wrap">
         {/* Prix barré : le prix bon plan s'il est plus cher que l'OP (référence légale), sinon le prix fort */}
-        {ref != null && ref > p.prixOp && <span className="text-gray-400 dark:text-neutral-500 line-through">{formatEuro(ref)}</span>}
-        <span className={`font-bold whitespace-nowrap ${compact ? 'text-xs' : 'text-sm'} ${better ? 'text-gray-400 dark:text-neutral-500' : 'text-gray-900 dark:text-white'}`}>{formatEuro(p.prixOp)}</span>
+        {ref != null && ref > p.prixOp && <span className="text-gray-500 dark:text-neutral-400 line-through">{formatEuro(ref)}</span>}
+        <span className={`font-bold whitespace-nowrap ${compact ? 'text-xs' : 'text-sm'} ${better ? 'text-gray-500 dark:text-neutral-400' : 'text-gray-900 dark:text-white'}`}>{formatEuro(p.prixOp)}</span>
         {rem > 0 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">-{rem} %</span>}
       </div>
       {better && (
-        <p className="text-[11px] font-semibold text-orange-600 dark:text-orange-400">Bon plan déjà moins cher ({formatEuro(p.prixBonPlan)})</p>
+        <p className="text-[11px] font-semibold text-orange-700 dark:text-orange-400">Bon plan déjà moins cher ({formatEuro(p.prixBonPlan)})</p>
       )}
       {same && (
         <p className="text-[11px] font-semibold text-blue-600 dark:text-blue-400">Même prix que le bon plan</p>
@@ -531,23 +534,23 @@ function VariantLine({ p, showPrice, canCreate, onIlv, onEdit }) {
       <div className="flex items-center gap-1.5 flex-wrap min-w-0 flex-1">
         {p.couleur
           ? <span className="text-[10px] font-semibold bg-gray-100 dark:bg-neutral-800 text-gray-600 dark:text-neutral-300 px-1.5 py-0.5 rounded">{p.couleur}</span>
-          : <span className="text-[10px] text-gray-400 dark:text-neutral-500 italic">Sans couleur</span>}
+          : <span className="text-[10px] text-gray-500 dark:text-neutral-400 italic">Sans couleur</span>}
         {(p.reference || p.refFournisseur) && <span className="text-[11px] font-mono text-gray-700 dark:text-neutral-300 whitespace-nowrap">{p.reference || p.refFournisseur}</span>}
-        {p.chrono && <span className="text-[10px] font-mono text-gray-400 dark:text-neutral-500 whitespace-nowrap">{p.chrono}</span>}
+        {p.chrono && <span className="text-[10px] font-mono text-gray-500 dark:text-neutral-400 whitespace-nowrap">{p.chrono}</span>}
         {showPrice && <span className="basis-full"><PriceCell p={p} compact /></span>}
       </div>
       <div className="flex items-center gap-1 shrink-0">
         {p.prixOp != null && (
           <button onClick={() => onIlv(p)} title="Télécharger l’ILV de cette déclinaison"
             className="h-7 px-2 inline-flex items-center gap-1 rounded-lg text-[11px] font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 dark:text-neutral-300 dark:border-neutral-700 dark:hover:bg-neutral-800">
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+            <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
             ILV
           </button>
         )}
         {canCreate && (
           <button onClick={() => onEdit(p)} title="Modifier ou retirer cette déclinaison" aria-label={`Modifier ${p.nom} ${p.couleur || ''}`}
-            className="h-7 w-7 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800">
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+            className="h-7 w-7 grid place-items-center rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-400 dark:hover:text-neutral-200 dark:hover:bg-neutral-800">
+            <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
           </button>
         )}
       </div>
@@ -560,14 +563,14 @@ function BonPlanStatus({ group, canCreate, onToggle }) {
   const all = group.every(p => !!p.passeBonPlan)
   const some = group.some(p => !!p.passeBonPlan)
   const done = group.every(p => !!p.bonPlanTransfere)
-  if (done) return <span className="text-[11px] font-semibold text-green-600 dark:text-green-400">✓ Passé en bon plan</span>
-  if (!canCreate) return all ? <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-300">Passera en bon plan</span> : <span className="text-gray-300 dark:text-neutral-600">—</span>
+  if (done) return <span className="text-[11px] font-semibold text-green-700 dark:text-green-400">✓ Passé en bon plan</span>
+  if (!canCreate) return all ? <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-300">Passera en bon plan</span> : <span className="text-gray-500 dark:text-neutral-400">—</span>
   return (
     <label className="inline-flex items-center gap-2 cursor-pointer">
       <input type="checkbox" className="sr-only" checked={all} onChange={onToggle} />
       <span className={['h-4 w-4 rounded border-2 flex items-center justify-center transition-colors shrink-0',
         all ? 'bg-blue-600 border-blue-600' : some ? 'bg-blue-200 border-blue-300 dark:bg-blue-500/30 dark:border-blue-500/50' : 'border-gray-300 dark:border-neutral-600'].join(' ')}>
-        {all && <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+        {all && <svg aria-hidden="true" className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
         {some && !all && <span className="block h-0.5 w-2 bg-blue-600 dark:bg-blue-400 rounded" />}
       </span>
       <span className={`text-[11px] ${all ? 'font-semibold text-blue-700 dark:text-blue-300' : 'text-gray-500 dark:text-neutral-400'}`}>{all ? 'Oui' : 'Non'}</span>
@@ -582,12 +585,12 @@ function ProductRow({ group, canCreate, onIlv, onEdit, onToggleBonPlan }) {
     <tr className="border-t border-gray-100 dark:border-neutral-800 align-top">
       <td className="px-4 py-3 w-[22%]">
         <p className="font-semibold text-gray-900 dark:text-white">{nomAffiche(first)}</p>
-        <p className="text-[11px] text-gray-400 dark:text-neutral-500">{[first.marque, SEGMENT_LABELS[first.segment] || first.segment].filter(Boolean).join(' · ')}</p>
+        <p className="text-[11px] text-gray-500 dark:text-neutral-400">{[first.marque, SEGMENT_LABELS[first.segment] || first.segment].filter(Boolean).join(' · ')}</p>
       </td>
       <td className="px-4 py-2">
         {group.map(p => <VariantLine key={p.id} p={p} showPrice={!same} canCreate={canCreate} onIlv={onIlv} onEdit={onEdit} />)}
       </td>
-      <td className="px-4 py-3 w-[22%]">{same ? <PriceCell p={first} /> : <span className="text-[11px] text-gray-400">Prix par déclinaison</span>}</td>
+      <td className="px-4 py-3 w-[22%]">{same ? <PriceCell p={first} /> : <span className="text-[11px] text-gray-500 dark:text-neutral-400">Prix par déclinaison</span>}</td>
       <td className="px-4 py-3 whitespace-nowrap"><BonPlanStatus group={group} canCreate={canCreate} onToggle={onToggleBonPlan} /></td>
       {canCreate && <td className="w-2" />}
     </tr>
@@ -601,7 +604,7 @@ function ProductCard({ group, canCreate, onIlv, onEdit, onToggleBonPlan }) {
     <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 p-4 space-y-2">
       <div>
         <p className="text-sm font-semibold text-gray-900 dark:text-white">{nomAffiche(first)}</p>
-        <p className="text-[11px] text-gray-400 dark:text-neutral-500">{[first.marque, SEGMENT_LABELS[first.segment] || first.segment].filter(Boolean).join(' · ')}</p>
+        <p className="text-[11px] text-gray-500 dark:text-neutral-400">{[first.marque, SEGMENT_LABELS[first.segment] || first.segment].filter(Boolean).join(' · ')}</p>
       </div>
       {same && <PriceCell p={first} />}
       <div className="divide-y divide-gray-100 dark:divide-neutral-800">
@@ -779,7 +782,7 @@ export default function OperationDetail() {
     return (
       <div className="min-h-screen flex flex-col">
         <Navbar />
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-sm text-gray-400">
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-sm text-gray-500 dark:text-neutral-400">
           {op === undefined ? 'Chargement…' : (
             <>
               <p>Cette opération n'existe plus.</p>
@@ -830,7 +833,7 @@ export default function OperationDetail() {
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
       <Navbar />
 
-      <main className="flex-1 p-4 sm:p-6">
+      <main id="contenu" tabIndex={-1} className="focus:outline-none flex-1 p-4 sm:p-6">
         <div className="max-w-6xl mx-auto space-y-5">
 
           {/* En-tête : statut, temps restant, ciblage, actions et résumé */}
@@ -839,7 +842,7 @@ export default function OperationDetail() {
               <div className="space-y-1.5 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${status.pill}`}>{status.label}</span>
-                  {op.globale && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-500 text-white">OP Animation</span>}
+                  {op.globale && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-500 text-gray-900">OP Animation</span>}
                   <span className="text-xs text-gray-500 dark:text-neutral-400">{opTiming(op)}</span>
                 </div>
                 <h1 className="text-xl font-bold text-gray-900 dark:text-white break-words">{op.nom}</h1>
@@ -851,7 +854,7 @@ export default function OperationDetail() {
                 {produits.some(p => p.prixOp != null) && (
                   <button onClick={openIlvBatch} title="Un seul PDF avec une ILV par produit, prêt à imprimer"
                     className="h-9 px-3 inline-flex items-center gap-1.5 rounded-lg text-xs font-semibold border border-gray-200 dark:border-neutral-700 text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800">
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+                    <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
                     Toutes les ILV
                   </button>
                 )}
@@ -904,7 +907,7 @@ export default function OperationDetail() {
                 </div>
                 {canCreate && (
                   <button onClick={handleTransferBonPlan} disabled={transfer.busy}
-                    className="shrink-0 h-8 px-3 rounded-lg disabled:opacity-60 text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400 transition-colors">
+                    className="shrink-0 h-8 px-3 rounded-lg disabled:opacity-60 text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-700 transition-colors">
                     {transfer.busy ? 'Transfert…' : 'Passer en bon plan'}
                   </button>
                 )}
@@ -917,7 +920,7 @@ export default function OperationDetail() {
               <p className="text-sm font-semibold text-gray-700 dark:text-neutral-300">Aucun produit dans cette opération</p>
               {canCreate ? (
                 <>
-                  <p className="text-xs text-gray-400 dark:text-neutral-500">Importe le fichier Excel de l’OP : les vélos sont retrouvés dans la base de données.</p>
+                  <p className="text-xs text-gray-500 dark:text-neutral-400">Importe le fichier Excel de l’OP : les vélos sont retrouvés dans la base de données.</p>
                   <div className="flex items-center justify-center gap-2">
                     <button onClick={() => setShowImport(true)}
                       className="h-9 px-4 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
@@ -928,20 +931,20 @@ export default function OperationDetail() {
                     </button>
                   </div>
                 </>
-              ) : <p className="text-xs text-gray-400 dark:text-neutral-500">L’acheteur n’a pas encore ajouté les produits.</p>}
+              ) : <p className="text-xs text-gray-500 dark:text-neutral-400">L’acheteur n’a pas encore ajouté les produits.</p>}
             </div>
           ) : (
             <>
               {/* Recherche et filtres */}
               <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                 <div className="relative flex-1">
-                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 104.5 4.5a7.5 7.5 0 0012.15 12.15z" /></svg>
+                  <svg aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 dark:text-neutral-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 104.5 4.5a7.5 7.5 0 0012.15 12.15z" /></svg>
                   <input value={searchProd} onChange={e => setSearchProd(e.target.value)}
-                    placeholder="Rechercher dans l’OP : nom, référence, chrono, couleur…"
+                    aria-label="Rechercher" placeholder="Rechercher dans l’OP : nom, référence, chrono, couleur…"
                     className="w-full h-9 pl-9 pr-8 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-white/10" />
                   {searchProd && (
-                    <button onClick={() => setSearchProd('')} aria-label="Effacer la recherche" className="absolute right-2.5 top-1/2 -translate-y-1/2 h-5 w-5 grid place-items-center rounded text-gray-400 hover:text-gray-600">
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                    <button onClick={() => setSearchProd('')} aria-label="Effacer la recherche" className="absolute right-2.5 top-1/2 -translate-y-1/2 h-5 w-5 grid place-items-center rounded text-gray-500 dark:text-neutral-400 hover:text-gray-600">
+                      <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                   )}
                 </div>
@@ -959,14 +962,14 @@ export default function OperationDetail() {
               </div>
 
               {grouped.length === 0 ? (
-                <p className="text-center py-10 text-sm text-gray-400 dark:text-neutral-500">Aucun produit ne correspond à la recherche.</p>
+                <p className="text-center py-10 text-sm text-gray-500 dark:text-neutral-400">Aucun produit ne correspond à la recherche.</p>
               ) : (
                 <>
                   {/* Ordinateur : tableau (en-têtes fixes au défilement) */}
                   <div className="hidden md:block bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800">
                     <table className="w-full text-xs">
                       <thead className="sticky top-12 z-10">
-                        <tr className="bg-gray-50 dark:bg-neutral-800 text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">
+                        <tr className="bg-gray-50 dark:bg-neutral-800 text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">
                           <th className="px-4 py-3 text-left rounded-tl-2xl">Produit</th>
                           <th className="px-4 py-3 text-left">Déclinaisons</th>
                           <th className="px-4 py-3 text-left">Prix</th>

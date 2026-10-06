@@ -23,6 +23,9 @@ import {
 import { toDate } from '../lib/ticketStats'
 import { useMagasin } from '../store/useMagasin'
 import { useStaff } from '../lib/useStaff'
+import Dialog from '../components/Dialog'
+import RequiredHint from '../components/RequiredHint'
+import { markInvalid } from '../components/markInvalid'
 
 /* ── Helpers ──────────────────────────────────────────────────────────────── */
 function fmtDate(value) {
@@ -264,14 +267,14 @@ export default function Orders() {
     <div className="min-h-screen flex flex-col">
       <Navbar />
 
-      <main className="flex-1 p-4 sm:p-5">
+      <main id="contenu" tabIndex={-1} className="focus:outline-none flex-1 p-4 sm:p-5">
         <div className="max-w-7xl mx-auto space-y-4">
 
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h1 className="text-sm font-semibold text-gray-900 dark:text-white">Commandes clients</h1>
-              <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">Vélos, pièces et accessoires commandés pour un client</p>
+              <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">Vélos, pièces et accessoires commandés pour un client</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {canManage && (
@@ -323,14 +326,14 @@ export default function Orders() {
                 onClick={() => { setTab(k); setFilterStatut('') }}
                 className={`h-9 px-3 -mb-px border-b-2 text-xs font-semibold transition-colors ${tab === k
                   ? 'border-gray-900 text-gray-900 dark:border-white dark:text-white'
-                  : 'border-transparent text-gray-400 hover:text-gray-700 dark:text-neutral-500 dark:hover:text-neutral-300'}`}>
-                {label} <span className="ml-1 font-medium text-gray-400 dark:text-neutral-500">{n}</span>
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-neutral-400 dark:hover:text-neutral-300'}`}>
+                {label} <span className="ml-1 font-medium text-gray-500 dark:text-neutral-400">{n}</span>
               </button>
             ))}
           </div>
 
           {tab === 'done' && (
-            <p className="text-[11px] text-gray-400 dark:text-neutral-500">
+            <p className="text-[11px] text-gray-500 dark:text-neutral-400">
               Les commandes terminées restent affichées {ORDER_VISIBLE_DAYS} jours. Ensuite, les données du client sont effacées (RGPD)
               et la commande ne sert plus qu'aux statistiques.
             </p>
@@ -348,12 +351,12 @@ export default function Orders() {
           <div className="flex flex-wrap items-center gap-2">
             <input
               className="Input h-8 sm:!w-72 text-xs"
-              placeholder="Rechercher : client, téléphone, n°, référence, fournisseur…"
+              aria-label="Rechercher" placeholder="Rechercher : client, téléphone, n°, référence, fournisseur…"
               value={q}
               onChange={e => setQ(e.target.value)}
             />
             {creators.length > 0 && (
-              <select className="Input h-8 text-xs flex-1 sm:flex-none sm:!w-44" value={filterCreator} onChange={e => setFilterCreator(e.target.value)}>
+              <select aria-label="Filtrer par vendeur" className="Input h-8 text-xs flex-1 sm:flex-none sm:!w-44" value={filterCreator} onChange={e => setFilterCreator(e.target.value)}>
                 <option value="">Tous les vendeurs</option>
                 {creators.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -375,7 +378,7 @@ export default function Orders() {
                 Effacer
               </button>
             )}
-            <span className="ml-auto text-xs text-gray-400 dark:text-neutral-500">
+            <span className="ml-auto text-xs text-gray-500 dark:text-neutral-400">
               {filtered.length} résultat{filtered.length !== 1 ? 's' : ''}
             </span>
           </div>
@@ -387,7 +390,7 @@ export default function Orders() {
                 onOpen={() => setActiveId(o.id)} onChangeStatut={s => changeStatut(o, s)} />
             ))}
             {filtered.length === 0 && (
-              <p className="py-8 text-center text-xs text-gray-400 dark:text-neutral-500">
+              <p className="py-8 text-center text-xs text-gray-500 dark:text-neutral-400">
                 Aucune commande{hasFilters || alertKey ? ' pour ces filtres' : tab === 'open' ? ' en cours' : ' terminée'}.
               </p>
             )}
@@ -419,8 +422,13 @@ export default function Orders() {
                       <tr key={o.id} onClick={() => setActiveId(o.id)}
                         className="border-t border-gray-100 dark:border-neutral-800 hover:bg-gray-50 dark:hover:bg-neutral-800/50 cursor-pointer transition-colors align-top">
                         <td className="px-3 py-2.5 font-mono text-gray-500 dark:text-neutral-400 whitespace-nowrap">
-                          {formatOrderNumber(o.numero)}
-                          <p className="font-sans text-[11px] text-gray-400 dark:text-neutral-500">{fmtDate(o.createdAt)}</p>
+                          {/* Ouverture au clavier : le numéro est un bouton (la ligne reste cliquable à la souris) */}
+                          <button type="button" onClick={e => { e.stopPropagation(); setActiveId(o.id) }}
+                            aria-label={`Ouvrir la commande ${formatOrderNumber(o.numero)}${o.client ? ` de ${o.client}` : ''}`}
+                            className="font-mono hover:underline rounded">
+                            {formatOrderNumber(o.numero)}
+                          </button>
+                          <p className="font-sans text-[11px] text-gray-500 dark:text-neutral-400">{fmtDate(o.createdAt)}</p>
                         </td>
                         <td className="px-3 py-2.5 whitespace-nowrap">
                           <p className="font-medium text-gray-900 dark:text-white">{o.client || (o.anonymizedAt ? 'Client anonymisé' : '—')}</p>
@@ -428,7 +436,7 @@ export default function Orders() {
                         </td>
                         <td className="px-3 py-2.5 max-w-[260px]">
                           <p className="text-gray-800 dark:text-neutral-200 truncate">
-                            {o.type && <span className="mr-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-neutral-500">{ORDER_TYPES[o.type]}</span>}
+                            {o.type && <span className="mr-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-neutral-400">{ORDER_TYPES[o.type]}</span>}
                             {o.produit || '—'}
                           </p>
                           {o.ref_produit && <p className="font-mono text-[11px] text-gray-500 dark:text-neutral-400 truncate">{o.ref_produit}</p>}
@@ -450,8 +458,8 @@ export default function Orders() {
                           )}
                         </td>
                         <td className="px-3 py-2.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                          <StatusSelect value={status} onChange={s => changeStatut(o, s)} />
-                          <p className={`mt-0.5 text-[11px] ${late ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-neutral-500'}`}>
+                          <StatusSelect value={status} onChange={s => changeStatut(o, s)} label={`Statut de la commande ${formatOrderNumber(o.numero)}`} />
+                          <p className={`mt-0.5 text-[11px] ${late ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-neutral-400'}`}>
                             {late && '⚠ '}{sinceLabel(orderStatusSince(o))}
                           </p>
                         </td>
@@ -464,7 +472,7 @@ export default function Orders() {
                   })}
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="px-3 py-8 text-center text-xs text-gray-400 dark:text-neutral-500">
+                      <td colSpan={9} className="px-3 py-8 text-center text-xs text-gray-500 dark:text-neutral-400">
                         Aucune commande{hasFilters || alertKey ? ' pour ces filtres' : tab === 'open' ? ' en cours' : ' terminée'}.
                       </td>
                     </tr>
@@ -510,7 +518,7 @@ export default function Orders() {
                         flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-lg border
                         bg-emerald-50 border-emerald-200 text-emerald-700 text-xs font-medium
                         dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-300">
-          <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg aria-hidden="true" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
           {toast}
@@ -608,7 +616,7 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
   const history = (order.history || []).slice().reverse()
 
   return (
-    <div ref={overlayRef} onClick={e => { if (e.target === overlayRef.current && !editing) onClose() }}
+    <Dialog ref={overlayRef} onClick={e => { if (e.target === overlayRef.current && !editing) onClose() }}
       className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm flex items-start justify-center p-3 sm:p-4 sm:pt-[5vh] overflow-y-auto">
       <div className="w-full max-w-3xl rounded-2xl border shadow-2xl bg-white border-gray-200 dark:bg-neutral-900 dark:border-neutral-800">
 
@@ -616,7 +624,7 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
         <div className="flex items-start justify-between gap-3 px-4 sm:px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
           <div className="min-w-0 space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-mono text-xs text-gray-400 dark:text-neutral-500">{formatOrderNumber(order.numero)}</span>
+              <span className="font-mono text-xs text-gray-500 dark:text-neutral-400">{formatOrderNumber(order.numero)}</span>
               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-medium ${meta.badge}`}>
                 <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />{meta.label}
               </span>
@@ -717,17 +725,18 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
                     value={noteText}
                     onChange={e => setNoteText(e.target.value)}
                     placeholder="Ajouter une note…"
+                    aria-label="Nouvelle note"
                     rows={3}
                     className="Input text-sm resize-y min-h-[4.5rem] leading-relaxed"
                     onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitNote() } }}
                   />
                   <div className="flex flex-wrap items-center gap-2">
-                    <select value={noteAuthor} onChange={e => { setNoteAuthor(e.target.value); setNoteError(false) }}
+                    <select aria-label="Auteur de la note" value={noteAuthor} onChange={e => { setNoteAuthor(e.target.value); setNoteError(false) }}
                       className={`h-9 px-2 rounded-xl border text-xs font-medium bg-white dark:bg-neutral-800 text-gray-700 dark:text-neutral-200 flex-1 sm:flex-none sm:w-40 min-w-0 ${noteError ? 'border-red-400 dark:border-red-500' : 'border-gray-200 dark:border-neutral-700'}`}>
                       <option value="">— Auteur</option>
                       {staff.map(s => <option key={s.id} value={s.nom}>{s.nom}</option>)}
                     </select>
-                    <span className="hidden sm:inline text-[11px] text-gray-400 dark:text-neutral-500">
+                    <span className="hidden sm:inline text-[11px] text-gray-500 dark:text-neutral-400">
                       Entrée : nouvelle ligne · Ctrl/⌘ + Entrée : ajouter
                     </span>
                     <button type="submit" disabled={!noteText.trim() || sendingNote}
@@ -737,11 +746,11 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
                       Ajouter
                     </button>
                   </div>
-                  {noteError && <p className="text-xs text-red-500 dark:text-red-400">Choisis le vendeur qui écrit la note.</p>}
+                  {noteError && <p role="alert" className="text-xs text-red-600 dark:text-red-400">Choisis le vendeur qui écrit la note.</p>}
                 </form>
               )}
               <div className="max-h-64 overflow-y-auto space-y-3">
-                {notes.length === 0 && !order.commentaire && <p className="text-xs text-gray-400 dark:text-neutral-500 py-1">Aucune note.</p>}
+                {notes.length === 0 && !order.commentaire && <p className="text-xs text-gray-500 dark:text-neutral-400 py-1">Aucune note.</p>}
                 {notes.map(n => (
                   <div key={noteKey(n)} className="group flex gap-3">
                     <div className="h-7 w-7 rounded-full bg-gray-100 dark:bg-neutral-800 text-gray-600 dark:text-neutral-300
@@ -751,7 +760,7 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
                     <div className="flex-1 min-w-0">
                       <div className="flex items-baseline flex-wrap gap-x-2 mb-0.5">
                         <span className="text-xs font-semibold text-gray-700 dark:text-neutral-300">{n.author || '—'}</span>
-                        <span className="text-[11px] text-gray-400 dark:text-neutral-500">
+                        <span className="text-[11px] text-gray-500 dark:text-neutral-400">
                           {toDate(n.at)?.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) || '—'}
                           {n.editedAt ? ' · modifiée' : ''}
                         </span>
@@ -798,14 +807,14 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
           {!editing && (
             <MCard title="Historique">
               <div className="max-h-48 overflow-y-auto divide-y divide-gray-100 dark:divide-neutral-800 sm:divide-y-0">
-                {history.length === 0 && <p className="text-xs text-gray-400 dark:text-neutral-500">Créée le {fmtDate(order.createdAt)}.</p>}
+                {history.length === 0 && <p className="text-xs text-gray-500 dark:text-neutral-400">Créée le {fmtDate(order.createdAt)}.</p>}
                 {history.map((h, i) => (
                   <div key={i} className="flex flex-col sm:flex-row sm:gap-2 text-xs py-1.5 sm:py-1">
-                    <span className="text-gray-400 dark:text-neutral-500 shrink-0 sm:w-36">
+                    <span className="text-gray-500 dark:text-neutral-400 shrink-0 sm:w-36">
                       {toDate(h.at)?.toLocaleString('fr-FR') || '—'}<span className="sm:hidden"> · {h.by}</span>
                     </span>
                     <span className="text-gray-700 dark:text-neutral-300">{h.note}</span>
-                    <span className="hidden sm:block text-gray-400 dark:text-neutral-500 ml-auto shrink-0">{h.by}</span>
+                    <span className="hidden sm:block text-gray-500 dark:text-neutral-400 ml-auto shrink-0">{h.by}</span>
                   </div>
                 ))}
               </div>
@@ -822,7 +831,7 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
           </div>
         )}
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -855,7 +864,7 @@ function OrderForm({ staff, onSubmit, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm flex items-start justify-center p-3 sm:p-4 sm:pt-[5vh] overflow-y-auto">
+    <Dialog className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm flex items-start justify-center p-3 sm:p-4 sm:pt-[5vh] overflow-y-auto">
       <div className="w-full max-w-3xl rounded-2xl border shadow-2xl bg-white border-gray-200 dark:bg-neutral-900 dark:border-neutral-800">
         <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
           <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Nouvelle commande client</h2>
@@ -877,15 +886,15 @@ function OrderForm({ staff, onSubmit, onClose }) {
                 </div>
               </MCard>
               <MCard title="Note (facultative)">
-                <textarea rows={3} className="Input text-sm" placeholder="Taille, couleur, précisions…" value={note} onChange={e => setNote(e.target.value)} />
+                <textarea rows={3} className="Input text-sm" aria-label="Note (facultative)" placeholder="Taille, couleur, précisions…" value={note} onChange={e => setNote(e.target.value)} />
               </MCard>
             </div>
           </div>
 
           <div className="sticky bottom-0 flex flex-wrap items-center justify-end gap-2 px-4 sm:px-5 py-3 border-t rounded-b-2xl border-gray-100 bg-white dark:border-neutral-800 dark:bg-neutral-900">
-            {error && <p className="text-xs text-red-600 dark:text-red-400 w-full sm:w-auto sm:mr-auto">{error}</p>}
+            {error && <p role="alert" className="text-xs text-red-600 dark:text-red-400 w-full sm:w-auto sm:mr-auto">{error}</p>}
             {!error && (
-              <p className={`text-xs w-full sm:w-auto sm:mr-auto ${tried && invalid ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-neutral-500'}`}>
+              <p className={`text-xs w-full sm:w-auto sm:mr-auto ${tried && invalid ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-neutral-400'}`}>
                 {tried && invalid ? 'Corrige les champs en rouge.' : 'Client, désignation, prix de vente et vendeur sont obligatoires.'}
               </p>
             )}
@@ -894,7 +903,7 @@ function OrderForm({ staff, onSubmit, onClose }) {
           </div>
         </form>
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -907,6 +916,7 @@ function OrderFields({ fields, setFields, staff, errors = {}, autoFocus = false 
   const bad = k => (errors[k] ? INVALID : '')
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+      <RequiredHint className="md:col-span-2" />
       <MCard title="Client">
         <MGrid>
           <FField label="Nom du client" required wide error={errors.client}>
@@ -931,7 +941,7 @@ function OrderFields({ fields, setFields, staff, errors = {}, autoFocus = false 
           </FField>
           {/* Calculé automatiquement */}
           <div className="space-y-1">
-            <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Total TTC</span>
+            <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Total TTC</span>
             <p className="h-[42px] flex items-center px-3 rounded-xl bg-gray-50 dark:bg-neutral-800/60 text-sm font-semibold text-gray-900 dark:text-white tabular-nums">
               {total != null ? formatEuro(total) : '—'}
             </p>
@@ -1009,7 +1019,7 @@ function OrderCard({ order: o, magasin, onOpen, onChangeStatut }) {
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-gray-900 dark:text-white break-words">{o.client || (o.anonymizedAt ? 'Client anonymisé' : '—')}</p>
-          <p className="text-[11px] text-gray-400 dark:text-neutral-500">
+          <p className="text-[11px] text-gray-500 dark:text-neutral-400">
             <span className="font-mono">{formatOrderNumber(o.numero)}</span> · {fmtDate(o.createdAt)}{o.createur ? ` · ${o.createur}` : ''}
           </p>
         </div>
@@ -1019,14 +1029,14 @@ function OrderCard({ order: o, magasin, onOpen, onChangeStatut }) {
         </div>
       </div>
       <p className="text-xs text-gray-700 dark:text-neutral-300 line-clamp-2 break-words">
-        {o.type && <span className="mr-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-neutral-500">{ORDER_TYPES[o.type]}</span>}
+        {o.type && <span className="mr-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-neutral-400">{ORDER_TYPES[o.type]}</span>}
         {orderQuantity(o) > 1 && <span className="font-semibold text-gray-900 dark:text-white">{orderQuantity(o)} × </span>}
         {o.produit || '—'}
-        {o.fournisseur && <span className="text-gray-400 dark:text-neutral-500"> · {o.fournisseur}</span>}
+        {o.fournisseur && <span className="text-gray-500 dark:text-neutral-400"> · {o.fournisseur}</span>}
       </p>
       <div className="flex items-center justify-between gap-2 pt-1" onClick={e => e.stopPropagation()}>
-        <StatusSelect value={orderStatus(o)} onChange={onChangeStatut} />
-        <span className={`text-[11px] text-right ${late ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-neutral-500'}`}>
+        <StatusSelect value={orderStatus(o)} onChange={onChangeStatut} label={`Statut de la commande ${formatOrderNumber(o.numero)}`} />
+        <span className={`text-[11px] text-right ${late ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-neutral-400'}`}>
           {late && '⚠ '}{sinceLabel(orderStatusSince(o))}
           {magasin && <span className="block">{magasin}</span>}
         </span>
@@ -1047,15 +1057,15 @@ function StatCard({ status, value, active, onClick }) {
         <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide truncate">{meta.label}</span>
       </div>
       <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white tabular-nums">{value}</p>
-      <p className="hidden sm:block text-[11px] text-gray-400 dark:text-neutral-500 truncate">{meta.hint}</p>
+      <p className="hidden sm:block text-[11px] text-gray-500 dark:text-neutral-400 truncate">{meta.hint}</p>
     </button>
   )
 }
 
-function StatusSelect({ value, onChange }) {
+function StatusSelect({ value, onChange, label = 'Statut de la commande' }) {
   const meta = ORDER_STATUS_META[value]
   return (
-    <select value={value} onChange={e => onChange(e.target.value)} onClick={e => e.stopPropagation()}
+    <select value={value} onChange={e => onChange(e.target.value)} onClick={e => e.stopPropagation()} aria-label={label}
       className={`rounded-lg border text-xs font-medium px-2 py-1 cursor-pointer focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/20 ${meta.badge}`}>
       {ORDER_STATUSES.map(s => (
         <option key={s} value={s} className="bg-white dark:bg-neutral-900 text-gray-900 dark:text-white">{ORDER_STATUS_META[s].label}</option>
@@ -1078,17 +1088,17 @@ function SmallBtn({ children, primary = false, type = 'button', ...props }) {
 function IconBtn({ children, title, onClick, danger = false }) {
   return (
     <button type="button" onClick={onClick} title={title} aria-label={title}
-      className={`h-8 w-8 grid place-items-center rounded-lg text-gray-400 transition-colors ${danger
-        ? 'hover:text-red-600 hover:bg-red-50 dark:text-neutral-500 dark:hover:text-red-400 dark:hover:bg-red-500/10'
-        : 'hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800'}`}>
-      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>{children}</svg>
+      className={`h-8 w-8 grid place-items-center rounded-lg text-gray-500 transition-colors ${danger
+        ? 'hover:text-red-600 hover:bg-red-50 dark:text-neutral-400 dark:hover:text-red-400 dark:hover:bg-red-500/10'
+        : 'hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-400 dark:hover:text-neutral-200 dark:hover:bg-neutral-800'}`}>
+      <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>{children}</svg>
     </button>
   )
 }
 
 function Th({ children, right = false }) {
   return (
-    <th className={`px-3 py-2.5 text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide whitespace-nowrap ${right ? 'text-right' : 'text-left'}`}>
+    <th className={`px-3 py-2.5 text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide whitespace-nowrap ${right ? 'text-right' : 'text-left'}`}>
       {children}
     </th>
   )
@@ -1113,7 +1123,7 @@ function MGrid({ children }) {
 function MField({ label, children, span2 = false }) {
   return (
     <div className={span2 ? 'col-span-full' : ''}>
-      <p className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide mb-1">{label}</p>
+      <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide mb-1">{label}</p>
       {children}
     </div>
   )
@@ -1127,10 +1137,10 @@ function MVal({ children, mono = false }) {
 function FField({ label, children, required = false, span2 = false, wide = false, error }) {
   return (
     <label className={`block space-y-1 min-w-0 ${span2 ? 'col-span-full' : wide ? 'col-span-full sm:col-span-1' : ''}`}>
-      <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">
-        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+      <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">
+        {label}{required && <span className="text-red-600 ml-0.5">*</span>}
       </span>
-      {children}
+      {markInvalid(children, !!error)}
       {error && <span className="block text-[11px] text-red-600 dark:text-red-400">{error}</span>}
     </label>
   )

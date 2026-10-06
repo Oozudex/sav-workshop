@@ -15,6 +15,9 @@ import {
 } from '../lib/calendarEvents'
 import CalendarSettings from './CalendarSettings'
 import Portal from './Portal'
+import Dialog from './Dialog'
+import RequiredHint from './RequiredHint'
+import { markInvalid } from './markInvalid'
 
 /* ── Constants ──────────────────────────────────────────────────────────────── */
 const DAYS_FR = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
@@ -105,17 +108,17 @@ function getDayKey(dateStr) {
 }
 
 /* ── EventModal ─────────────────────────────────────────────────────────────── */
-const LABEL = 'text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide'
+const LABEL = 'text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide'
 const INVALID = '!border-red-400 dark:!border-red-500/70'
 
 function Field({ label, required, error, hint, className = '', children }) {
   return (
     <label className={`block space-y-1 ${className}`}>
-      <span className={LABEL}>{label}{required && <span className="text-red-500 ml-0.5">*</span>}</span>
-      {children}
+      <span className={LABEL}>{label}{required && <span className="text-red-600 ml-0.5">*</span>}</span>
+      {markInvalid(children, !!error)}
       {error
         ? <span className="block text-[11px] text-red-600 dark:text-red-400">{error}</span>
-        : hint && <span className="block text-[11px] text-gray-400 dark:text-neutral-500">{hint}</span>}
+        : hint && <span className="block text-[11px] text-gray-500 dark:text-neutral-400">{hint}</span>}
     </label>
   )
 }
@@ -124,7 +127,7 @@ function TransformButton({ onClick }) {
   return (
     <button type="button" onClick={onClick}
       className="w-full h-9 flex items-center justify-center gap-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors">
-      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
       </svg>
       Créer la fiche atelier
@@ -139,7 +142,7 @@ function PresenceBlock({ event, onPresence, onReschedule }) {
     <button type="button" onClick={() => onPresence(event, p === value ? null : value)} aria-pressed={p === value}
       className={['h-9 inline-flex items-center justify-center gap-1.5 rounded-lg border text-xs font-semibold transition-colors',
         p === value ? on : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800'].join(' ')}>
-      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d={d} /></svg>
+      <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d={d} /></svg>
       {label}
     </button>
   )
@@ -240,7 +243,7 @@ function EventModal({ event, prefill, defaultDate, onClose, onSave, onDelete, on
 
   return (
     <Portal>
-    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <Dialog onClose={onClose} className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
@@ -255,8 +258,8 @@ function EventModal({ event, prefill, defaultDate, onClose, onSave, onDelete, on
               {isNew ? (prefill ? 'Reprogrammer le RDV' : creatableTypes.length === 1 ? `Nouveau ${EVENT_TYPES[creatableTypes[0]].label}` : 'Nouvel événement') : isTicket ? event.title : (canEdit ? 'Modifier' : event.title)}
             </span>
           </div>
-          <button onClick={onClose} aria-label="Fermer" className="shrink-0 h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <button onClick={onClose} aria-label="Fermer" className="shrink-0 h-8 w-8 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -266,7 +269,7 @@ function EventModal({ event, prefill, defaultDate, onClose, onSave, onDelete, on
         {isTicket ? (
           <div className="p-5 space-y-3">
             <p className="text-xs text-gray-500 dark:text-neutral-400">{event.description || 'Pas de description.'}</p>
-            <div className="flex gap-2 text-xs text-gray-400">
+            <div className="flex gap-2 text-xs text-gray-500 dark:text-neutral-400">
               <span>{event.date}</span>
               {event.startTime && <span>· {event.startTime}</span>}
             </div>
@@ -277,25 +280,25 @@ function EventModal({ event, prefill, defaultDate, onClose, onSave, onDelete, on
             {showPresence && <PresenceBlock event={event} onPresence={onPresence} onReschedule={onReschedule} />}
             {event.rescheduledFrom && <p className="text-[11px] text-gray-500 dark:text-neutral-400">Reprogrammé : le client n’était pas venu au RDV du {fmtDateLong(event.rescheduledFrom)}.</p>}
             <div className="grid grid-cols-2 gap-3 text-xs">
-              <div><span className="text-gray-400">Date</span><p className="font-medium text-gray-900 dark:text-white mt-0.5">{fmtDateLong(event.date)}{event.startTime && ` · ${event.startTime}${event.endTime ? ` – ${event.endTime}` : ''}`}</p></div>
-              {event.rayonType && <div><span className="text-gray-400">Rayon</span><p className="font-medium text-gray-900 dark:text-white mt-0.5">{RAYON_TYPE_LABELS[event.rayonType] || event.rayonType}</p></div>}
-              {event.type === 'rdv_client' && event.customerName && <div><span className="text-gray-400">Client</span><p className="font-medium text-gray-900 dark:text-white mt-0.5">{event.customerName}</p></div>}
+              <div><span className="text-gray-500 dark:text-neutral-400">Date</span><p className="font-medium text-gray-900 dark:text-white mt-0.5">{fmtDateLong(event.date)}{event.startTime && ` · ${event.startTime}${event.endTime ? ` – ${event.endTime}` : ''}`}</p></div>
+              {event.rayonType && <div><span className="text-gray-500 dark:text-neutral-400">Rayon</span><p className="font-medium text-gray-900 dark:text-white mt-0.5">{RAYON_TYPE_LABELS[event.rayonType] || event.rayonType}</p></div>}
+              {event.type === 'rdv_client' && event.customerName && <div><span className="text-gray-500 dark:text-neutral-400">Client</span><p className="font-medium text-gray-900 dark:text-white mt-0.5">{event.customerName}</p></div>}
               {event.type === 'rdv_client' && event.customerPhone && (
-                <div><span className="text-gray-400">Téléphone</span>
+                <div><span className="text-gray-500 dark:text-neutral-400">Téléphone</span>
                   <p className="mt-0.5"><a href={`tel:${phoneDigits(event.customerPhone)}`} className="font-medium text-gray-900 dark:text-white hover:underline">{formatPhone(event.customerPhone)}</a></p>
                 </div>
               )}
             </div>
             {event.description && (
               <div className="text-xs">
-                {event.type === 'rdv_client' && <span className="text-gray-400">Problème</span>}
+                {event.type === 'rdv_client' && <span className="text-gray-500 dark:text-neutral-400">Problème</span>}
                 <p className="text-gray-600 dark:text-neutral-300 whitespace-pre-line mt-0.5">{event.description}</p>
               </div>
             )}
             {event.teamsLink && (
               <a href={safeUrl(event.teamsLink)} target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-2 text-xs text-violet-600 dark:text-violet-400 hover:underline">
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
                 </svg>
                 Rejoindre la réunion Teams
@@ -310,6 +313,7 @@ function EventModal({ event, prefill, defaultDate, onClose, onSave, onDelete, on
         ) : (
           /* Formulaire */
           <form onSubmit={handleSave} noValidate className="p-5 space-y-4">
+            <RequiredHint />
             {showPresence && <PresenceBlock event={event} onPresence={onPresence} onReschedule={onReschedule} />}
             {form.rescheduledFrom && (
               <p className="rounded-lg bg-gray-50 dark:bg-neutral-800/60 px-3 py-2 text-[11px] text-gray-600 dark:text-neutral-300">
@@ -418,7 +422,7 @@ function EventModal({ event, prefill, defaultDate, onClose, onSave, onDelete, on
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <span className={LABEL}>Magasins concernés</span>
-                      <span className="text-[11px] text-gray-400 dark:text-neutral-500">
+                      <span className="text-[11px] text-gray-500 dark:text-neutral-400">
                         {form.teamsMagasins.length === 0 ? 'Tous' : `${form.teamsMagasins.length} sélectionné${form.teamsMagasins.length > 1 ? 's' : ''}`}
                       </span>
                     </div>
@@ -434,7 +438,7 @@ function EventModal({ event, prefill, defaultDate, onClose, onSave, onDelete, on
                             <span className={['h-3.5 w-3.5 rounded border-2 flex items-center justify-center shrink-0',
                               active ? 'bg-gray-900 border-gray-900 dark:bg-white dark:border-white' : 'border-gray-300 dark:border-neutral-600',
                             ].join(' ')}>
-                              {active && <svg className="h-2 w-2 text-white dark:text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                              {active && <svg aria-hidden="true" className="h-2 w-2 text-white dark:text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
                             </span>
                             {m.nom}
                           </button>
@@ -487,7 +491,7 @@ function EventModal({ event, prefill, defaultDate, onClose, onSave, onDelete, on
           </form>
         )}
       </div>
-    </div>
+    </Dialog>
     </Portal>
   )
 }
@@ -501,7 +505,7 @@ function EventChip({ ev, onClick, today }) {
   // Présence au RDV client : à pointer (passé, non renseigné), venu ou absent
   const toCheck = rdvToCheck(ev, today)
   const presence = ev.type === 'rdv_client' ? ev.presence : null
-  const status = toCheck ? { text: '⚠ À pointer', cls: 'text-orange-600 dark:text-orange-400' }
+  const status = toCheck ? { text: '⚠ À pointer', cls: 'text-orange-700 dark:text-orange-400' }
     : presence === 'absent' ? { text: ev.rescheduledTo ? 'Absent · reprogrammé' : 'Absent', cls: 'text-red-600 dark:text-red-400' }
       : presence === 'venu' ? { text: '✓ Venu', cls: 'text-emerald-700 dark:text-emerald-400' } : null
   const tooltip = [
@@ -562,7 +566,7 @@ function OpBand({ bars, onOpen, className = '' }) {
             title={[op.globale ? 'OP Animation' : 'Opération commerciale', op.nom, dates].join('\n')}
             style={{ gridColumn: `${col + 1} / span ${span}`, gridRow: lane + 1 }}
             className={['h-6 min-w-0 flex items-center gap-1 px-2 text-[11px] font-semibold text-left transition hover:brightness-95 dark:hover:brightness-125',
-              op.globale ? 'bg-amber-500 text-white dark:bg-amber-500/80' : 'bg-amber-100 text-amber-900 dark:bg-amber-500/25 dark:text-amber-100',
+              op.globale ? 'bg-amber-500 text-gray-900 dark:bg-amber-500/80' : 'bg-amber-100 text-amber-900 dark:bg-amber-500/25 dark:text-amber-100',
               avant ? 'rounded-l-none' : 'rounded-l-md ml-1', apres ? 'rounded-r-none' : 'rounded-r-md mr-1'].join(' ')}>
             {avant && <span aria-hidden="true" className="opacity-70">‹</span>}
             <span className="truncate">{op.globale && <span className="font-bold">Animation · </span>}{op.nom}</span>
@@ -579,7 +583,7 @@ function LegendItem({ active, onClick, dot, label }) {
   return (
     <button onClick={onClick} title={active ? `Masquer : ${label}` : `Afficher : ${label}`}
       className={['h-6 px-2 inline-flex items-center gap-1.5 rounded-md text-[11px] font-medium transition-colors hover:bg-gray-100 dark:hover:bg-neutral-800',
-        active ? 'text-gray-600 dark:text-neutral-300' : 'text-gray-400 dark:text-neutral-600 line-through opacity-60'].join(' ')}>
+        active ? 'text-gray-600 dark:text-neutral-300' : 'text-gray-500 dark:text-neutral-400 line-through opacity-60'].join(' ')}>
       <span className={`h-2.5 w-2.5 rounded-sm ${dot}`} />
       {label}
     </button>
@@ -1026,14 +1030,14 @@ export default function WeeklyCalendar({ magasinId }) {
           )}
 
           <div className="flex items-center gap-1">
-            <button onClick={prevWeek} className="h-7 w-7 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors">
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+            <button onClick={prevWeek} aria-label="Semaine précédente" className="h-7 w-7 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors">
+              <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
             </button>
             <span className="text-[11px] sm:text-xs font-semibold text-gray-700 dark:text-neutral-300 px-1 sm:px-0 sm:w-44 text-center whitespace-nowrap">
               {fmtWeekRange(days)}
             </span>
-            <button onClick={nextWeek} className="h-7 w-7 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors">
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+            <button onClick={nextWeek} aria-label="Semaine suivante" className="h-7 w-7 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors">
+              <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
             </button>
             <button onClick={() => setRefDate(new Date())}
               className="h-7 px-2 sm:px-2.5 rounded-lg text-[11px] font-medium border border-gray-200 dark:border-neutral-700 text-gray-500 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors sm:ml-1">
@@ -1049,9 +1053,9 @@ export default function WeeklyCalendar({ magasinId }) {
             <button
               onClick={() => setSettingsOpen(true)}
               title="Paramètres du calendrier"
-              className="h-7 w-7 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors"
+              className="h-7 w-7 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors"
             >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
@@ -1073,7 +1077,7 @@ export default function WeeklyCalendar({ magasinId }) {
         <div className="md:hidden px-2 pt-2 pb-1 border-b border-gray-100 dark:border-neutral-800">
           <div className="grid grid-cols-7">
             {days.map((day, i) => (
-              <span key={i} className={['text-center text-[10px] font-semibold uppercase', isToday(day) ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-neutral-500'].join(' ')}>
+              <span key={i} className={['text-center text-[10px] font-semibold uppercase', isToday(day) ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-neutral-400'].join(' ')}>
                 {DAYS_FR[i].charAt(0)}{day.getDate()}
               </span>
             ))}
@@ -1090,14 +1094,14 @@ export default function WeeklyCalendar({ magasinId }) {
           return (
             <div key={dateStr} className={['flex gap-3 px-3 py-2.5', today ? 'bg-gray-50/70 dark:bg-neutral-800/30' : ''].join(' ')}>
               <div className="w-10 shrink-0 flex flex-col items-center gap-0.5 pt-0.5">
-                <span className="text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">{DAYS_FR[i]}</span>
+                <span className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">{DAYS_FR[i]}</span>
                 <span className={['text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full',
                   today ? 'bg-gray-900 text-white dark:bg-white dark:text-black' : 'text-gray-800 dark:text-neutral-200'].join(' ')}>
                   {day.getDate()}
                 </span>
                 {quotaInfo !== null && (
                   <span className={['text-[9px] font-semibold px-1 py-0.5 rounded-full leading-none whitespace-nowrap',
-                    quotaInfo.count >= quotaInfo.quota ? 'bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400' : 'bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-400'].join(' ')}>
+                    quotaInfo.count >= quotaInfo.quota ? 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400' : 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400'].join(' ')}>
                     {quotaInfo.count}/{quotaInfo.quota}
                   </span>
                 )}
@@ -1105,7 +1109,7 @@ export default function WeeklyCalendar({ magasinId }) {
               <div className="flex-1 min-w-0 space-y-1">
                 {empty
                   ? <button onClick={() => setModal({ event: null, date: dateStr })}
-                      className="h-8 text-[11px] text-gray-400 dark:text-neutral-500 hover:text-gray-600 dark:hover:text-neutral-300">
+                      className="h-8 text-[11px] text-gray-500 dark:text-neutral-400 hover:text-gray-600 dark:hover:text-neutral-300">
                       Rien de prévu · <span className="font-semibold">Ajouter</span>
                     </button>
                   : dayItems(dateStr)}
@@ -1124,7 +1128,7 @@ export default function WeeklyCalendar({ magasinId }) {
             const quotaInfo = getDayQuotaInfo(dateStr)
             return (
               <div key={dateStr} className={['flex flex-col items-center py-2 gap-0.5', today ? 'bg-gray-50/70 dark:bg-neutral-800/30' : ''].join(' ')}>
-                <span className="text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">
+                <span className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">
                   {DAYS_FR[i]}
                 </span>
                 <span className={['text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full',
@@ -1138,10 +1142,10 @@ export default function WeeklyCalendar({ magasinId }) {
                 {quotaInfo !== null && (
                   <span className={['text-[9px] font-semibold px-1.5 py-0.5 rounded-full leading-none',
                     quotaInfo.count >= quotaInfo.quota
-                      ? 'bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400'
+                      ? 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400'
                       : quotaInfo.count >= quotaInfo.quota - 1 && quotaInfo.quota > 1
-                        ? 'bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400'
-                        : 'bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-400',
+                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
+                        : 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400',
                   ].join(' ')}>
                     {quotaInfo.count}/{quotaInfo.quota} rdv
                   </span>
@@ -1169,7 +1173,7 @@ export default function WeeklyCalendar({ magasinId }) {
                 ))}
                 {dayEvents.length === 0 && (
                   <div className="h-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <span className="text-[10px] text-gray-300 dark:text-neutral-700">+</span>
+                    <span aria-hidden="true" className="text-[10px] text-gray-300 dark:text-neutral-700">+</span>
                   </div>
                 )}
               </div>
@@ -1203,7 +1207,7 @@ export default function WeeklyCalendar({ magasinId }) {
           <button onClick={() => toggleFilter('planning_shift')}
             title={activeFilters.has('planning_shift') ? 'Masquer le planning' : 'Afficher le planning'}
             className={['h-6 px-2 inline-flex items-center gap-2 rounded-md text-[11px] transition-colors hover:bg-gray-100 dark:hover:bg-neutral-800 sm:ml-1 sm:pl-3 sm:border-l sm:border-gray-200 sm:dark:border-neutral-700 sm:rounded-l-none',
-              activeFilters.has('planning_shift') ? 'text-gray-600 dark:text-neutral-300' : 'text-gray-400 dark:text-neutral-600 line-through opacity-60'].join(' ')}>
+              activeFilters.has('planning_shift') ? 'text-gray-600 dark:text-neutral-300' : 'text-gray-500 dark:text-neutral-400 line-through opacity-60'].join(' ')}>
             <span className="font-semibold">Planning :</span>
             {Object.values(PLANNING_KINDS).map(k => (
               <span key={k.label} className="inline-flex items-center gap-1">
@@ -1243,11 +1247,11 @@ export default function WeeklyCalendar({ magasinId }) {
       {/* Dialog alerte quota dépassé */}
       {quotaWarning && (
         <Portal>
-        <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <Dialog onClose={() => { setQuotaWarning(null); setPendingForm(null) }} className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl p-5 space-y-4">
             <div className="flex items-start gap-3">
               <div className="h-9 w-9 rounded-full bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center shrink-0">
-                <svg className="h-4.5 w-4.5 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg aria-hidden="true" className="h-4.5 w-4.5 text-amber-700 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                 </svg>
               </div>
@@ -1270,13 +1274,13 @@ export default function WeeklyCalendar({ magasinId }) {
               </button>
               <button
                 onClick={handleQuotaConfirm}
-                className="h-8 px-4 rounded-lg text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white transition-colors"
+                className="h-8 px-4 rounded-lg text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-gray-900 transition-colors"
               >
                 Créer quand même
               </button>
             </div>
           </div>
-        </div>
+        </Dialog>
         </Portal>
       )}
 

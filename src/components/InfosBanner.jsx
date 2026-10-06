@@ -10,6 +10,7 @@ import {
 import { RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
 import { safeUrl } from '../lib/security'
 import { isOpVisibleFor } from '../lib/opSearch'
+import Dialog from './Dialog'
 
 function getTodayStr() {
   const d = new Date()
@@ -66,14 +67,14 @@ function InfoModal({ info, profile, userId, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <Dialog onClose={onClose} className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
           <p className="text-sm font-semibold text-gray-900 dark:text-white">
             {isNew ? 'Nouvelle info importante' : "Modifier l'info"}
           </p>
-          <button onClick={onClose} className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <button aria-label="Fermer" onClick={onClose} className="h-8 w-8 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -145,7 +146,7 @@ function InfoModal({ info, profile, userId, onClose }) {
             />
           </div>
 
-          {error && <p className="text-xs text-red-500">{error}</p>}
+          {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
         </div>
 
         <div className="px-5 py-3.5 border-t border-gray-100 dark:border-neutral-800 flex justify-end gap-2">
@@ -154,12 +155,12 @@ function InfoModal({ info, profile, userId, onClose }) {
             Annuler
           </button>
           <button onClick={handleSave} disabled={saving}
-            className="h-8 px-4 rounded-lg text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white transition-colors disabled:opacity-50">
+            className="h-8 px-4 rounded-lg text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-gray-900 transition-colors disabled:opacity-50">
             {saving ? 'Enregistrement…' : 'Enregistrer'}
           </button>
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -246,16 +247,16 @@ export default function InfosBanner({ magasinId }) {
           <div className={[
             'h-6 w-6 rounded-lg flex items-center justify-center shrink-0 mt-0.5',
             alert.kind === 'start'
-              ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400'
-              : 'bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400',
+              ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400'
+              : 'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400',
           ].join(' ')}>
             {alert.kind === 'start'
               ? (
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
                 </svg>
               ) : (
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
                 </svg>
               )}
@@ -299,7 +300,7 @@ export default function InfosBanner({ magasinId }) {
           className="flex items-start gap-3 px-4 py-3 rounded-xl border bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/30"
         >
           <div className="h-6 w-6 rounded-lg bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center shrink-0 mt-0.5 text-blue-600 dark:text-blue-400">
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
             </svg>
           </div>
@@ -330,19 +331,19 @@ export default function InfosBanner({ magasinId }) {
             {canManage && (
               <>
                 <button
-                  onClick={() => setModal(info)}
-                  className="h-7 w-7 grid place-items-center rounded-lg text-gray-400 hover:bg-white dark:hover:bg-neutral-800 hover:text-gray-600 dark:hover:text-neutral-200 transition-colors"
+                  onClick={() => setModal(info)} aria-label={`Modifier l’info « ${info.titre || ''} »`}
+                  className="h-7 w-7 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:bg-white dark:hover:bg-neutral-800 hover:text-gray-600 dark:hover:text-neutral-200 transition-colors"
                 >
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
                   </svg>
                 </button>
                 <button
-                  onClick={() => handleDelete(info.id)}
+                  onClick={() => handleDelete(info.id)} aria-label={`Supprimer l’info « ${info.titre || ''} »`}
                   disabled={deleting === info.id}
-                  className="h-7 w-7 grid place-items-center rounded-lg text-gray-400 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50"
+                  className="h-7 w-7 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50"
                 >
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
                   </svg>
                 </button>
@@ -356,9 +357,9 @@ export default function InfosBanner({ magasinId }) {
       {canManage && (
         <button
           onClick={() => setModal('new')}
-          className="flex items-center gap-2 h-8 px-3 rounded-xl border border-dashed border-gray-300 dark:border-neutral-700 text-xs text-gray-400 dark:text-neutral-500 hover:border-amber-400 dark:hover:border-amber-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
+          className="flex items-center gap-2 h-8 px-3 rounded-xl border border-dashed border-gray-300 dark:border-neutral-700 text-xs text-gray-500 dark:text-neutral-400 hover:border-amber-400 dark:hover:border-amber-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
         >
-          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
           Ajouter une info importante

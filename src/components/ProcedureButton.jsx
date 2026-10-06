@@ -12,7 +12,7 @@ const DOC_ICON = 'M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.1
 const EDIT_ICON = 'M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z'
 
 const Svg = ({ d }) => (
-  <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+  <svg aria-hidden="true" className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
     <path strokeLinecap="round" strokeLinejoin="round" d={d} />
   </svg>
 )
@@ -47,7 +47,7 @@ function ProcedureModal({ settingId, current, user, onClose }) {
     <Portal>
       <Modal title="Lien de la procédure" subtitle="Affiché pour tous les magasins" onClose={onClose}
         footer={<>
-          {current && <button type="button" onClick={remove} disabled={busy} className={`${BTN_SECONDARY} mr-auto !text-red-600 dark:!text-red-400`}>Retirer le lien</button>}
+          {current && <button type="button" onClick={remove} disabled={busy} className={`${BTN_SECONDARY} mr-auto !text-red-600 dark:!text-red-600`}>Retirer le lien</button>}
           <button type="button" onClick={onClose} className={BTN_SECONDARY}>Annuler</button>
           <button type="submit" form="procedure-form" disabled={busy} className={BTN_PRIMARY}>{busy ? 'Enregistrement…' : 'Enregistrer'}</button>
         </>}>
@@ -84,7 +84,7 @@ export default function ProcedureButton({ settingId, isAdmin, user }) {
           </a>
           {isAdmin && (
             <button type="button" onClick={() => setEditing(true)} aria-label="Modifier le lien de la procédure" title="Modifier le lien de la procédure"
-              className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800">
+              className="h-8 w-8 grid place-items-center rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-400 dark:hover:text-neutral-200 dark:hover:bg-neutral-800">
               <Svg d={EDIT_ICON} />
             </button>
           )}

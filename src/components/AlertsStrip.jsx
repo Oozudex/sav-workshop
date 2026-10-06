@@ -30,8 +30,8 @@ export default function AlertsStrip() {
   const arrow = (dir, d) => (
     <button type="button" onClick={() => setIndex((i + dir + alerts.length) % alerts.length)}
       aria-label={dir < 0 ? 'Alerte précédente' : 'Alerte suivante'}
-      className="h-6 w-5 grid place-items-center rounded text-red-500 hover:bg-red-100 dark:text-red-300 dark:hover:bg-red-500/20">
-      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d={d} /></svg>
+      className="h-6 w-5 grid place-items-center rounded text-red-600 hover:bg-red-100 dark:text-red-300 dark:hover:bg-red-500/20">
+      <svg aria-hidden="true" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d={d} /></svg>
     </button>
   )
 
@@ -40,7 +40,7 @@ export default function AlertsStrip() {
       className="w-full max-w-xl h-8 flex items-center rounded-lg border overflow-hidden
                  border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
       <span className="pl-2.5 pr-1.5 shrink-0" aria-hidden>
-        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+        <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
         </svg>
       </span>
@@ -60,7 +60,7 @@ export default function AlertsStrip() {
         title="Marquer comme traitée : l'alerte reviendra si d'autres éléments dépassent le seuil"
         className="h-full shrink-0 ml-1 px-2.5 inline-flex items-center gap-1 border-l text-[11px] font-semibold transition-colors disabled:opacity-50
                    border-red-200 hover:bg-red-100 dark:border-red-500/30 dark:hover:bg-red-500/20">
-        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+        <svg aria-hidden="true" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
         Traité
       </button>
     </div>

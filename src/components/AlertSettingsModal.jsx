@@ -3,6 +3,7 @@ import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { isBreached, measureRule } from '../lib/alerts'
 import { useAuth } from '../store/useAuth'
+import Dialog from './Dialog'
 
 const round = n => Math.round(n)
 
@@ -62,7 +63,7 @@ export default function AlertSettingsModal({ ruleSet, magasinId, magasinNom, ite
   }
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-start justify-center p-4 pt-[5vh] bg-black/50 backdrop-blur-sm overflow-y-auto"
+    <Dialog className="fixed inset-0 z-[300] flex items-start justify-center p-4 pt-[5vh] bg-black/50 backdrop-blur-sm overflow-y-auto"
       onMouseDown={e => e.target === e.currentTarget && onClose()}>
       <div className="w-full max-w-2xl rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl">
         <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-gray-100 dark:border-neutral-800">
@@ -73,13 +74,13 @@ export default function AlertSettingsModal({ ruleSet, magasinId, magasinNom, ite
             </p>
           </div>
           <button onClick={onClose} aria-label="Fermer"
-            className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800 shrink-0">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            className="h-8 w-8 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800 shrink-0">
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
         {!rules ? (
-          <p className="p-6 text-sm text-gray-400 text-center">{error || 'Chargement…'}</p>
+          <p className="p-6 text-sm text-gray-500 dark:text-neutral-400 text-center">{error || 'Chargement…'}</p>
         ) : (
           <ul className="divide-y divide-gray-100 dark:divide-neutral-800">
             {ruleSet.rules.map(rule => {
@@ -123,7 +124,7 @@ export default function AlertSettingsModal({ ruleSet, magasinId, magasinNom, ite
 
         <div className="flex items-center justify-end gap-3 px-5 py-3.5 border-t border-gray-100 dark:border-neutral-800">
           {error && rules && <p className="text-xs text-red-600 dark:text-red-400 mr-auto">{error}</p>}
-          {saved && <p className="text-xs text-emerald-600 dark:text-emerald-400 mr-auto">Seuils enregistrés ✓</p>}
+          {saved && <p className="text-xs text-emerald-700 dark:text-emerald-400 mr-auto">Seuils enregistrés ✓</p>}
           <button onClick={onClose}
             className="h-8 px-3 rounded-lg text-xs font-medium border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800">
             Fermer
@@ -134,6 +135,6 @@ export default function AlertSettingsModal({ ruleSet, magasinId, magasinNom, ite
           </button>
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }

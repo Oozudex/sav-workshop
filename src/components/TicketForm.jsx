@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { BIKE_TYPES, PRIORITIES } from '../lib/constants'
 import BikeBrandSelect from './BikeBrandSelect'
+import Dialog from './Dialog'
+import RequiredHint from './RequiredHint'
 
 const INITIAL = {
   customerName: '', customerPhone: '',
@@ -45,7 +47,7 @@ export default function TicketForm({ onSubmit, onClose, users = [], initialValue
   }
 
   return (
-    <div
+    <Dialog
       ref={overlayRef}
       onClick={onOverlayClick}
       className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm flex items-start justify-center p-3 sm:p-4 sm:pt-[5vh] overflow-y-auto"
@@ -58,19 +60,20 @@ export default function TicketForm({ onSubmit, onClose, users = [], initialValue
         <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b
                         border-gray-100 dark:border-neutral-800">
           <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Nouveau ticket</h2>
-          <button
+          <button aria-label="Fermer"
             type="button"
             onClick={onClose}
-            className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100
-                       dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors"
+            className="h-8 w-8 grid place-items-center rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100
+                       dark:text-neutral-400 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors"
           >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
         <form onSubmit={handleSubmit}>
+          <RequiredHint />
           <div className="p-3 sm:p-5 space-y-3 sm:space-y-4">
 
             {error && (
@@ -184,7 +187,7 @@ export default function TicketForm({ onSubmit, onClose, users = [], initialValue
           </div>
         </form>
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -213,8 +216,8 @@ function Grid({ children, cols = 2 }) {
 function Field({ label, children, required = false, span2 = false }) {
   return (
     <label className={`block space-y-1 ${span2 ? 'col-span-full' : ''}`}>
-      <span className="block text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">
-        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+      <span className="block text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">
+        {label}{required && <span className="text-red-600 ml-0.5">*</span>}
       </span>
       {children}
     </label>

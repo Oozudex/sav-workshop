@@ -14,13 +14,14 @@ import { safeUrl } from '../lib/security'
 import {
   EMPTY_SERVICE, credentialWrites, hasCredential, serviceAccess, serviceFormErrors, servicePayload, sortServices,
 } from '../lib/services'
+import RequiredHint from '../components/RequiredHint'
 
 const COLOR = {
-  emerald: { bg: 'bg-emerald-50 dark:bg-emerald-500/10', icon: 'text-emerald-600 dark:text-emerald-400', ring: 'hover:ring-emerald-200 dark:hover:ring-emerald-500/30', btn: 'bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600' },
-  indigo:  { bg: 'bg-indigo-50 dark:bg-indigo-500/10',   icon: 'text-indigo-600 dark:text-indigo-400',   ring: 'hover:ring-indigo-200 dark:hover:ring-indigo-500/30',   btn: 'bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600' },
-  blue:    { bg: 'bg-blue-50 dark:bg-blue-500/10',       icon: 'text-blue-600 dark:text-blue-400',       ring: 'hover:ring-blue-200 dark:hover:ring-blue-500/30',       btn: 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600' },
-  amber:   { bg: 'bg-amber-50 dark:bg-amber-500/10',     icon: 'text-amber-600 dark:text-amber-400',     ring: 'hover:ring-amber-200 dark:hover:ring-amber-500/30',     btn: 'bg-amber-500 hover:bg-amber-600' },
-  rose:    { bg: 'bg-rose-50 dark:bg-rose-500/10',       icon: 'text-rose-600 dark:text-rose-400',       ring: 'hover:ring-rose-200 dark:hover:ring-rose-500/30',       btn: 'bg-rose-600 hover:bg-rose-700 dark:bg-rose-500 dark:hover:bg-rose-600' },
+  emerald: { bg: 'bg-emerald-50 dark:bg-emerald-500/10', icon: 'text-emerald-700 dark:text-emerald-400', ring: 'hover:ring-emerald-200 dark:hover:ring-emerald-500/30', btn: 'bg-emerald-700 hover:bg-emerald-800' },
+  indigo:  { bg: 'bg-indigo-50 dark:bg-indigo-500/10',   icon: 'text-indigo-600 dark:text-indigo-400',   ring: 'hover:ring-indigo-200 dark:hover:ring-indigo-500/30',   btn: 'bg-indigo-600 hover:bg-indigo-700' },
+  blue:    { bg: 'bg-blue-50 dark:bg-blue-500/10',       icon: 'text-blue-600 dark:text-blue-400',       ring: 'hover:ring-blue-200 dark:hover:ring-blue-500/30',       btn: 'bg-blue-600 hover:bg-blue-700' },
+  amber:   { bg: 'bg-amber-50 dark:bg-amber-500/10',     icon: 'text-amber-700 dark:text-amber-400',     ring: 'hover:ring-amber-200 dark:hover:ring-amber-500/30',     btn: 'bg-amber-700 hover:bg-amber-800' },
+  rose:    { bg: 'bg-rose-50 dark:bg-rose-500/10',       icon: 'text-rose-600 dark:text-rose-400',       ring: 'hover:ring-rose-200 dark:hover:ring-rose-500/30',       btn: 'bg-rose-600 hover:bg-rose-700' },
   gray:    { bg: 'bg-gray-100 dark:bg-neutral-800',      icon: 'text-gray-600 dark:text-neutral-300',    ring: 'hover:ring-gray-200 dark:hover:ring-neutral-700',       btn: 'bg-gray-800 hover:bg-gray-700 dark:bg-neutral-700 dark:hover:bg-neutral-600' },
 }
 const COLOR_LABELS = { emerald: 'Vert', indigo: 'Indigo', blue: 'Bleu', amber: 'Ambre', rose: 'Rose', gray: 'Gris' }
@@ -39,7 +40,7 @@ const PATHS = {
 }
 function Icon({ name, className = 'h-3.5 w-3.5', strokeWidth = 1.8 }) {
   return (
-    <svg className={`${className} shrink-0`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={strokeWidth}>
+    <svg aria-hidden="true" className={`${className} shrink-0`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={strokeWidth}>
       <path strokeLinecap="round" strokeLinejoin="round" d={PATHS[name]} />
     </svg>
   )
@@ -75,7 +76,7 @@ function ServiceCard({ s, access, isAdmin, onEdit, onCreds }) {
           )}
           {isAdmin && (
             <button type="button" onClick={() => onEdit(s)} aria-label={`Modifier ${s.label}`} title="Modifier"
-              className="h-8 w-8 sm:h-7 sm:w-7 grid place-items-center rounded-lg border shadow-sm bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-700 text-gray-400 hover:text-gray-700 dark:hover:text-neutral-200 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-all">
+              className="h-8 w-8 sm:h-7 sm:w-7 grid place-items-center rounded-lg border shadow-sm bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-700 text-gray-500 dark:text-neutral-400 hover:text-gray-700 dark:hover:text-neutral-200 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-all">
               <Icon name="edit" strokeWidth={2} />
             </button>
           )}
@@ -84,7 +85,7 @@ function ServiceCard({ s, access, isAdmin, onEdit, onCreds }) {
 
       <div className="flex-1 min-w-0">
         <h2 className="text-sm font-semibold text-gray-900 dark:text-white leading-snug break-words">{s.label}</h2>
-        {s.description && <p className="text-xs text-gray-400 dark:text-neutral-500 mt-1 leading-relaxed">{s.description}</p>}
+        {s.description && <p className="text-xs text-gray-500 dark:text-neutral-400 mt-1 leading-relaxed">{s.description}</p>}
       </div>
 
       <div className="grid grid-cols-1 gap-2">
@@ -149,7 +150,7 @@ function ServiceModal({ service, onClose, onSave, onDelete }) {
             </span>
             <button type="button" onClick={remove} disabled={busy}
               className="h-8 px-3 rounded-lg text-xs font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50">Oui, supprimer</button>
-            <button type="button" onClick={() => setConfirmDelete(false)} className="text-xs text-gray-500 hover:text-gray-800 dark:hover:text-neutral-200">Non</button>
+            <button type="button" onClick={() => setConfirmDelete(false)} className="text-xs text-gray-500 dark:text-neutral-400 hover:text-gray-800 dark:hover:text-neutral-200">Non</button>
           </span>
         ) : (
           <button type="button" onClick={() => setConfirmDelete(true)}
@@ -165,6 +166,7 @@ function ServiceModal({ service, onClose, onSave, onDelete }) {
         </>}
       </>}>
       <form id="service-form" onSubmit={submit} noValidate className="space-y-4">
+        <RequiredHint />
         <Field label="Nom *" error={errors.label}>
           <input className={`Input ${errors.label ? INVALID : ''}`} value={form.label} onChange={e => set('label', e.target.value)} placeholder="Ex. Upway" autoFocus />
         </Field>
@@ -188,7 +190,7 @@ function ServiceModal({ service, onClose, onSave, onDelete }) {
             <input type="checkbox" className="mt-0.5 h-4 w-4 accent-gray-900 dark:accent-white" checked={form.usesCredentials} onChange={e => set('usesCredentials', e.target.checked)} />
             <span className="min-w-0">
               <span className="block text-xs font-semibold text-gray-800 dark:text-neutral-200">Identifiants par magasin</span>
-              <span className="block text-[11px] text-gray-400 dark:text-neutral-500">Affiche le cadenas sur la carte.</span>
+              <span className="block text-[11px] text-gray-500 dark:text-neutral-400">Affiche le cadenas sur la carte.</span>
             </span>
           </label>
         </div>
@@ -212,8 +214,8 @@ function CopyButton({ value, label }) {
   }
   return (
     <button type="button" onClick={copy} aria-label={`Copier ${label}`} title={done ? 'Copié' : `Copier ${label}`}
-      className={`h-8 w-8 grid place-items-center rounded-lg transition-colors ${done ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-neutral-200 dark:hover:bg-neutral-800'}`}>
-      {done ? <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg> : <Icon name="copy" />}
+      className={`h-8 w-8 grid place-items-center rounded-lg transition-colors ${done ? 'text-emerald-700 dark:text-emerald-400' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-neutral-200 dark:hover:bg-neutral-800'}`}>
+      {done ? <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg> : <Icon name="copy" />}
     </button>
   )
 }
@@ -225,7 +227,7 @@ function PasswordInput({ value, onChange, readOnly }) {
       <input className="Input text-xs !pr-9 font-mono" type={show ? 'text' : 'password'} value={value} readOnly={readOnly}
         onChange={e => onChange?.(e.target.value)} placeholder={readOnly ? '—' : '••••••••'} autoComplete="new-password" />
       <button type="button" onClick={() => setShow(v => !v)} aria-label={show ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-neutral-300">
+        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 dark:text-neutral-400 hover:text-gray-600 dark:hover:text-neutral-300">
         <Icon name={show ? 'eyeOff' : 'eye'} strokeWidth={2} />
       </button>
     </div>
@@ -286,7 +288,7 @@ function AllCredentialsModal({ service, magasins, canEdit, onClose }) {
         <button type="button" onClick={onClose} className={BTN_SECONDARY}>Annuler</button>
         <button type="button" onClick={save} disabled={!creds || busy} className={BTN_PRIMARY}>{busy ? 'Enregistrement…' : 'Enregistrer'}</button>
       </> : <button type="button" onClick={onClose} className={BTN_PRIMARY}>Fermer</button>}>
-      {!canEdit && <p className="text-[11px] text-gray-400 dark:text-neutral-500">Lecture seule : les identifiants sont gérés par les administrateurs.</p>}
+      {!canEdit && <p className="text-[11px] text-gray-500 dark:text-neutral-400">Lecture seule : les identifiants sont gérés par les administrateurs.</p>}
       {magasins.length === 0 && <EmptyState title="Aucun magasin" text="Créez d’abord les magasins dans l’administration." />}
       {creds && (
         <div className="divide-y divide-gray-100 dark:divide-neutral-800 -my-1">
@@ -303,7 +305,7 @@ function AllCredentialsModal({ service, magasins, canEdit, onClose }) {
           ))}
         </div>
       )}
-      <p className="text-[11px] text-gray-400 dark:text-neutral-500">
+      <p className="text-[11px] text-gray-500 dark:text-neutral-400">
         Chaque magasin ne voit que ses propres identifiants. Laissez vide si le service n’a pas de mot de passe.
       </p>
       {error && <Notice notice={{ tone: 'error', text: error }} />}
@@ -324,21 +326,21 @@ function MyCredentialsModal({ service, magasinId, onClose }) {
   return (
     <Modal title={`Identifiants — ${service.label}`} subtitle="Identifiants de votre magasin" onClose={onClose} size="max-w-sm"
       footer={<button type="button" onClick={onClose} className={BTN_PRIMARY}>Fermer</button>}>
-      {cred === undefined ? <p className="text-sm text-gray-400 text-center py-2">Chargement…</p>
+      {cred === undefined ? <p className="text-sm text-gray-500 dark:text-neutral-400 text-center py-2">Chargement…</p>
         : !cred ? <p className="text-sm text-gray-500 dark:text-neutral-400 text-center py-2">Aucun identifiant configuré pour votre magasin.</p>
           : (
             <div className="space-y-3">
               {[['Identifiant', cred.login, false], ['Mot de passe', cred.password, true]].map(([label, value, secret]) => (
                 <div key={label} className="rounded-xl border border-gray-200 dark:border-neutral-800 pl-3 pr-1 py-1.5 flex items-center gap-2">
                   <div className="flex-1 min-w-0">
-                    <p className="text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">{label}</p>
+                    <p className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">{label}</p>
                     <p className="text-sm font-mono text-gray-900 dark:text-white break-all">
                       {!value ? '—' : secret && !show ? '••••••••' : value}
                     </p>
                   </div>
                   {secret && value && (
                     <button type="button" onClick={() => setShow(v => !v)} aria-label={show ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-                      className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-neutral-200 dark:hover:bg-neutral-800">
+                      className="h-8 w-8 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-neutral-200 dark:hover:bg-neutral-800">
                       <Icon name={show ? 'eyeOff' : 'eye'} strokeWidth={2} />
                     </button>
                   )}
@@ -361,7 +363,7 @@ function MissingCredentialsModal({ service, magasins, onClose }) {
       </p>
       {stores.length > 0 && (
         <div className="space-y-2">
-          <p className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">
+          <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">
             {stores.length > 1 ? 'Magasins qui ont les accès' : 'Magasin qui a les accès'}
           </p>
           <div className="flex flex-wrap gap-1.5">
@@ -422,12 +424,12 @@ export default function Service() {
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
       <Navbar />
 
-      <main className="flex-1 p-4 sm:p-6">
+      <main id="contenu" tabIndex={-1} className="focus:outline-none flex-1 p-4 sm:p-6">
         <div className="max-w-6xl mx-auto space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
             <div>
               <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">Services</h1>
-              <p className="text-xs sm:text-sm text-gray-400 dark:text-neutral-500 mt-0.5">
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-neutral-400 mt-0.5">
                 Plateformes de services partenaires du Groupe Nivault, avec leur procédure
               </p>
             </div>
@@ -439,7 +441,7 @@ export default function Service() {
           {loadError && <Notice notice={{ tone: 'error', text: loadError }} />}
 
           {services === null ? (
-            <p className="text-sm text-gray-400 dark:text-neutral-500 py-10 text-center">Chargement…</p>
+            <p className="text-sm text-gray-500 dark:text-neutral-400 py-10 text-center">Chargement…</p>
           ) : services.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-gray-300 dark:border-neutral-700 bg-white dark:bg-neutral-900">
               <EmptyState title="Aucun service pour le moment"

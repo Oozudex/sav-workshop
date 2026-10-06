@@ -68,13 +68,23 @@ export default function Navbar() {
   const pageTitle = PAGE_TITLES[location.pathname]
     ?? (location.pathname.startsWith('/operations/') ? 'Opérations Commerciales' : undefined)
 
+  // Titre de l'onglet propre à chaque page (RGAA 8.6)
+  useEffect(() => {
+    document.title = `${isHome ? 'Accueil' : pageTitle || 'Atelier SAV'} · Groupe Nivault`
+  }, [isHome, pageTitle])
+
   return (
     <header className="sticky top-0 z-[200] border-b border-gray-200 dark:border-neutral-800
                        bg-white/90 dark:bg-neutral-900/90 backdrop-blur">
+      {/* Lien d'évitement : visible au premier Tab (RGAA 12.7) */}
+      <a href="#contenu" className="lien-evitement"
+        onClick={e => { e.preventDefault(); const m = document.getElementById('contenu'); m?.focus(); m?.scrollIntoView() }}>
+        Aller au contenu
+      </a>
       <div className="mx-auto max-w-7xl h-12 px-3 sm:px-5 flex items-center justify-between gap-2 sm:gap-4">
 
         {/* Left : home icon + brand ou back arrow + titre (tronqué sur petit écran) */}
-        <div className="flex items-center gap-1 sm:gap-2 min-w-0">
+        <nav aria-label="Navigation principale" className="flex items-center gap-1 sm:gap-2 min-w-0">
           {/* Symbole Intersport : retour à l'accueil (pastille blanche en thème sombre, pour garder le bleu lisible) */}
           <button
             onClick={() => navigate('/')}
@@ -92,11 +102,12 @@ export default function Navbar() {
             <>
               <button
                 onClick={() => navigate(-1)}
-                className="h-8 w-8 shrink-0 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100
-                           dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors"
+                className="h-8 w-8 shrink-0 grid place-items-center rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100
+                           dark:text-neutral-400 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors"
                 title="Retour"
+                aria-label="Retour"
               >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
               </button>
@@ -107,7 +118,7 @@ export default function Navbar() {
               )}
             </>
           )}
-        </div>
+        </nav>
 
         {/* Alertes à traiter du directeur de magasin (ordinateur) */}
         {profile?.role === 'directeurmag' && (
@@ -125,7 +136,7 @@ export default function Navbar() {
               value={selectedId || ''}
               onChange={e => setSelectedId(e.target.value || null)}
               aria-label="Magasin affiché"
-              className={['h-8 max-w-[7.5rem] sm:max-w-none pl-2.5 pr-7 rounded-lg border text-xs font-medium outline-none cursor-pointer truncate',
+              className={['h-8 max-w-[7.5rem] sm:max-w-none pl-2.5 pr-7 rounded-lg border text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-black/80 dark:focus-visible:ring-white/70 cursor-pointer truncate',
                 selectedId
                   ? 'border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-black'
                   : 'border-gray-200 bg-transparent text-gray-700 dark:border-neutral-700 dark:text-neutral-300'].join(' ')}
@@ -152,12 +163,12 @@ export default function Navbar() {
           <button
             onClick={toggleTheme}
             title={theme === 'dark' ? 'Mode clair' : 'Mode sombre'}
-            className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100
-                       dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors"
+            className="h-8 w-8 grid place-items-center rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100
+                       dark:text-neutral-400 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors"
           >
             {theme === 'dark'
-              ? <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M12 7a5 5 0 100 10A5 5 0 0012 7z" /></svg>
-              : <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" /></svg>
+              ? <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M12 7a5 5 0 100 10A5 5 0 0012 7z" /></svg>
+              : <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" /></svg>
             }
           </button>
 
@@ -176,7 +187,7 @@ export default function Navbar() {
                 {initial}
               </span>
               <span className="hidden sm:inline">{firstName}</span>
-              <svg className={`h-3 w-3 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <svg aria-hidden="true" className={`h-3 w-3 text-gray-500 dark:text-neutral-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
               </svg>
             </button>
@@ -191,7 +202,7 @@ export default function Navbar() {
                 {(magasinNom || firstName) && (
                   <div className="px-3 py-2 border-b border-gray-100 dark:border-neutral-800 sm:hidden">
                     <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">{firstName}</p>
-                    {!isGlobal && magasinNom && <p className="text-[11px] text-gray-400 truncate">{magasinNom}</p>}
+                    {!isGlobal && magasinNom && <p className="text-[11px] text-gray-500 dark:text-neutral-400 truncate">{magasinNom}</p>}
                   </div>
                 )}
                 <button

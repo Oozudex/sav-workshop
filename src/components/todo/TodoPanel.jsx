@@ -51,8 +51,8 @@ function TodoItem({ t, today, staff, onToggle, onAssign, onRemove }) {
         }}
         aria-label={t.fait ? `Remettre « ${t.titre} » à faire` : `Terminer « ${t.titre} »`}
         className={['mt-0.5 h-5 w-5 shrink-0 rounded-full border-2 grid place-items-center transition-colors',
-          t.fait ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300 dark:border-neutral-600 hover:border-emerald-500'].join(' ')}>
-        {t.fait && <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+          t.fait ? 'bg-emerald-700 border-emerald-500 text-white' : 'border-gray-300 dark:border-neutral-600 hover:border-emerald-500'].join(' ')}>
+        {t.fait && <svg aria-hidden="true" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
       </button>
       <div className="flex-1 min-w-0">
         {lien ? (
@@ -63,7 +63,7 @@ function TodoItem({ t, today, staff, onToggle, onAssign, onRemove }) {
             <span className="ml-1 text-[11px] font-semibold text-blue-600 dark:text-blue-400 whitespace-nowrap">{lien.label} →</span>
           </button>
         ) : (
-          <p className={`text-sm leading-snug break-words ${t.fait ? 'line-through text-gray-400 dark:text-neutral-500' : 'text-gray-900 dark:text-neutral-100'}`}>{t.titre}</p>
+          <p className={`text-sm leading-snug break-words ${t.fait ? 'line-through text-gray-500 dark:text-neutral-400' : 'text-gray-900 dark:text-neutral-100'}`}>{t.titre}</p>
         )}
         {asking && (
           <div className="flex flex-wrap items-center gap-1 mt-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 px-2 py-1.5">
@@ -84,12 +84,12 @@ function TodoItem({ t, today, staff, onToggle, onAssign, onRemove }) {
           {badge && <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${badge.cls}`}>{badge.label}</span>}
           {ech && !t.fait && <span className={`text-[10px] font-medium ${ech.late ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-neutral-400'}`}>{ech.late ? '⚠ ' : ''}{ech.label}</span>}
           {t.fait ? (
-            t.faitPar && <span className="text-[10px] text-gray-400 dark:text-neutral-500">fait par {t.faitPar}</span>
+            t.faitPar && <span className="text-[10px] text-gray-500 dark:text-neutral-400">fait par {t.faitPar}</span>
           ) : staff.length > 0 ? (
             <select value={t.assigneA || ''} onChange={e => onAssign(t, e.target.value)} aria-label="Assigner à"
               className={`h-6 px-1.5 rounded-md border text-[10px] font-medium max-w-[9rem] ${t.assigneA
                 ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300'
-                : 'border-dashed border-gray-300 bg-transparent text-gray-400 dark:border-neutral-600 dark:text-neutral-500'}`}>
+                : 'border-dashed border-gray-300 bg-transparent text-gray-500 dark:border-neutral-600 dark:text-neutral-400'}`}>
               <option value="">{t.assigneA ? '— Personne' : '+ Assigner'}</option>
               {staff.map(s => <option key={s.id} value={s.nom}>{s.nom}</option>)}
               {t.assigneA && !staff.some(s => s.nom === t.assigneA) && <option value={t.assigneA}>{t.assigneA}</option>}
@@ -98,8 +98,8 @@ function TodoItem({ t, today, staff, onToggle, onAssign, onRemove }) {
         </div>
       </div>
       <button type="button" onClick={() => onRemove(t)} aria-label={`Supprimer « ${t.titre} »`} title="Supprimer"
-        className="h-6 w-6 shrink-0 grid place-items-center rounded-md text-gray-300 hover:text-red-600 hover:bg-red-50 dark:text-neutral-600 dark:hover:text-red-400 dark:hover:bg-red-500/10 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-opacity">
-        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+        className="h-6 w-6 shrink-0 grid place-items-center rounded-md text-gray-500 hover:text-red-600 hover:bg-red-50 dark:text-neutral-400 dark:hover:text-red-400 dark:hover:bg-red-500/10 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-opacity">
+        <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
       </button>
     </li>
   )
@@ -144,13 +144,13 @@ function MotDuSoir({ mot, onSave, onVu, compact }) {
             placeholder="Ex. Livraison Nakamura à 9 h, le vélo de M. Durand est prêt à rendre…"
             className="Input text-sm resize-y leading-relaxed" />
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={() => setWriting(false)} className="ml-auto h-8 px-3 rounded-lg text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-neutral-800">Annuler</button>
+            <button type="button" onClick={() => setWriting(false)} className="ml-auto h-8 px-3 rounded-lg text-xs text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800">Annuler</button>
             <button type="submit" disabled={!texte.trim() || saving}
               className="h-8 px-3 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40">
               {saving ? '…' : 'Laisser le mot'}
             </button>
           </div>
-          {recent && <p className="text-[10px] text-gray-400 dark:text-neutral-500">Il remplacera le mot actuel.</p>}
+          {recent && <p className="text-[10px] text-gray-500 dark:text-neutral-400">Il remplacera le mot actuel.</p>}
         </form>
       ) : (
         <button type="button" onClick={() => setWriting(true)}
@@ -205,7 +205,7 @@ export default function TodoPanel({ data, magasinId, rayon, compact = false }) {
   }
 
   if (error) return <p className="text-xs text-red-600 dark:text-red-400 py-4">Impossible de charger la liste. Recharge la page.</p>
-  if (loading) return <p className="text-xs text-gray-400 dark:text-neutral-500 py-4">Chargement…</p>
+  if (loading) return <p className="text-xs text-gray-500 dark:text-neutral-400 py-4">Chargement…</p>
 
   return (
     <div className="space-y-3">
@@ -243,7 +243,7 @@ export default function TodoPanel({ data, magasinId, rayon, compact = false }) {
       </form>
 
       {aFaire.length === 0 ? (
-        <p className="text-center text-xs text-gray-400 dark:text-neutral-500 py-4">Rien à faire pour l’instant 🎉</p>
+        <p className="text-center text-xs text-gray-500 dark:text-neutral-400 py-4">Rien à faire pour l’instant 🎉</p>
       ) : (
         <ul className="divide-y divide-gray-100 dark:divide-neutral-800">
           {aFaire.map(t => <TodoItem key={t.id} t={t} today={today} staff={staff} onToggle={toggle} onAssign={data.assign} onRemove={remove} />)}
@@ -253,7 +253,7 @@ export default function TodoPanel({ data, magasinId, rayon, compact = false }) {
       {faites.length > 0 && (
         <div>
           <button type="button" onClick={() => setShowDone(v => !v)}
-            className="text-[11px] font-semibold text-gray-400 hover:text-gray-600 dark:text-neutral-500 dark:hover:text-neutral-300">
+            className="text-[11px] font-semibold text-gray-500 hover:text-gray-600 dark:text-neutral-400 dark:hover:text-neutral-300">
             {showDone ? '▾' : '▸'} {compact ? 'Terminées aujourd’hui' : 'Terminées (30 derniers jours)'} ({faites.length})
           </button>
           {showDone && (

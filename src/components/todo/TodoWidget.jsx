@@ -22,9 +22,9 @@ export default function TodoWidget({ profile, magasinId }) {
       </div>
       <div className="flex-1 overflow-y-auto px-4 py-3">
         {!magasinId ? (
-          <p className="text-xs text-gray-400 dark:text-neutral-500 py-4">Choisis un magasin dans la barre du haut pour voir sa todo list.</p>
+          <p className="text-xs text-gray-500 dark:text-neutral-400 py-4">Choisis un magasin dans la barre du haut pour voir sa todo list.</p>
         ) : !rayon ? (
-          <p className="text-xs text-gray-400 dark:text-neutral-500 py-4">Aucun rayon dans ce magasin.</p>
+          <p className="text-xs text-gray-500 dark:text-neutral-400 py-4">Aucun rayon dans ce magasin.</p>
         ) : (
           <TodoPanel data={data} magasinId={magasinId} rayon={rayon} compact />
         )}

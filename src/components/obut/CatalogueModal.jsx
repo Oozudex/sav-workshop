@@ -32,16 +32,16 @@ function EditRow({ draft, setDraft, isService, onSave, onCancel, busy }) {
     <form onSubmit={submit} noValidate className="rounded-xl border border-gray-300 dark:border-neutral-600 bg-gray-50/60 dark:bg-neutral-800/40 p-3 space-y-2.5">
       <div className="grid grid-cols-[minmax(0,1fr)_7rem] gap-2">
         <label className="space-y-1 min-w-0">
-          <span className="text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Nom</span>
+          <span className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Nom</span>
           <input className={`Input text-sm ${errors.label ? INVALID : ''}`} value={draft.label} autoFocus
             onChange={e => set('label', e.target.value)} placeholder={isService ? 'Ex. Livraison' : 'Ex. ATX'} />
         </label>
         <label className="space-y-1">
-          <span className="text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Prix TTC</span>
+          <span className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Prix TTC</span>
           <div className="relative">
             <input className={`Input text-sm !pr-6 text-right tabular-nums ${errors.prix ? INVALID : ''}`} inputMode="decimal"
               value={draft.prix} onChange={e => set('prix', e.target.value)} placeholder="0,00" />
-            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">€</span>
+            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-500 dark:text-neutral-400">€</span>
           </div>
         </label>
       </div>
@@ -66,7 +66,7 @@ function EditRow({ draft, setDraft, isService, onSave, onCancel, busy }) {
               Coché par défaut sur les nouvelles commandes
             </label>
           ) : (
-            <p className="text-[11px] text-gray-400 dark:text-neutral-500">Un seul marquage par commande, avec le texte à graver.</p>
+            <p className="text-[11px] text-gray-500 dark:text-neutral-400">Un seul marquage par commande, avec le texte à graver.</p>
           )}
         </div>
       )}
@@ -152,8 +152,8 @@ export default function CatalogueModal({ items, onClose }) {
             <button key={t.key} role="tab" aria-selected={tab === t.key} onClick={() => switchTab(t.key)}
               className={['h-9 px-3 -mb-px border-b-2 text-xs font-semibold transition-colors',
                 tab === t.key ? 'border-gray-900 text-gray-900 dark:border-white dark:text-white'
-                  : 'border-transparent text-gray-400 hover:text-gray-700 dark:text-neutral-500 dark:hover:text-neutral-300'].join(' ')}>
-              {t.label} <span className="ml-1 font-medium text-gray-400 dark:text-neutral-500">{n}</span>
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-neutral-400 dark:hover:text-neutral-300'].join(' ')}>
+              {t.label} <span className="ml-1 font-medium text-gray-500 dark:text-neutral-400">{n}</span>
             </button>
           )
         })}
@@ -179,7 +179,7 @@ export default function CatalogueModal({ items, onClose }) {
                 <button type="button" onClick={() => remove(item)} disabled={busy}
                   className="h-8 sm:h-7 px-2.5 rounded-lg text-xs font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50">Oui</button>
                 <button type="button" onClick={() => setConfirmId(null)}
-                  className="h-8 sm:h-7 px-2 rounded-lg text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-neutral-800">Non</button>
+                  className="h-8 sm:h-7 px-2 rounded-lg text-xs text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800">Non</button>
               </div>
             ) : (
               <>
@@ -201,7 +201,7 @@ export default function CatalogueModal({ items, onClose }) {
         )}
       </div>
 
-      <p className="text-[11px] text-gray-400 dark:text-neutral-500">
+      <p className="text-[11px] text-gray-500 dark:text-neutral-400">
         Un changement de prix s’applique aux nouvelles commandes. Les commandes déjà enregistrées gardent leur prix.
       </p>
     </Modal>

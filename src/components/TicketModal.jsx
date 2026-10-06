@@ -13,6 +13,7 @@ import { STATUS_DOT } from './TicketCard'
 import { useStaff } from '../lib/useStaff'
 import { commentExcerpt, withCommentEdited, withCommentRemoved } from '../lib/ticketHistory'
 import BikeBrandSelect from './BikeBrandSelect'
+import Dialog from './Dialog'
 
 export default function TicketModal({ ticket, role, onClose, onDelete, onChangeStatus }) {
     const overlayRef = useRef(null)
@@ -243,7 +244,7 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onChangeS
     }
 
     return (
-        <div
+        <Dialog
             ref={overlayRef}
             onClick={onOverlayClick}
             className="fixed inset-0 z-[300] flex items-start justify-center p-3 sm:p-4 sm:pt-[5vh] bg-black/50 backdrop-blur-sm overflow-y-auto"
@@ -257,7 +258,7 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onChangeS
                 <div className="px-4 sm:px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800 space-y-2">
                     <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2 flex-wrap min-w-0">
-                            <span className="text-xs font-mono font-semibold text-gray-400 dark:text-neutral-500 shrink-0">
+                            <span className="text-xs font-mono font-semibold text-gray-500 dark:text-neutral-400 shrink-0">
                                 #{ticket.ticketNumber || ticket.id.slice(0, 8)}
                             </span>
                             <StatusBadge status={ticket.status} />
@@ -281,10 +282,10 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onChangeS
                             <button
                                 onClick={onClose}
                                 aria-label="Fermer"
-                                className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100
-                                           dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors"
+                                className="h-8 w-8 grid place-items-center rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100
+                                           dark:text-neutral-400 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors"
                             >
-                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                                 </svg>
                             </button>
@@ -302,7 +303,7 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onChangeS
                             {ticket.customerName || 'Client inconnu'}
                             {ticket.customerPhone && (
                                 <>
-                                    <span className="text-gray-300 dark:text-neutral-600"> · </span>
+                                    <span className="text-gray-500 dark:text-neutral-400"> · </span>
                                     <a href={`tel:${ticket.customerPhone.replace(/\s/g, '')}`} title="Appeler le client"
                                         className="font-medium text-gray-700 dark:text-neutral-300 underline sm:no-underline hover:underline underline-offset-2 whitespace-nowrap">
                                         {ticket.customerPhone}
@@ -324,6 +325,7 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onChangeS
                                     value={commentText}
                                     onChange={e => setCommentText(e.target.value)}
                                     placeholder="Ajouter un commentaire…"
+                                    aria-label="Nouveau commentaire"
                                     rows={3}
                                     className="Input text-sm !h-auto resize-y min-h-[4.5rem] leading-relaxed"
                                     onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitComment() } }}
@@ -331,6 +333,7 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onChangeS
                                 <div className="flex flex-wrap items-center gap-2">
                                     {users.length > 0 ? (
                                         <select
+                                            aria-label="Auteur du commentaire"
                                             value={commentAuthor}
                                             onChange={e => { setCommentAuthor(e.target.value); setAuthorError(false) }}
                                             className={`h-9 px-2 rounded-xl border text-xs font-medium bg-white dark:bg-neutral-800 text-gray-700 dark:text-neutral-200 flex-1 sm:flex-none sm:w-40 min-w-0 ${authorError ? 'border-red-400 dark:border-red-500' : 'border-gray-200 dark:border-neutral-700'}`}
@@ -346,7 +349,7 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onChangeS
                                             className={`Input h-9 !w-auto flex-1 sm:flex-none sm:!w-40 min-w-0 ${authorError ? 'border-red-400 dark:border-red-500' : ''}`}
                                         />
                                     )}
-                                    <span className="hidden sm:inline text-[11px] text-gray-400 dark:text-neutral-500">
+                                    <span className="hidden sm:inline text-[11px] text-gray-500 dark:text-neutral-400">
                                         Entrée : nouvelle ligne · Ctrl/⌘ + Entrée : envoyer
                                     </span>
                                     <button
@@ -360,12 +363,12 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onChangeS
                                     </button>
                                 </div>
                                 {authorError && (
-                                    <p className="text-xs text-red-500 dark:text-red-400">Veuillez sélectionner la personne qui a écrit le commentaire.</p>
+                                    <p className="text-xs text-red-600 dark:text-red-400">Veuillez sélectionner la personne qui a écrit le commentaire.</p>
                                 )}
                             </form>
                             <div className="max-h-56 overflow-y-auto space-y-3">
                                 {comments.length === 0 && (
-                                    <p className="text-xs text-gray-400 dark:text-neutral-500 py-1">Aucun commentaire.</p>
+                                    <p className="text-xs text-gray-500 dark:text-neutral-400 py-1">Aucun commentaire.</p>
                                 )}
                                 {comments.slice().reverse().map(c => (
                                     <div key={c.id} className="group flex gap-3">
@@ -376,7 +379,7 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onChangeS
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-baseline flex-wrap gap-x-2 mb-0.5">
                                                 <span className="text-xs font-semibold text-gray-700 dark:text-neutral-300">{c.author || '—'}</span>
-                                                <span className="text-[11px] text-gray-400 dark:text-neutral-500">
+                                                <span className="text-[11px] text-gray-500 dark:text-neutral-400">
                                                     {formatTS(c.createdAt)}{c.editedAt ? ' · modifié' : ''}
                                                 </span>
                                                 {canEdit && editingCommentId !== c.id && (
@@ -481,7 +484,7 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onChangeS
 
                         <Card title="Suivi">
                             <div className="mb-4">
-                                <p className="text-[11px] font-medium text-gray-400 dark:text-neutral-500 uppercase tracking-wide mb-1.5">Statut</p>
+                                <p className="text-[11px] font-medium text-gray-500 dark:text-neutral-400 uppercase tracking-wide mb-1.5">Statut</p>
                                 {onChangeStatus && canEdit ? (
                                     <div className="flex flex-wrap gap-1.5">
                                         {STATUSES.map(st => (
@@ -496,11 +499,11 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onChangeS
                                         ))}
                                     </div>
                                 ) : <StatusBadge status={ticket.status} />}
-                                <p className="hidden md:block text-[11px] text-gray-400 dark:text-neutral-500 mt-1.5">Tu peux aussi déplacer le ticket dans le tableau.</p>
+                                <p className="hidden md:block text-[11px] text-gray-500 dark:text-neutral-400 mt-1.5">Tu peux aussi déplacer le ticket dans le tableau.</p>
                             </div>
                             <div className="mb-4">
                                 <div className="flex items-center justify-between mb-1">
-                                    <p className="text-[11px] font-medium text-gray-400 dark:text-neutral-500 uppercase tracking-wide">N° de suivi SAV</p>
+                                    <p className="text-[11px] font-medium text-gray-500 dark:text-neutral-400 uppercase tracking-wide">N° de suivi SAV</p>
                                     {ticket.trackingNumber && <CopyBtn onClick={copyTracking} label="Copier" />}
                                 </div>
                                 <form onSubmit={saveTracking} className="flex gap-2">
@@ -509,6 +512,7 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onChangeS
                                         value={tracking}
                                         onChange={e => setTracking(e.target.value)}
                                         placeholder="Numéro donné par le fournisseur"
+                                        aria-label="N° de suivi SAV"
                                         disabled={!canEdit}
                                     />
                                     <Btn
@@ -519,7 +523,7 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onChangeS
                                         {savingTracking ? '…' : 'Enregistrer'}
                                     </Btn>
                                 </form>
-                                <p className="text-[11px] text-gray-400 dark:text-neutral-500 mt-1">
+                                <p className="text-[11px] text-gray-500 dark:text-neutral-400 mt-1">
                                     Permet de retrouver le ticket depuis la recherche à la réception d'un colis.
                                 </p>
                             </div>
@@ -549,11 +553,11 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onChangeS
                             </Grid>
                             <div className="mt-3 pt-3 border-t border-gray-100 dark:border-neutral-800 grid grid-cols-2 gap-2 text-xs">
                                 <div>
-                                    <p className="text-gray-400 dark:text-neutral-500 mb-0.5">Créé</p>
+                                    <p className="text-gray-500 dark:text-neutral-400 mb-0.5">Créé</p>
                                     <p className="text-gray-700 dark:text-neutral-300">{formatTS(ticket.createdAt)}</p>
                                 </div>
                                 <div>
-                                    <p className="text-gray-400 dark:text-neutral-500 mb-0.5">Mis à jour</p>
+                                    <p className="text-gray-500 dark:text-neutral-400 mb-0.5">Mis à jour</p>
                                     <p className="text-gray-700 dark:text-neutral-300">{formatTS(ticket.updatedAt)}</p>
                                 </div>
                             </div>
@@ -562,11 +566,11 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onChangeS
                         <Card title="Historique">
                             <div className="max-h-52 overflow-y-auto space-y-0.5">
                                 {(ticket.history || []).length === 0 && (
-                                    <p className="text-xs text-gray-400 dark:text-neutral-500 py-2">Aucun événement.</p>
+                                    <p className="text-xs text-gray-500 dark:text-neutral-400 py-2">Aucun événement.</p>
                                 )}
                                 {(ticket.history || []).slice().reverse().map((h, i) => (
                                     <div key={i} className="flex flex-col sm:flex-row sm:gap-2 text-xs py-1.5 px-2 rounded-lg hover:bg-gray-50 dark:hover:bg-neutral-800">
-                                        <span className="text-gray-400 dark:text-neutral-500 shrink-0 sm:w-32">
+                                        <span className="text-gray-500 dark:text-neutral-400 shrink-0 sm:w-32">
                                             {formatTS(h.at)}<span className="sm:hidden"> · {h.action}</span>
                                         </span>
                                         <span className="hidden sm:block text-gray-500 dark:text-neutral-400 shrink-0">{h.action}</span>
@@ -595,14 +599,14 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onChangeS
                                     flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-lg
                                     bg-emerald-500 text-white text-sm font-medium
                                     animate-fade-in whitespace-nowrap z-10">
-                        <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <svg aria-hidden="true" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                         </svg>
                         {toast}
                     </div>
                 )}
             </div>
-        </div>
+        </Dialog>
     )
 }
 
@@ -623,7 +627,7 @@ function CopyBtn({ onClick, label }) {
             className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg border transition-colors
                        text-gray-500 border-gray-200 hover:text-gray-800 hover:bg-gray-50 hover:border-gray-300
                        dark:text-neutral-400 dark:border-neutral-700 dark:hover:text-neutral-100 dark:hover:bg-neutral-800">
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round"
                     d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-4 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
             </svg>
@@ -655,7 +659,7 @@ function Grid({ children }) {
 function Field({ label, children, vertical = false }) {
     return (
         <div className={vertical ? 'col-span-2 space-y-1' : 'space-y-0.5'}>
-            <p className="text-[11px] font-medium text-gray-400 dark:text-neutral-500 uppercase tracking-wide">{label}</p>
+            <p className="text-[11px] font-medium text-gray-500 dark:text-neutral-400 uppercase tracking-wide">{label}</p>
             {children}
         </div>
     )

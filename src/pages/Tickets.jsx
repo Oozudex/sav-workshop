@@ -22,6 +22,7 @@ import { useAlerts } from '../store/useAlerts'
 import { STATUSES, GLOBAL_ROLES } from '../lib/constants'
 import { useStaff } from '../lib/useStaff'
 import { useMagasin } from '../store/useMagasin'
+import Dialog from '../components/Dialog'
 
 function EasterEgg({ onClose }) {
   const hearts = Array.from({ length: 30 }, (_, i) => ({
@@ -33,7 +34,7 @@ function EasterEgg({ onClose }) {
   }))
 
   return (
-    <div
+    <Dialog onClose={onClose}
       onClick={onClose}
       className="fixed inset-0 z-[999] flex flex-col items-center justify-center cursor-pointer overflow-hidden"
       style={{ background: 'linear-gradient(135deg, #ff6b9d 0%, #ff8fab 40%, #ffb3c6 100%)' }}
@@ -76,7 +77,7 @@ function EasterEgg({ onClose }) {
           50%       { transform: scale(1.04); }
         }
       `}</style>
-    </div>
+    </Dialog>
   )
 }
 
@@ -234,7 +235,7 @@ export default function Tickets() {
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
       <Navbar />
 
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <main id="contenu" tabIndex={-1} className="focus:outline-none flex-1 flex flex-col overflow-hidden">
         {/* ── Toolbar ── */}
         <div className="px-4 sm:px-5 py-3 border-b border-gray-200 dark:border-neutral-800
                         bg-white/80 dark:bg-neutral-900/80 backdrop-blur">
@@ -255,14 +256,14 @@ export default function Tickets() {
 
             {/* Search */}
             <div className="relative order-3 sm:order-none w-full sm:w-auto">
-              <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 dark:text-neutral-500 pointer-events-none"
+              <svg aria-hidden="true" className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-500 dark:text-neutral-400 pointer-events-none"
                 fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 111 11a6 6 0 0116 0z" />
               </svg>
               <input
                 value={q}
                 onChange={e => setQ(e.target.value)}
-                placeholder="Rechercher, n° de suivi…"
+                aria-label="Rechercher" placeholder="Rechercher, n° de suivi…"
                 className="h-9 sm:h-8 pl-8 pr-3 w-full sm:w-60 rounded-lg border text-sm
                            bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400
                            focus:outline-none focus:ring-2 focus:ring-black/20 focus:border-gray-400
@@ -309,8 +310,8 @@ export default function Tickets() {
             {hasFilters && (
               <button
                 onClick={() => { setQ(''); setFilterPriority(''); setFilterAssigned('') }}
-                className="order-4 sm:order-none h-8 px-2.5 rounded-lg text-xs text-gray-400 hover:text-gray-700 hover:bg-gray-100
-                           dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors"
+                className="order-4 sm:order-none h-8 px-2.5 rounded-lg text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100
+                           dark:text-neutral-400 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors"
               >
                 ✕ Effacer
               </button>
@@ -389,7 +390,7 @@ export default function Tickets() {
             <KanbanBoard tickets={filtered} onOpen={setActiveTicket} />
           </DragDropContext>
         </div>
-      </div>
+      </main>
 
       {showForm && (
         <TicketForm onSubmit={createTicket} onClose={() => setShowForm(false)} users={staff} initialValues={formInitialValues} />

@@ -2,6 +2,8 @@
 import { catalogueByKind, catalogueChoice, obutMinDeposit, obutRemaining, obutTotal } from '../../lib/obut'
 import { formatEuro, parseEuro } from '../../lib/orders'
 import { INVALID } from '../admin/ui'
+import RequiredHint from '../RequiredHint'
+import { markInvalid } from '../markInvalid'
 
 function Block({ title, children, aside }) {
   return (
@@ -18,12 +20,12 @@ function Block({ title, children, aside }) {
 function F({ label, required, error, hint, className = '', children }) {
   return (
     <label className={`block space-y-1 min-w-0 ${className}`}>
-      <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">
-        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+      <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">
+        {label}{required && <span className="text-red-600 ml-0.5">*</span>}
       </span>
-      {children}
+      {markInvalid(children, !!error)}
       {error ? <span className="block text-[11px] text-red-600 dark:text-red-400">{error}</span>
-        : hint && <span className="block text-[11px] text-gray-400 dark:text-neutral-500">{hint}</span>}
+        : hint && <span className="block text-[11px] text-gray-500 dark:text-neutral-400">{hint}</span>}
     </label>
   )
 }
@@ -33,7 +35,7 @@ function PriceInput({ value, onChange, invalid, label }) {
     <div className="relative w-28 shrink-0">
       <input className={`Input h-9 text-sm !pr-6 text-right tabular-nums ${invalid ? INVALID : ''}`} inputMode="decimal"
         aria-label={`Prix ${label}`} value={value} onChange={e => onChange(e.target.value)} placeholder="0,00" />
-      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">€</span>
+      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-500 dark:text-neutral-400">€</span>
     </div>
   )
 }
@@ -72,6 +74,7 @@ export default function ObutFields({ form, setForm, catalogue, staff, errors = {
 
   return (
     <div className="space-y-3 sm:space-y-4">
+      <RequiredHint />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
         <Block title="Client">
           <div className="grid grid-cols-2 gap-3">
@@ -146,7 +149,7 @@ export default function ObutFields({ form, setForm, catalogue, staff, errors = {
                     on ? 'border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-black'
                       : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800'].join(' ')}>
                   <span className={`h-3.5 w-3.5 rounded border grid place-items-center ${on ? 'border-current' : 'border-gray-300 dark:border-neutral-600'}`}>
-                    {on && <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>}
+                    {on && <svg aria-hidden="true" className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>}
                   </span>
                   {o.label}
                   <span className="opacity-60 tabular-nums">{formatEuro(parseEuro(o.prix))}</span>
@@ -157,7 +160,7 @@ export default function ObutFields({ form, setForm, catalogue, staff, errors = {
         )}
       </Block>
 
-      <Block title="Récapitulatif" aside={<span className="text-[11px] text-gray-400 dark:text-neutral-500">Prix modifiables pour cette commande</span>}>
+      <Block title="Récapitulatif" aside={<span className="text-[11px] text-gray-500 dark:text-neutral-400">Prix modifiables pour cette commande</span>}>
         <div className="divide-y divide-gray-100 dark:divide-neutral-800 -my-1.5">
           {form.modele && (
             <div className="flex items-center gap-3 py-1.5">
@@ -169,7 +172,7 @@ export default function ObutFields({ form, setForm, catalogue, staff, errors = {
             <div className="flex items-center gap-3 py-1.5">
               <span className="flex-1 min-w-0 text-sm text-gray-800 dark:text-neutral-200">
                 <span className="block truncate">{form.marquage.label}</span>
-                {form.marquageTexte && <span className="block text-[11px] text-gray-400 dark:text-neutral-500 truncate">« {form.marquageTexte} »</span>}
+                {form.marquageTexte && <span className="block text-[11px] text-gray-500 dark:text-neutral-400 truncate">« {form.marquageTexte} »</span>}
               </span>
               <PriceInput label="du marquage" value={form.marquage.prix} invalid={errors.prixMarquage} onChange={v => setLinePrice('marquage', v)} />
             </div>
@@ -184,21 +187,21 @@ export default function ObutFields({ form, setForm, catalogue, staff, errors = {
 
         <div className="mt-3 rounded-xl bg-gray-50 dark:bg-neutral-800/60 border border-gray-200 dark:border-neutral-700 p-3 grid grid-cols-2 sm:grid-cols-3 gap-3 items-end">
           <div>
-            <p className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide mb-1">Total TTC</p>
+            <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide mb-1">Total TTC</p>
             <p className="text-base sm:text-lg font-bold text-gray-900 dark:text-white tabular-nums">{formatEuro(total)}</p>
           </div>
           <label className="block col-span-2 sm:col-span-1 order-last sm:order-none">
-            <span className="block text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide mb-1">Acompte</span>
+            <span className="block text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide mb-1">Acompte</span>
             <div className="relative">
               <input className={`Input h-9 text-sm !pr-6 text-right tabular-nums ${errors.acompte ? INVALID : ''}`} inputMode="decimal"
                 value={form.acompte} onChange={e => set('acompte', e.target.value)} onBlur={e => { const n = parseEuro(e.target.value); if (n != null) set('acompte', money(n)) }} placeholder={minDeposit ? `min ${money(minDeposit)}` : '0,00'}
                 title={minDeposit ? `Acompte minimum : 30 % du total, soit ${formatEuro(minDeposit)}` : undefined} />
-              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">€</span>
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-500 dark:text-neutral-400">€</span>
             </div>
           </label>
           <div className="text-right">
-            <p className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide mb-1">Reste</p>
-            <p className={`text-base sm:text-lg font-bold tabular-nums ${reste > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{formatEuro(reste)}</p>
+            <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide mb-1">Reste</p>
+            <p className={`text-base sm:text-lg font-bold tabular-nums ${reste > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'}`}>{formatEuro(reste)}</p>
           </div>
         </div>
         {(errors.acompte || errors.prixModele || errors.prixMarquage || errors.options) && (

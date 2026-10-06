@@ -33,7 +33,7 @@ function NewPasswordModal({ result, onClose }) {
         {result.compte.email && <p className="text-[11px] text-gray-500 dark:text-neutral-400">Compte : <span className="font-medium text-gray-700 dark:text-neutral-200">{result.compte.email}</span></p>}
         <div className="flex items-center justify-between gap-3">
           <span className="font-mono text-lg font-bold tracking-wider text-gray-900 dark:text-white select-all break-all">{result.compte.password}</span>
-          <button type="button" onClick={copy} className={copied ? `${BTN_SECONDARY} !text-emerald-600 dark:!text-emerald-400` : BTN_SECONDARY}>
+          <button type="button" onClick={copy} className={copied ? `${BTN_SECONDARY} !text-emerald-700 dark:!text-emerald-400` : BTN_SECONDARY}>
             {copied ? '✓ Copié' : 'Copier'}
           </button>
         </div>
@@ -248,7 +248,7 @@ export default function StorePanel({ magasinId, magasin, directeurs = [], showDi
         </span>
         <div className="flex-1 min-w-0">
           <h2 className="text-base font-bold text-gray-900 dark:text-white break-words">{magasin?.nom || 'Magasin'}</h2>
-          <p className="text-xs text-gray-400 dark:text-neutral-500">Créé le {fmtDate(magasin?.createdAt)}</p>
+          <p className="text-xs text-gray-500 dark:text-neutral-400">Créé le {fmtDate(magasin?.createdAt)}</p>
           {showDirection ? (
             <div className="flex flex-wrap items-center gap-1 mt-1.5">
               <span className="text-[11px] text-gray-500 dark:text-neutral-400">Direction :</span>
@@ -259,8 +259,8 @@ export default function StorePanel({ magasinId, magasin, directeurs = [], showDi
           ) : null}
         </div>
         <dl className="w-full sm:w-auto grid grid-cols-2 gap-4 sm:gap-6 shrink-0 pt-3 sm:pt-0 border-t sm:border-0 border-gray-100 dark:border-neutral-800">
-          <div><dt className="text-[11px] text-gray-400 dark:text-neutral-500">Rayons</dt><dd className="text-xl font-bold text-gray-900 dark:text-white tabular-nums">{rayons.length}</dd></div>
-          <div><dt className="text-[11px] text-gray-400 dark:text-neutral-500">Équipe active</dt><dd className="text-xl font-bold text-gray-900 dark:text-white tabular-nums">{activeStaff}</dd></div>
+          <div><dt className="text-[11px] text-gray-500 dark:text-neutral-400">Rayons</dt><dd className="text-xl font-bold text-gray-900 dark:text-white tabular-nums">{rayons.length}</dd></div>
+          <div><dt className="text-[11px] text-gray-500 dark:text-neutral-400">Équipe active</dt><dd className="text-xl font-bold text-gray-900 dark:text-white tabular-nums">{activeStaff}</dd></div>
         </dl>
       </div>
 
@@ -290,7 +290,7 @@ export default function StorePanel({ magasinId, magasin, directeurs = [], showDi
                           <span className="text-sm font-medium text-gray-900 dark:text-white">{r.nom}</span>
                           <Tag>{RAYON_TYPE_LABELS[r.type] || r.type}</Tag>
                         </span>
-                        <span className="block text-[11px] text-gray-400 dark:text-neutral-500 break-all">{r.email || 'Sans compte de connexion'}</span>
+                        <span className="block text-[11px] text-gray-500 dark:text-neutral-400 break-all">{r.email || 'Sans compte de connexion'}</span>
                         <span className="block text-[11px] text-gray-500 dark:text-neutral-400">{countFor(r.id)} membre{countFor(r.id) > 1 ? 's' : ''} actif{countFor(r.id) > 1 ? 's' : ''}</span>
                       </span>
                     </button>

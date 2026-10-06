@@ -16,7 +16,7 @@ export default function ActionsMenu({ items, label = 'Plus d’actions' }) {
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen(v => !v)} aria-haspopup="menu" aria-expanded={open} aria-label={label}
         className="h-9 w-9 grid place-items-center rounded-lg border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800">
-        <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
+        <svg aria-hidden="true" className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
       </button>
       {open && (
         <div role="menu" className="absolute right-0 mt-1.5 w-48 z-20 rounded-xl border shadow-lg overflow-hidden bg-white border-gray-200 dark:bg-neutral-900 dark:border-neutral-800">

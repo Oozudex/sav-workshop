@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { enrichIlvSources } from '../lib/ilvSources'
 import { ILV_TYPES, PACKS, buildIlv, ilvTypesFor, oneyAllowed, packPrice, sansPack } from '../lib/ilv'
 import { nomAffiche } from '../lib/opImport'
+import Dialog from './Dialog'
 
 function fileName(ilv, source) {
   const clean = v => String(v || '').replace(/[\\/:*?"<>|]+/g, ' ').trim()
@@ -91,24 +92,24 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
     document.body.appendChild(a); a.click(); a.remove()
   }
 
-  const label = 'text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide'
+  const label = 'text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide'
   const error = loadError || ilv?.error || pdf?.error
 
   return (
-    <div className="fixed inset-0 z-[450] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="ilv-title">
+    <Dialog className="fixed inset-0 z-[450] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" aria-labelledby="ilv-title">
       <div className="w-full max-w-5xl max-h-[92vh] rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800 shrink-0">
           <span id="ilv-title" className="text-sm font-semibold text-gray-900 dark:text-white">
             Télécharger l’ILV{item ? ` · ${nomAffiche(item)}` : ''}
           </span>
-          <button onClick={onClose} aria-label="Fermer" className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          <button onClick={onClose} aria-label="Fermer" className="h-8 w-8 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 grid gap-5 md:grid-cols-[260px_1fr]">
           {!items ? (
-            <p className="text-sm text-gray-400 md:col-span-2">{loadError || 'Chargement…'}</p>
+            <p className="text-sm text-gray-500 dark:text-neutral-400 md:col-span-2">{loadError || 'Chargement…'}</p>
           ) : (
             <>
               <div className="space-y-4">
@@ -129,7 +130,7 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
                   {types.length === 1 && types[0] === 'engage' && (
                     <p className="text-[11px] text-gray-500 dark:text-neutral-400">Vélo en prix engagé : l’ILV sort toujours en prix engagé.</p>
                   )}
-                  {!types.length && <p className="text-[11px] text-red-500">Aucun prix pour ce produit : l’acheteur doit renseigner son prix fort dans la base de données.</p>}
+                  {!types.length && <p className="text-[11px] text-red-600">Aucun prix pour ce produit : l’acheteur doit renseigner son prix fort dans la base de données.</p>}
                 </div>
 
                 {!item.pack && !noPack && (
@@ -139,7 +140,7 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
                       <option value="">Choisir…</option>
                       {Object.entries(PACKS).map(([k, p]) => <option key={k} value={k}>{p.label}</option>)}
                     </select>
-                    <span className="block text-[11px] text-amber-600 dark:text-amber-400">Pack non renseigné dans la base de données pour ce vélo.</span>
+                    <span className="block text-[11px] text-amber-700 dark:text-amber-400">Pack non renseigné dans la base de données pour ce vélo.</span>
                   </label>
                 )}
 
@@ -164,18 +165,18 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
                         <button key={n} onClick={() => setOney(n)} disabled={total == null || !oneyAllowed(n, total)} className={choice(oney === n)}>{n}x</button>
                       ))}
                     </div>
-                    {total != null && !oneyAllowed(3, total) && <p className="text-[11px] text-gray-500">Oney : achats de 80 € à 6 000 € uniquement.</p>}
+                    {total != null && !oneyAllowed(3, total) && <p className="text-[11px] text-gray-500 dark:text-neutral-400">Oney : achats de 80 € à 6 000 € uniquement.</p>}
                   </div>
                 )}
 
-                {error && <p className="text-xs text-red-500">{error}</p>}
+                {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
               </div>
 
               <div className="rounded-xl border border-gray-200 dark:border-neutral-700 bg-gray-100 dark:bg-neutral-800 overflow-hidden aspect-[297/210] relative">
                 <canvas ref={canvasRef} aria-label="Aperçu de l’ILV" role="img"
                   className={`w-full h-full bg-white ${pdf?.bytes && !error && !previewError ? '' : 'invisible'}`} />
                 {(!pdf?.bytes || error || previewError) && (
-                  <div className="absolute inset-0 grid place-items-center text-xs text-gray-400">
+                  <div className="absolute inset-0 grid place-items-center text-xs text-gray-500 dark:text-neutral-400">
                     {rendering ? 'Génération…' : previewError ? 'Aperçu indisponible : le PDF reste téléchargeable.' : 'Aperçu indisponible'}
                   </div>
                 )}
@@ -195,6 +196,6 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
           </button>
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }

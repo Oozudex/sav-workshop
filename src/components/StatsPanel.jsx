@@ -1,6 +1,7 @@
 // Briques communes des panneaux de statistiques (tickets SAV, commandes clients)
 import { useEffect, useState } from 'react'
 import { PERIODS } from '../lib/ticketStats'
+import Dialog from './Dialog'
 
 // Palette catégorielle validée (skill dataviz, slots 1-2) : année N en bleu, N-1 en orange
 export const SERIES = {
@@ -37,7 +38,7 @@ const TONE = {
   good: 'text-emerald-700 dark:text-emerald-400',
   bad: 'text-red-600 dark:text-red-400',
   neutral: 'text-gray-500 dark:text-neutral-400',
-  none: 'text-gray-400 dark:text-neutral-500',
+  none: 'text-gray-500 dark:text-neutral-400',
 }
 
 export function Kpi({ label, value, previous, d, hint }) {
@@ -48,9 +49,9 @@ export function Kpi({ label, value, previous, d, hint }) {
       <p className={`text-xs mt-1 ${TONE[d.tone]}`}>
         {d.tone !== 'none' && <span aria-hidden>{d.up ? '▲ ' : '▼ '}</span>}
         {d.text}
-        {previous != null && <span className="text-gray-400 dark:text-neutral-500"> · N-1 : {previous}</span>}
+        {previous != null && <span className="text-gray-500 dark:text-neutral-400"> · N-1 : {previous}</span>}
       </p>
-      {hint && <p className="text-[11px] text-gray-400 dark:text-neutral-500 mt-1">{hint}</p>}
+      {hint && <p className="text-[11px] text-gray-500 dark:text-neutral-400 mt-1">{hint}</p>}
     </div>
   )
 }
@@ -147,7 +148,7 @@ export function MonthlyChart({ title, current, previous, year }) {
 export function PairedBars({ rows, format = fmtDays, empty = 'Aucune donnée sur la période.' }) {
   const shown = rows.filter(([, c, p]) => c != null || p != null)
   const max = Math.max(0.1, ...shown.flatMap(([, c, p]) => [c || 0, p || 0]))
-  if (!shown.length) return <p className="text-xs text-gray-400 dark:text-neutral-500">{empty}</p>
+  if (!shown.length) return <p className="text-xs text-gray-500 dark:text-neutral-400">{empty}</p>
   return (
     <div className="space-y-2.5">
       {shown.map(([label, c, p]) => (
@@ -174,13 +175,13 @@ export function Ranking({ title, rows, previousRows }) {
   return (
     <div className="rounded-xl border border-gray-200 dark:border-neutral-800 p-3.5">
       <p className="text-xs font-semibold text-gray-900 dark:text-white mb-2">{title}</p>
-      {rows.length === 0 ? <p className="text-xs text-gray-400 dark:text-neutral-500">Aucune donnée.</p> : (
+      {rows.length === 0 ? <p className="text-xs text-gray-500 dark:text-neutral-400">Aucune donnée.</p> : (
         <ul className="space-y-1.5">
           {rows.slice(0, 6).map(([name, n]) => (
             <li key={name} className="text-xs">
               <div className="flex justify-between gap-2 text-gray-700 dark:text-neutral-200">
                 <span className="truncate">{name}</span>
-                <span className="tabular-nums shrink-0">{n}<span className="text-gray-400 dark:text-neutral-500"> · N-1 {prev[name] || 0}</span></span>
+                <span className="tabular-nums shrink-0">{n}<span className="text-gray-500 dark:text-neutral-400"> · N-1 {prev[name] || 0}</span></span>
               </div>
               <div className="h-1.5 mt-0.5 rounded-full bg-gray-100 dark:bg-neutral-800">
                 <div className={`h-full rounded-full ${SERIES.current}`} style={{ width: `${(n / max) * 100}%` }} />
@@ -232,7 +233,7 @@ export function StatsModalShell({ title, subtitle, period, setPeriod, hasHistory
   }, [onClose])
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-start justify-center p-4 pt-[4vh] bg-black/50 backdrop-blur-sm overflow-y-auto"
+    <Dialog className="fixed inset-0 z-[300] flex items-start justify-center p-4 pt-[4vh] bg-black/50 backdrop-blur-sm overflow-y-auto"
       onMouseDown={e => e.target === e.currentTarget && onClose()}>
       <div className="w-full max-w-5xl rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl">
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-gray-100 dark:border-neutral-800">
@@ -252,8 +253,8 @@ export function StatsModalShell({ title, subtitle, period, setPeriod, hasHistory
               ))}
             </div>
             <button onClick={onClose} aria-label="Fermer"
-              className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              className="h-8 w-8 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
+              <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
         </div>
@@ -266,6 +267,6 @@ export function StatsModalShell({ title, subtitle, period, setPeriod, hasHistory
           {children}
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }

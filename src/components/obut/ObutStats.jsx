@@ -16,9 +16,9 @@ function StatCard({ label, value, sub, color = 'teal', trend }) {
     <div className={`rounded-2xl bg-gradient-to-br ${cls.wrap} border p-4 space-y-1`}>
       <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">{label}</p>
       <p className={`text-2xl sm:text-3xl font-bold tabular-nums ${cls.val}`}>{value}</p>
-      {sub && <p className="text-xs text-gray-400 dark:text-neutral-500">{sub}</p>}
+      {sub && <p className="text-xs text-gray-500 dark:text-neutral-400">{sub}</p>}
       {trend !== undefined && trend !== null && (
-        <p className={`text-xs font-semibold ${trend >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
+        <p className={`text-xs font-semibold ${trend >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
           {trend >= 0 ? '↑' : '↓'} {Math.abs(trend)} % vs N-1
         </p>
       )}
@@ -40,7 +40,7 @@ function ObutBarChart({ data }) {
               style={{ height: `${((d.previous || 0) / max) * 100}%`, minHeight: d.previous > 0 ? '3px' : '0' }}
               title={`${d.previous || 0}`} />
           </div>
-          <span className="text-[8px] text-gray-400 dark:text-neutral-500 leading-none truncate w-full text-center">{d.label}</span>
+          <span className="text-[8px] text-gray-500 dark:text-neutral-400 leading-none truncate w-full text-center">{d.label}</span>
         </div>
       ))}
     </div>
@@ -151,7 +151,7 @@ export default function ObutStats({ commandes, magasins }) {
   const maxMagasin = byMagasin[0]?.[1] || 1
 
   if (valid.length === 0) {
-    return <div className="text-center py-16 text-sm text-gray-400 dark:text-neutral-500">Aucune commande enregistrée pour afficher des statistiques.</div>
+    return <div className="text-center py-16 text-sm text-gray-500 dark:text-neutral-400">Aucune commande enregistrée pour afficher des statistiques.</div>
   }
 
   return (
@@ -169,7 +169,7 @@ export default function ObutStats({ commandes, magasins }) {
       <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm font-semibold text-gray-900 dark:text-white">Commandes par mois — N vs N-1</p>
-          <div className="flex items-center gap-3 text-[11px] text-gray-400 dark:text-neutral-500">
+          <div className="flex items-center gap-3 text-[11px] text-gray-500 dark:text-neutral-400">
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-indigo-500 inline-block" />{currentYear}</span>
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-gray-300 dark:bg-neutral-600 inline-block" />{prevYear}</span>
           </div>
@@ -209,7 +209,7 @@ export default function ObutStats({ commandes, magasins }) {
 
         {sortedModels.length > 0 && (
           <div className="space-y-2.5">
-            <p className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Par modèle</p>
+            <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Par modèle</p>
             {sortedModels.map(m => (
               <div key={m.model} className="flex items-center gap-3">
                 <p className="text-xs text-gray-600 dark:text-neutral-300 w-20 sm:w-24 shrink-0 truncate font-medium" title={m.model}>{m.model}</p>
@@ -217,7 +217,7 @@ export default function ObutStats({ commandes, magasins }) {
                   <div className="h-full bg-indigo-500 rounded-full transition-all duration-300" style={{ width: `${(m.count / maxModel) * 100}%` }} />
                 </div>
                 <p className="text-xs font-semibold text-gray-700 dark:text-neutral-200 w-6 text-right shrink-0">{m.count}</p>
-                <p className="hidden sm:block text-xs text-gray-400 dark:text-neutral-500 w-16 text-right shrink-0 tabular-nums">{m.revenue.toFixed(0)} €</p>
+                <p className="hidden sm:block text-xs text-gray-500 dark:text-neutral-400 w-16 text-right shrink-0 tabular-nums">{m.revenue.toFixed(0)} €</p>
               </div>
             ))}
           </div>
@@ -225,7 +225,7 @@ export default function ObutStats({ commandes, magasins }) {
 
         {byMagasin.length > 1 && (
           <div className="space-y-2.5">
-            <p className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Par magasin</p>
+            <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Par magasin</p>
             {byMagasin.map(([magId, count]) => {
               const nom = magasins.find(m => m.id === magId)?.nom || magId
               return (
@@ -264,8 +264,8 @@ export default function ObutStats({ commandes, magasins }) {
                 <tr key={i} className="border-b border-gray-50 dark:border-neutral-800/50 hover:bg-gray-50 dark:hover:bg-neutral-800/30 transition-colors">
                   <td className="px-4 py-2 text-gray-700 dark:text-neutral-300">{label}</td>
                   <td className="px-4 py-2 text-right font-semibold text-gray-900 dark:text-white">{curr.count || '—'}</td>
-                  <td className="px-4 py-2 text-right text-gray-400 dark:text-neutral-500">{prev.count || '—'}</td>
-                  <td className={`px-4 py-2 text-right font-semibold ${diff > 0 ? 'text-emerald-600 dark:text-emerald-400' : diff < 0 ? 'text-red-500 dark:text-red-400' : 'text-gray-300 dark:text-neutral-600'}`}>
+                  <td className="px-4 py-2 text-right text-gray-500 dark:text-neutral-400">{prev.count || '—'}</td>
+                  <td className={`px-4 py-2 text-right font-semibold ${diff > 0 ? 'text-emerald-700 dark:text-emerald-400' : diff < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-neutral-400'}`}>
                     {curr.count === 0 && prev.count === 0 ? '—' : diff > 0 ? `+${diff}` : diff === 0 ? '=' : diff}
                   </td>
                   <td className="px-4 py-2 text-right text-gray-500 dark:text-neutral-400">{curr.revenue > 0 ? `${curr.revenue.toFixed(0)} €` : '—'}</td>
@@ -275,7 +275,7 @@ export default function ObutStats({ commandes, magasins }) {
                 <td className="px-4 py-2.5 text-gray-800 dark:text-neutral-200">Total</td>
                 <td className="px-4 py-2.5 text-right text-gray-900 dark:text-white">{tableTotals.curr}</td>
                 <td className="px-4 py-2.5 text-right text-gray-500 dark:text-neutral-400">{tableTotals.prev}</td>
-                <td className={`px-4 py-2.5 text-right ${tableTotals.diff > 0 ? 'text-emerald-600 dark:text-emerald-400' : tableTotals.diff < 0 ? 'text-red-500 dark:text-red-400' : 'text-gray-300 dark:text-neutral-600'}`}>
+                <td className={`px-4 py-2.5 text-right ${tableTotals.diff > 0 ? 'text-emerald-700 dark:text-emerald-400' : tableTotals.diff < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-neutral-400'}`}>
                   {tableTotals.diff > 0 ? `+${tableTotals.diff}` : tableTotals.diff === 0 ? '=' : tableTotals.diff}
                 </td>
                 <td className="px-4 py-2.5 text-right font-semibold text-gray-900 dark:text-white">{tableTotals.ca.toFixed(0)} €</td>

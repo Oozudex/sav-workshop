@@ -39,7 +39,7 @@ export default function ChangePasswordScreen() {
         <label className="block">
           <span className="text-sm font-medium text-gray-700">Nouveau mot de passe</span>
           <PasswordInput value={pwd} onChange={setPwd} autoComplete="new-password" autoFocus />
-          <span className="block mt-1 text-[11px] text-gray-400">8 caractères minimum.</span>
+          <span className="block mt-1 text-[11px] text-gray-500">8 caractères minimum.</span>
         </label>
         <label className="block">
           <span className="text-sm font-medium text-gray-700">Confirme le mot de passe</span>

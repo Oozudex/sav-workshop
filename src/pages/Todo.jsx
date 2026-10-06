@@ -31,7 +31,7 @@ function Recurrences({ data, magasinId, rayon }) {
     <section className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4 sm:p-5 space-y-4">
       <div>
         <h2 className="text-sm font-bold text-gray-900 dark:text-white">🔁 Tâches récurrentes</h2>
-        <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">Ajoutées toutes seules à la liste les jours choisis.</p>
+        <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">Ajoutées toutes seules à la liste les jours choisis.</p>
       </div>
 
       <form onSubmit={add} className="space-y-2">
@@ -61,7 +61,7 @@ function Recurrences({ data, magasinId, rayon }) {
       </form>
 
       {data.recurrences.length === 0 ? (
-        <p className="text-xs text-gray-400 dark:text-neutral-500">Aucune tâche récurrente.</p>
+        <p className="text-xs text-gray-500 dark:text-neutral-400">Aucune tâche récurrente.</p>
       ) : (
         <ul className="divide-y divide-gray-100 dark:divide-neutral-800">
           {data.recurrences.map(r => (
@@ -98,12 +98,12 @@ export default function Todo() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
       <Navbar />
-      <main className="flex-1 p-4 sm:p-6">
+      <main id="contenu" tabIndex={-1} className="focus:outline-none flex-1 p-4 sm:p-6">
         <div className="max-w-5xl mx-auto space-y-5">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h1 className="text-lg font-bold text-gray-900 dark:text-white">Todo list{rayon ? ` · ${RAYON_TYPE_LABELS[rayon] || rayon}` : ''}</h1>
-              <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">
+              <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
                 Tâches de l’équipe, débuts et fins d’OP (le jour même), relances atelier et mot du soir.
               </p>
             </div>
@@ -111,9 +111,9 @@ export default function Todo() {
           </div>
 
           {!magasinId ? (
-            <p className="text-sm text-gray-400 dark:text-neutral-500 py-10 text-center">Choisis un magasin dans la barre du haut.</p>
+            <p className="text-sm text-gray-500 dark:text-neutral-400 py-10 text-center">Choisis un magasin dans la barre du haut.</p>
           ) : !rayon ? (
-            <p className="text-sm text-gray-400 dark:text-neutral-500 py-10 text-center">Aucun rayon dans ce magasin.</p>
+            <p className="text-sm text-gray-500 dark:text-neutral-400 py-10 text-center">Aucun rayon dans ce magasin.</p>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 items-start">
               <section className="lg:col-span-3 rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4 sm:p-5">

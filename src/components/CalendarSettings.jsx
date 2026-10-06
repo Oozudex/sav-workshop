@@ -5,6 +5,7 @@ import { useAuth } from '../store/useAuth'
 import { useShallow } from 'zustand/react/shallow'
 import Portal from './Portal'
 import { RAYON_TYPES, RAYON_TYPE_LABELS, GLOBAL_ROLES } from '../lib/constants'
+import Dialog from './Dialog'
 
 const DAYS = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
 const DAY_LABELS = {
@@ -86,20 +87,20 @@ export default function CalendarSettings({ magasinId, isOpen, onClose }) {
 
   return (
     <Portal>
-    <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <Dialog onClose={onClose} className="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-lg rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl">
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
           <div className="flex items-center gap-2">
-            <svg className="h-4 w-4 text-gray-500 dark:text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg aria-hidden="true" className="h-4 w-4 text-gray-500 dark:text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
             <span className="text-sm font-semibold text-gray-900 dark:text-white">Paramètres calendrier</span>
           </div>
-          <button onClick={onClose} className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <button onClick={onClose} aria-label="Fermer" className="h-8 w-8 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -129,14 +130,14 @@ export default function CalendarSettings({ magasinId, isOpen, onClose }) {
               <p className="text-[11px] font-semibold text-gray-900 dark:text-white">
                 Quota RDV Client — {RAYON_TYPE_LABELS[activeRayon]}
               </p>
-              <p className="text-[11px] text-gray-400 dark:text-neutral-500 mt-0.5">
+              <p className="text-[11px] text-gray-500 dark:text-neutral-400 mt-0.5">
                 Nombre max de RDV client par jour. Laissez vide pour aucune limite.
               </p>
             </div>
             <div className="grid grid-cols-7 gap-2">
               {DAYS.map(day => (
                 <div key={day} className="space-y-1.5">
-                  <span className="block text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase text-center tracking-wide">
+                  <span className="block text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase text-center tracking-wide">
                     {DAY_LABELS[day]}
                   </span>
                   <input
@@ -144,6 +145,7 @@ export default function CalendarSettings({ magasinId, isOpen, onClose }) {
                     min="0"
                     max="99"
                     placeholder="∞"
+                    aria-label={`Quota de RDV client du ${day}`}
                     disabled={!canWrite}
                     value={currentQuotas[day] ?? ''}
                     onChange={e => setQuota(activeRayon, day, e.target.value)}
@@ -153,7 +155,7 @@ export default function CalendarSettings({ magasinId, isOpen, onClose }) {
               ))}
             </div>
             {!canWrite && (
-              <p className="text-[11px] text-gray-400 dark:text-neutral-600 italic">
+              <p className="text-[11px] text-gray-500 dark:text-neutral-400 italic">
                 Vous pouvez consulter les paramètres mais pas les modifier.
               </p>
             )}
@@ -173,7 +175,7 @@ export default function CalendarSettings({ magasinId, isOpen, onClose }) {
           )}
         </div>
       </div>
-    </div>
+    </Dialog>
     </Portal>
   )
 }

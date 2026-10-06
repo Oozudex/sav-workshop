@@ -29,10 +29,10 @@ export default function AlertsBell() {
         title={count ? `${count} alerte${count > 1 ? 's' : ''} rayon vélo` : 'Aucune alerte rayon vélo'}
         aria-label="Alertes rayon vélo"
         aria-expanded={open}
-        className="relative h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100
-                   dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors"
+        className="relative h-8 w-8 grid place-items-center rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100
+                   dark:text-neutral-400 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors"
       >
-        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
         </svg>
         {count > 0 && (
@@ -48,7 +48,7 @@ export default function AlertsBell() {
             <p className="text-xs font-semibold text-gray-900 dark:text-white">Alertes rayon vélo</p>
           </div>
           {count === 0 ? (
-            <p className="px-3 py-4 text-xs text-gray-400 dark:text-neutral-500">
+            <p className="px-3 py-4 text-xs text-gray-500 dark:text-neutral-400">
               Aucun seuil dépassé. Les seuils se règlent avec le bouton « Alertes » des pages Réparation / SAV et Commandes.
             </p>
           ) : (

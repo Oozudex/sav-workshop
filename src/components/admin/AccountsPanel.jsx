@@ -145,7 +145,7 @@ function AccountModal({ kind, account, me, magasins, admins, onClose, onDone }) 
                 )
               })}
             </div>
-            <p className="text-[11px] text-gray-400 dark:text-neutral-500">Sans rayon coché, l’acheteur n’a accès à aucun outil de rayon.</p>
+            <p className="text-[11px] text-gray-500 dark:text-neutral-400">Sans rayon coché, l’acheteur n’a accès à aucun outil de rayon.</p>
           </div>
         )}
 
@@ -172,9 +172,9 @@ function AccountRow({ account, dark, tags, isMe, onEdit, onDelete }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap">
           <p className="text-sm font-medium text-gray-900 dark:text-white">{account.displayName || '—'}</p>
-          {isMe && <span className="text-[10px] font-semibold text-gray-400">· vous</span>}
+          {isMe && <span className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400">· vous</span>}
         </div>
-        <p className="text-[11px] text-gray-400 dark:text-neutral-500 break-all">{account.email}</p>
+        <p className="text-[11px] text-gray-500 dark:text-neutral-400 break-all">{account.email}</p>
         {tags && <div className="flex flex-wrap gap-1 mt-1">{tags}</div>}
       </div>
       <div className="flex items-center gap-0.5 shrink-0">
@@ -257,10 +257,10 @@ export default function AccountsPanel({ me, isAdmin, magasins }) {
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center gap-2">
         <div className="relative flex-1 sm:max-w-sm">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 111 11a6 6 0 0116 0z" /></svg>
+          <svg aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 dark:text-neutral-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 111 11a6 6 0 0116 0z" /></svg>
           <input className="Input h-9 !pl-9 text-sm" placeholder="Rechercher un nom, un e-mail, un magasin…" value={q} onChange={e => setQ(e.target.value)} aria-label="Rechercher un compte" />
         </div>
-        <p className="text-[11px] text-gray-400 dark:text-neutral-500 sm:ml-auto">
+        <p className="text-[11px] text-gray-500 dark:text-neutral-400 sm:ml-auto">
           Les comptes des rayons se gèrent dans l’onglet Magasins.
         </p>
       </div>

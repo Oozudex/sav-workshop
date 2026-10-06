@@ -10,6 +10,7 @@ import {
 import { GLOBAL_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
 import { ABSENCE_LABELS, parseTamigoExcel } from '../lib/parseTamigo'
 import { Avatar, BTN_PRIMARY, BTN_SECONDARY, EmptyState, LABEL, Notice, Section, Tag } from '../components/admin/ui'
+import Dialog from '../components/Dialog'
 
 const IMPORT_ROLES = ['directeurmag', ...GLOBAL_ROLES, ...RAYON_TYPES]
 const TAMIGO_URL = 'https://signin.tamigo.com/login?signin=5d11b9f27e54d48168a008e9064e3a75'
@@ -25,7 +26,7 @@ function fmtShortDate(dateStr) {
 function SnapshotWarning({ compact = false }) {
   return (
     <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 dark:border-amber-500/30 dark:bg-amber-500/10">
-      <svg className="h-4 w-4 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <svg aria-hidden="true" className="h-4 w-4 mt-0.5 shrink-0 text-amber-700 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
       </svg>
       <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-200">
@@ -57,14 +58,14 @@ function PreviewModal({ preview, rayonType, onConfirm, onClose, importing }) {
   const last = preview.dates[preview.dates.length - 1]
 
   return (
-    <div className="fixed inset-0 z-[400] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
+    <Dialog className="fixed inset-0 z-[400] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
       <div role="dialog" aria-modal="true" aria-label="Vérifier le planning avant import"
         className="w-full max-w-2xl rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh]">
 
         <div className="flex items-start justify-between gap-3 px-4 sm:px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800 shrink-0">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-gray-900 dark:text-white">Vérifier avant d’importer</p>
-            {preview.title && <p className="text-[11px] text-gray-400 dark:text-neutral-500 mt-0.5 break-words">{preview.title}</p>}
+            {preview.title && <p className="text-[11px] text-gray-500 dark:text-neutral-400 mt-0.5 break-words">{preview.title}</p>}
             <div className="flex flex-wrap gap-1 mt-2">
               <Tag dark>{RAYON_TYPE_LABELS[rayonType] || rayonType}</Tag>
               {first && <Tag>{fmtShortDate(first)} → {fmtShortDate(last)}</Tag>}
@@ -74,8 +75,8 @@ function PreviewModal({ preview, rayonType, onConfirm, onClose, importing }) {
             </div>
           </div>
           <button onClick={onClose} disabled={importing} aria-label="Fermer"
-            className="h-8 w-8 -mr-1 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800 shrink-0">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            className="h-8 w-8 -mr-1 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800 shrink-0">
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
@@ -92,12 +93,12 @@ function PreviewModal({ preview, rayonType, onConfirm, onClose, importing }) {
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                 {byEmployee[emp].map((s, i) => s.kind === 'shift' ? (
                   <div key={i} className="rounded-lg border border-gray-200 dark:border-neutral-700 px-2.5 py-1.5">
-                    <p className="text-[11px] text-gray-400 dark:text-neutral-500">{fmtShortDate(s.date)}{s.activityCode ? ` · ${s.activityCode}` : ''}</p>
+                    <p className="text-[11px] text-gray-500 dark:text-neutral-400">{fmtShortDate(s.date)}{s.activityCode ? ` · ${s.activityCode}` : ''}</p>
                     <p className="text-xs font-semibold text-gray-900 dark:text-white tabular-nums">{s.startTime} – {s.endTime}</p>
                   </div>
                 ) : (
                   <div key={i} className="rounded-lg border border-dashed border-gray-300 dark:border-neutral-600 bg-gray-50 dark:bg-neutral-800/40 px-2.5 py-1.5">
-                    <p className="text-[11px] text-gray-400 dark:text-neutral-500">{fmtShortDate(s.date)}</p>
+                    <p className="text-[11px] text-gray-500 dark:text-neutral-400">{fmtShortDate(s.date)}</p>
                     <p className="text-xs font-medium text-gray-600 dark:text-neutral-300">{ABSENCE_LABELS[s.absenceCode] || s.absenceCode}</p>
                   </div>
                 ))}
@@ -109,7 +110,7 @@ function PreviewModal({ preview, rayonType, onConfirm, onClose, importing }) {
         <div className="px-4 sm:px-5 py-3 space-y-3 border-t border-gray-100 dark:border-neutral-800 shrink-0">
           <SnapshotWarning />
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <p className="text-[11px] text-gray-400 dark:text-neutral-500">Les créneaux déjà importés pour ces jours seront remplacés.</p>
+            <p className="text-[11px] text-gray-500 dark:text-neutral-400">Les créneaux déjà importés pour ces jours seront remplacés.</p>
             <div className="flex gap-2 justify-end">
               <button onClick={onClose} disabled={importing} className={BTN_SECONDARY}>Annuler</button>
               <button onClick={onConfirm} disabled={importing || preview.shifts.length === 0} className={BTN_PRIMARY}>
@@ -119,7 +120,7 @@ function PreviewModal({ preview, rayonType, onConfirm, onClose, importing }) {
           </div>
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -261,7 +262,7 @@ function TamigoImportSection({ magasinId, userId, userRayonType }) {
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = '' }} />
               {parsing ? (
                 <>
-                  <svg className="h-7 w-7 text-gray-500 animate-spin motion-reduce:animate-none" fill="none" viewBox="0 0 24 24">
+                  <svg aria-hidden="true" className="h-7 w-7 text-gray-500 dark:text-neutral-400 animate-spin motion-reduce:animate-none" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                   </svg>
@@ -269,8 +270,8 @@ function TamigoImportSection({ magasinId, userId, userRayonType }) {
                 </>
               ) : (
                 <>
-                  <span className={`h-11 w-11 rounded-xl grid place-items-center ${ready ? 'bg-gray-900 text-white dark:bg-white dark:text-black' : 'bg-gray-100 text-gray-400 dark:bg-neutral-800'}`}>
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <span className={`h-11 w-11 rounded-xl grid place-items-center ${ready ? 'bg-gray-900 text-white dark:bg-white dark:text-black' : 'bg-gray-100 text-gray-600 dark:bg-neutral-800'}`}>
+                    <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
                     </svg>
                   </span>
@@ -278,7 +279,7 @@ function TamigoImportSection({ magasinId, userId, userRayonType }) {
                     <p className="text-sm font-medium text-gray-900 dark:text-white">
                       {ready ? 'Déposez l’export Excel de Tamigo ici' : 'Choisissez d’abord le rayon'}
                     </p>
-                    <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">
+                    <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
                       {ready ? 'ou cliquez pour choisir le fichier .xlsx' : 'Le planning sera rattaché à ce rayon'}
                     </p>
                   </div>
@@ -315,11 +316,11 @@ export default function RH() {
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
       <Navbar />
 
-      <main className="flex-1 p-4 sm:p-6">
+      <main id="contenu" tabIndex={-1} className="focus:outline-none flex-1 p-4 sm:p-6">
         <div className="max-w-5xl mx-auto space-y-4 sm:space-y-5">
           <div>
             <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">Ressources humaines</h1>
-            <p className="text-xs sm:text-sm text-gray-400 dark:text-neutral-500 mt-0.5">Plannings de l’équipe et outils RH du Groupe Nivault</p>
+            <p className="text-xs sm:text-sm text-gray-500 dark:text-neutral-400 mt-0.5">Plannings de l’équipe et outils RH du Groupe Nivault</p>
           </div>
 
           <div className={`grid grid-cols-1 gap-4 items-start ${canImport ? 'lg:grid-cols-[minmax(0,1fr)_18rem]' : ''}`}>
@@ -335,7 +336,7 @@ export default function RH() {
                   <a href={TAMIGO_URL} target="_blank" rel="noopener noreferrer"
                     className={`${BTN_PRIMARY} h-9 w-full inline-flex items-center justify-center gap-1.5`}>
                     Ouvrir Tamigo
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
+                    <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
                   </a>
                 </div>
               </Section>

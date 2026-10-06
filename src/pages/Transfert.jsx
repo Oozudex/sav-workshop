@@ -13,10 +13,12 @@ import {
   TRANSFER_STATUS, TRANSFER_STEPS, myTransferRole, otherReadField, readField,
   transferNextStep, transferProgress, transferSides, transferStatus,
 } from '../lib/transferts'
+import Dialog from '../components/Dialog'
+import RequiredHint from '../components/RequiredHint'
 
 const MOIS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']
 const MOIS_COURTS = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc']
-const LABEL = 'text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide'
+const LABEL = 'text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide'
 const HELP_KEY = 'transferts.aideMasquee'
 
 function getTs(ts) {
@@ -42,7 +44,7 @@ const details = t => [t.taille, t.couleur, t.codeChrono].filter(Boolean).join(' 
 /* ── Petits éléments communs ─────────────────────────────────────────────────── */
 function BikeIcon({ className = 'h-5 w-5' }) {
   return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
       <circle cx="5.5" cy="16" r="3.5" /><circle cx="18.5" cy="16" r="3.5" />
       <path d="M5.5 16l4-8h6l3 8M9.5 8L12 16h-6.5M15.5 8l-1.5-3h-2.5" />
     </svg>
@@ -60,15 +62,15 @@ function StatusPill({ t }) {
 
 function CloseBtn({ onClick }) {
   return (
-    <button type="button" onClick={onClick} aria-label="Fermer" className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
-      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+    <button type="button" onClick={onClick} aria-label="Fermer" className="h-8 w-8 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
+      <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
     </button>
   )
 }
 
 function Modal({ title, onClose, children, size = 'max-w-md' }) {
   return (
-    <div className="fixed inset-0 z-[400] flex items-start sm:items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
+    <Dialog onClose={onClose} className="fixed inset-0 z-[400] flex items-start sm:items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
       <div className={`w-full ${size} rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl`}>
         <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
           <span className="text-sm font-semibold text-gray-900 dark:text-white">{title}</span>
@@ -76,7 +78,7 @@ function Modal({ title, onClose, children, size = 'max-w-md' }) {
         </div>
         {children}
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -84,8 +86,8 @@ function Modal({ title, onClose, children, size = 'max-w-md' }) {
 function Route({ senderNom, receiverNom, me }) {
   const side = (label, nom, isMe, right) => (
     <div className={`min-w-0 ${right ? 'text-right' : ''}`}>
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-neutral-500">{label}</p>
-      <p className={`text-sm font-semibold truncate ${nom ? 'text-gray-900 dark:text-white' : 'text-gray-300 dark:text-neutral-600'}`}>
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-neutral-400">{label}</p>
+      <p className={`text-sm font-semibold truncate ${nom ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-neutral-400'}`}>
         {nom || 'À choisir'}
       </p>
       {isMe && <span className="inline-block mt-0.5 text-[10px] font-bold px-1.5 py-px rounded bg-gray-900 text-white dark:bg-white dark:text-black">VOUS</span>}
@@ -94,9 +96,9 @@ function Route({ senderNom, receiverNom, me }) {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 rounded-xl bg-gray-50 dark:bg-neutral-800/50 px-3 py-2.5">
       {side('Envoie le vélo', senderNom, me === 'sender', false)}
-      <div className="flex items-center gap-1 text-gray-400 dark:text-neutral-500" aria-hidden>
+      <div className="flex items-center gap-1 text-gray-500 dark:text-neutral-400" aria-hidden>
         <BikeIcon className="h-5 w-5" />
-        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
+        <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
       </div>
       {side('Reçoit le vélo', receiverNom, me === 'receiver', true)}
     </div>
@@ -116,10 +118,10 @@ function Steps({ t }) {
         return (
           <li key={st.key} className="min-w-0 space-y-1" aria-current={i === done ? 'step' : undefined}>
             <span className={`block h-1 rounded-full ${failed ? 'bg-red-500' : ok ? 'bg-gray-900 dark:bg-white' : 'bg-gray-200 dark:bg-neutral-700'}`} />
-            <p className={`text-[10px] font-semibold truncate ${failed ? 'text-red-600 dark:text-red-400' : ok ? 'text-gray-700 dark:text-neutral-200' : 'text-gray-400 dark:text-neutral-500'}`}>
+            <p className={`text-[10px] font-semibold truncate ${failed ? 'text-red-600 dark:text-red-400' : ok ? 'text-gray-700 dark:text-neutral-200' : 'text-gray-500 dark:text-neutral-400'}`}>
               {failed ? 'Refusé' : st.label}
             </p>
-            {(ok || failed) && fmtShort(dates[i]) && <p className="text-[10px] text-gray-400 dark:text-neutral-500 -mt-0.5">{fmtShort(dates[i])}</p>}
+            {(ok || failed) && fmtShort(dates[i]) && <p className="text-[10px] text-gray-500 dark:text-neutral-400 -mt-0.5">{fmtShort(dates[i])}</p>}
           </li>
         )
       })}
@@ -133,7 +135,7 @@ function HowItWorks({ onHide }) {
     <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4 space-y-3">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm font-semibold text-gray-900 dark:text-white">Comment se passe un transfert ?</p>
-        <button onClick={onHide} className="text-[11px] font-medium text-gray-400 hover:text-gray-700 dark:hover:text-neutral-200">Masquer</button>
+        <button onClick={onHide} className="text-[11px] font-medium text-gray-500 dark:text-neutral-400 hover:text-gray-700 dark:hover:text-neutral-200">Masquer</button>
       </div>
       <ol className="grid grid-cols-1 sm:grid-cols-4 gap-2 sm:gap-3">
         {TRANSFER_STEPS.map((st, i) => (
@@ -194,6 +196,7 @@ function TransfertForm({ onSubmit, onClose, fromMagasinId, fromMagasinNom, magas
   return (
     <Modal title={acheteurMode ? 'Organiser un transfert' : 'Demander un vélo à un autre magasin'} onClose={onClose} size="max-w-lg">
       <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-4">
+        <RequiredHint />
         {/* Trajet */}
         <div className="space-y-3">
           {acheteurMode ? (
@@ -307,7 +310,7 @@ function ReponseModal({ transfert: t, onClose, onReponse }) {
           <textarea className="Input resize-none h-20 text-sm leading-relaxed"
             placeholder="Ex. Disponible, envoi lundi · ou : vendu ce matin, désolé"
             value={commentaire} onChange={e => setCommentaire(e.target.value)} />
-          <span className="block text-[11px] text-gray-400 dark:text-neutral-500">Obligatoire pour un refus : expliquez pourquoi.</span>
+          <span className="block text-[11px] text-gray-500 dark:text-neutral-400">Obligatoire pour un refus : expliquez pourquoi.</span>
         </label>
         <div className="flex gap-2">
           <button onClick={() => submit('refused')} disabled={saving || !commentaire.trim()}
@@ -320,7 +323,7 @@ function ReponseModal({ transfert: t, onClose, onReponse }) {
             Accepter
           </button>
         </div>
-        <p className="text-[11px] text-center text-gray-400 dark:text-neutral-500">En acceptant, vous vous engagez à envoyer le vélo.</p>
+        <p className="text-[11px] text-center text-gray-500 dark:text-neutral-400">En acceptant, vous vous engagez à envoyer le vélo.</p>
       </div>
     </Modal>
   )
@@ -383,7 +386,7 @@ function TransfertCard({ t, magasinId, canAct, isAcheteur, isUnread, onAction })
         </div>
         <div className="shrink-0 flex flex-col items-end gap-1">
           <StatusPill t={t} />
-          <span className="text-[10px] text-gray-400 dark:text-neutral-500">
+          <span className="text-[10px] text-gray-500 dark:text-neutral-400">
             {s.byAcheteur ? 'Demandé par l’acheteur' : myTransferRole(t, magasinId) === 'receiver' ? 'Votre demande' : `Demandé par ${s.receiverNom}`}
           </span>
         </div>
@@ -397,7 +400,7 @@ function TransfertCard({ t, magasinId, canAct, isAcheteur, isUnread, onAction })
       )}
       {t.reponseCommentaire && (
         <div className="rounded-lg bg-gray-50 dark:bg-neutral-800 px-3 py-2 space-y-0.5">
-          <p className="text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Réponse de {s.senderNom}</p>
+          <p className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Réponse de {s.senderNom}</p>
           <p className="text-xs text-gray-700 dark:text-neutral-300">{t.reponseCommentaire}</p>
         </div>
       )}
@@ -431,15 +434,15 @@ function CompletedTransfertRow({ t }) {
           {t.quantite > 1 && (
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">×{t.quantite}</span>
           )}
-          {s.byAcheteur && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 dark:bg-neutral-800 dark:text-neutral-400">Acheteur</span>}
+          {s.byAcheteur && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-400">Acheteur</span>}
         </div>
-        {details(t) && <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">{details(t)}</p>}
+        {details(t) && <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">{details(t)}</p>}
         <p className="mt-1 text-xs text-gray-500 dark:text-neutral-400 truncate">
-          {s.senderNom} <span className="text-gray-300 dark:text-neutral-600">→</span> {s.receiverNom}
+          {s.senderNom} <span className="text-gray-500 dark:text-neutral-400">→</span> {s.receiverNom}
         </p>
       </div>
       <div className="text-right shrink-0 space-y-1">
-        <p className="text-[11px] text-gray-400 dark:text-neutral-500">{fmtDate(t.completedAt || t.createdAt)}</p>
+        <p className="text-[11px] text-gray-500 dark:text-neutral-400">{fmtDate(t.completedAt || t.createdAt)}</p>
         <StatusPill t={t} />
       </div>
     </div>
@@ -485,7 +488,7 @@ function RealisesTab({ completed }) {
       <div className="flex items-center gap-2 flex-wrap">
         <input
           className="Input h-8 text-xs flex-1 min-w-36"
-          placeholder="Rechercher modèle, magasin, code…"
+          aria-label="Rechercher" placeholder="Rechercher modèle, magasin, code…"
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
@@ -503,20 +506,20 @@ function RealisesTab({ completed }) {
         {(search || filterMonth) && (
           <button
             onClick={() => { setSearch(''); setFilterMonth('') }}
-            className="h-8 px-3 rounded-lg text-xs text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800 border border-gray-200 dark:border-neutral-700"
+            className="h-8 px-3 rounded-lg text-xs text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800 border border-gray-200 dark:border-neutral-700"
           >
             Réinitialiser
           </button>
         )}
       </div>
 
-      <p className="text-[11px] text-gray-400 dark:text-neutral-500">
+      <p className="text-[11px] text-gray-500 dark:text-neutral-400">
         {filtered.length} transfert{filtered.length !== 1 ? 's' : ''} réalisé{filtered.length !== 1 ? 's' : ''}
         {filterMonth || search ? ' (filtré)' : ' au total'}
       </p>
 
       {filtered.length === 0 ? (
-        <div className="text-center py-16 text-sm text-gray-400 dark:text-neutral-500">
+        <div className="text-center py-16 text-sm text-gray-500 dark:text-neutral-400">
           Aucun transfert réalisé trouvé.
         </div>
       ) : (
@@ -540,9 +543,9 @@ function StatCard({ label, value, sub, color = 'teal', trend }) {
     <div className={`rounded-2xl bg-gradient-to-br ${cls.wrap} border p-4 space-y-1`}>
       <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">{label}</p>
       <p className={`text-3xl font-bold ${cls.val}`}>{value}</p>
-      {sub && <p className="text-xs text-gray-400 dark:text-neutral-500">{sub}</p>}
+      {sub && <p className="text-xs text-gray-500 dark:text-neutral-400">{sub}</p>}
       {trend !== undefined && trend !== null && (
-        <p className={`text-xs font-semibold ${trend >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
+        <p className={`text-xs font-semibold ${trend >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
           {trend >= 0 ? '↑' : '↓'} {Math.abs(trend)}% vs N-1
         </p>
       )}
@@ -569,7 +572,7 @@ function BarChart({ data, labelKey = 'label', aKey = 'current', bKey = 'previous
               title={`${d[bKey] || 0}`}
             />
           </div>
-          <span className="text-[8px] text-gray-400 dark:text-neutral-500 leading-none truncate w-full text-center">{d[labelKey]}</span>
+          <span className="text-[8px] text-gray-500 dark:text-neutral-400 leading-none truncate w-full text-center">{d[labelKey]}</span>
         </div>
       ))}
     </div>
@@ -706,7 +709,7 @@ function StatistiquesTab({ completed }) {
         <div className="col-span-2 lg:col-span-4 rounded-2xl bg-gradient-to-br from-gray-50 to-gray-100/50 dark:from-neutral-800/60 dark:to-neutral-800/30 border border-gray-200 dark:border-neutral-700 p-4 flex items-center justify-between gap-4">
           <div className="space-y-0.5">
             <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Délai moyen de livraison</p>
-            <p className="text-xs text-gray-400 dark:text-neutral-500">Entre la demande et la réception du vélo — tous transferts</p>
+            <p className="text-xs text-gray-500 dark:text-neutral-400">Entre la demande et la réception du vélo — tous transferts</p>
           </div>
           <p className="text-3xl font-bold text-gray-800 dark:text-neutral-100 shrink-0">{fmtDelay(avgDelayAll)}</p>
         </div>
@@ -716,7 +719,7 @@ function StatistiquesTab({ completed }) {
       <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 p-4 space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold text-gray-900 dark:text-white">Comparaison N-1</p>
-          <div className="flex items-center gap-3 text-[11px] text-gray-400 dark:text-neutral-500">
+          <div className="flex items-center gap-3 text-[11px] text-gray-500 dark:text-neutral-400">
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-teal-500 inline-block" />{thisYear}</span>
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-gray-300 dark:bg-neutral-600 inline-block" />{thisYear - 1}</span>
           </div>
@@ -751,7 +754,7 @@ function StatistiquesTab({ completed }) {
         <div className="grid grid-cols-2 divide-x divide-gray-100 dark:divide-neutral-800 border-y border-gray-100 dark:border-neutral-800 py-2">
           <div className="flex items-center justify-between pr-4">
             <p className="text-xs text-gray-500 dark:text-neutral-400">Réalisés</p>
-            <p className="text-2xl font-bold text-teal-600 dark:text-teal-400">{filtered.length}</p>
+            <p className="text-2xl font-bold text-teal-700 dark:text-teal-400">{filtered.length}</p>
           </div>
           <div className="flex items-center justify-between pl-4">
             <p className="text-xs text-gray-500 dark:text-neutral-400">Délai moyen</p>
@@ -761,7 +764,7 @@ function StatistiquesTab({ completed }) {
 
         {storeStats.length > 0 && (
           <div className="space-y-2.5">
-            <p className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Magasins envoyeurs</p>
+            <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Magasins envoyeurs</p>
             {storeStats.map(([nom, count]) => (
               <div key={nom} className="flex items-center gap-3">
                 <p className="text-xs text-gray-600 dark:text-neutral-300 w-28 shrink-0 truncate">{nom}</p>
@@ -798,11 +801,11 @@ function StatistiquesTab({ completed }) {
                   <tr key={i} className="border-b border-gray-50 dark:border-neutral-800/50 hover:bg-gray-50 dark:hover:bg-neutral-800/30 transition-colors">
                     <td className="px-4 py-2 text-gray-700 dark:text-neutral-300">{label}</td>
                     <td className="px-4 py-2 text-right font-semibold text-gray-900 dark:text-white">{curr || '—'}</td>
-                    <td className="px-4 py-2 text-right text-gray-400 dark:text-neutral-500">{prev || '—'}</td>
+                    <td className="px-4 py-2 text-right text-gray-500 dark:text-neutral-400">{prev || '—'}</td>
                     <td className={`px-4 py-2 text-right font-semibold ${
-                      diff > 0 ? 'text-emerald-600 dark:text-emerald-400' :
-                      diff < 0 ? 'text-red-500 dark:text-red-400' :
-                      'text-gray-300 dark:text-neutral-600'
+                      diff > 0 ? 'text-emerald-700 dark:text-emerald-400' :
+                      diff < 0 ? 'text-red-600 dark:text-red-400' :
+                      'text-gray-500 dark:text-neutral-400'
                     }`}>
                       {curr === 0 && prev === 0 ? '—' : diff > 0 ? `+${diff}` : diff === 0 ? '=' : diff}
                     </td>
@@ -813,9 +816,9 @@ function StatistiquesTab({ completed }) {
                   <td className="px-4 py-2.5 text-right text-gray-900 dark:text-white">{tableTotals.curr}</td>
                   <td className="px-4 py-2.5 text-right text-gray-500 dark:text-neutral-400">{tableTotals.prev}</td>
                   <td className={`px-4 py-2.5 text-right ${
-                    tableTotals.diff > 0 ? 'text-emerald-600 dark:text-emerald-400' :
-                    tableTotals.diff < 0 ? 'text-red-500 dark:text-red-400' :
-                    'text-gray-300 dark:text-neutral-600'
+                    tableTotals.diff > 0 ? 'text-emerald-700 dark:text-emerald-400' :
+                    tableTotals.diff < 0 ? 'text-red-600 dark:text-red-400' :
+                    'text-gray-500 dark:text-neutral-400'
                   }`}>
                     {tableTotals.diff > 0 ? `+${tableTotals.diff}` : tableTotals.diff === 0 ? '=' : tableTotals.diff}
                   </td>
@@ -991,13 +994,13 @@ export default function Transfert() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
       <Navbar />
-      <main className="flex-1 p-4 sm:p-6">
+      <main id="contenu" tabIndex={-1} className="focus:outline-none flex-1 p-4 sm:p-6">
         <div className="max-w-7xl mx-auto space-y-4 sm:space-y-5">
 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h1 className="text-lg font-bold text-gray-900 dark:text-white">Transferts vélo</h1>
-              <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">
+              <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
                 Faire venir un vélo d’un autre magasin{magasinNom ? ` · ${magasinNom}` : ''}
                 {helpHidden && <> · <button onClick={() => toggleHelp(false)} className="underline underline-offset-2 hover:text-gray-700 dark:hover:text-neutral-300">Comment ça marche ?</button></>}
               </p>
@@ -1019,11 +1022,11 @@ export default function Transfert() {
                 className={['h-9 px-3 sm:px-4 -mb-px text-xs font-semibold border-b-2 transition-colors whitespace-nowrap shrink-0',
                   currentTab === t.key
                     ? 'border-gray-900 text-gray-900 dark:border-white dark:text-white'
-                    : 'border-transparent text-gray-400 dark:text-neutral-500 hover:text-gray-700 dark:hover:text-neutral-300',
+                    : 'border-transparent text-gray-500 dark:text-neutral-400 hover:text-gray-700 dark:hover:text-neutral-300',
                 ].join(' ')}>
                 {t.label}
                 {t.badge > 0 && (
-                  <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] bg-red-500 text-white font-bold" title="À traiter">{t.badge}</span>
+                  <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] bg-red-600 text-white font-bold" title="À traiter">{t.badge}</span>
                 )}
               </button>
             ))}
@@ -1039,7 +1042,7 @@ export default function Transfert() {
                 <p className="text-sm font-semibold text-gray-700 dark:text-neutral-300">
                   {currentTab === 'envoyer' ? 'Aucun vélo à envoyer' : currentTab === 'recevoir' ? 'Aucun vélo attendu' : 'Aucun transfert en cours'}
                 </p>
-                <p className="text-xs text-gray-400 dark:text-neutral-500">
+                <p className="text-xs text-gray-500 dark:text-neutral-400">
                   {currentTab === 'recevoir' && canCreate ? 'Il vous manque un vélo ? Demandez-le à un autre magasin.' : 'Rien à faire pour le moment.'}
                 </p>
               </div>

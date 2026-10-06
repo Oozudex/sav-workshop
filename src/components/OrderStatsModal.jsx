@@ -66,7 +66,7 @@ export default function OrderStatsModal({ orders, magasinNom, onClose }) {
           ['Chez le fournisseur', cur.supplierDays, prev.supplierDays],
           ['Avant retrait', cur.pickupDays, prev.pickupDays],
         ]} format={fmtDays} empty="Aucune commande reçue ou retirée sur la période." />
-        <p className="text-[11px] text-gray-400 dark:text-neutral-500">
+        <p className="text-[11px] text-gray-500 dark:text-neutral-400">
           Fournisseur : de la commande passée à la réception en magasin. Retrait : du client prévenu au retrait.
         </p>
       </Section>

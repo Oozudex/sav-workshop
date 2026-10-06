@@ -10,6 +10,8 @@ import {
 } from 'firebase/firestore'
 import { GLOBAL_ROLES } from '../lib/constants'
 import { escapeHtml } from '../lib/security'
+import Dialog from '../components/Dialog'
+import RequiredHint from '../components/RequiredHint'
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
 const LETTRES = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
@@ -115,7 +117,7 @@ function printCommande(c, magasinNom = 'Intersport') {
   </div>
   <div class="right">
     <div class="shirts">
-      <svg viewBox="0 0 160 175" width="90">
+      <svg aria-hidden="true" viewBox="0 0 160 175" width="90">
         <defs><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1d4ed8"/><stop offset="100%" stop-color="#1e3a8a"/></linearGradient></defs>
         <path d="M57 17Q80 34 103 17L134 30L154 50L137 61L126 52L126 156L34 156L34 52L23 61L6 50L26 30Z" fill="url(#g1)"/>
         <path d="M57 17Q80 34 103 17Q91 45 69 45Z" fill="#1e3a8a" opacity="0.6"/>
@@ -123,7 +125,7 @@ function printCommande(c, magasinNom = 'Intersport') {
         ${numero?.texte ? `<text text-anchor="middle" x="80" y="120" font-size="${numero.taille === 'gros_numero' ? '44' : '30'}" fill="white" font-weight="900" font-family="Arial"><tspan x="80" y="120">${escapeHtml(numero.texte)}</tspan></text>` : ''}
         ${bas?.texte ? svgText(bas.texte.toUpperCase(), 80, 143, 8, 'font-size="8" fill="white" font-weight="700"') : ''}
       </svg>
-      <svg viewBox="0 0 160 175" width="90">
+      <svg aria-hidden="true" viewBox="0 0 160 175" width="90">
         <defs><linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1d4ed8"/><stop offset="100%" stop-color="#1e3a8a"/></linearGradient></defs>
         <path d="M57 17Q80 34 103 17L134 30L154 50L137 61L126 52L126 156L34 156L34 52L23 61L6 50L26 30Z" fill="url(#g2)"/>
         <path d="M57 17Q80 34 103 17Q91 45 69 45Z" fill="#1e3a8a" opacity="0.6"/>
@@ -299,7 +301,7 @@ function ShirtPreview({ lignes = [], officiel = false, side = 'dos' }) {
 
   return (
     <div className="flex items-center justify-center bg-gray-100 dark:bg-neutral-800 rounded-xl p-4">
-      <svg viewBox="0 0 200 220" className="w-36 h-auto drop-shadow-lg">
+      <svg aria-hidden="true" viewBox="0 0 200 220" className="w-36 h-auto drop-shadow-lg">
         <defs>
           <linearGradient id={`sg${uid}`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={color1} />
@@ -465,18 +467,19 @@ function CommandeModal({ commande, onClose, onSave, stock, profile, magasinId })
   ]
 
   return (
-    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <Dialog onClose={onClose} className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-3xl rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl flex flex-col max-h-[92vh]">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800 shrink-0">
           <span className="text-sm font-semibold text-gray-900 dark:text-white">
             {commande?.id ? 'Modifier le flocage' : 'Nouveau flocage'}
           </span>
-          <button onClick={onClose} className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          <button aria-label="Fermer" onClick={onClose} className="h-8 w-8 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
         <form onSubmit={handleSave} className="flex-1 min-h-0 overflow-y-auto">
+          <RequiredHint />
           <div className="grid grid-cols-2 divide-x divide-gray-100 dark:divide-neutral-800">
 
             {/* ── Colonne gauche : formulaire ── */}
@@ -485,12 +488,12 @@ function CommandeModal({ commande, onClose, onSave, stock, profile, magasinId })
               {/* Client / Téléphone */}
               <div className="grid grid-cols-2 gap-3">
                 <label className="space-y-1.5">
-                  <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Client *</span>
+                  <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Client *</span>
                   <input className="Input h-11 text-sm font-medium" value={form.clientNom}
                     onChange={e => setF('clientNom', e.target.value)} placeholder="Nom du client" autoFocus />
                 </label>
                 <label className="space-y-1.5">
-                  <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Téléphone</span>
+                  <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Téléphone</span>
                   <input type="tel" className="Input h-11 text-sm" value={form.telephone}
                     onChange={e => setF('telephone', e.target.value)} placeholder="06 …" />
                 </label>
@@ -498,7 +501,7 @@ function CommandeModal({ commande, onClose, onSave, stock, profile, magasinId })
 
               {/* Vendeur */}
               <label className="block space-y-1.5">
-                <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Vendeur</span>
+                <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Vendeur</span>
                 {vendeurs.length > 0 ? (
                   <select className="Input h-11 text-sm" value={form.vendeur} onChange={e => setF('vendeur', e.target.value)}>
                     <option value="">— Sélectionner</option>
@@ -513,18 +516,18 @@ function CommandeModal({ commande, onClose, onSave, stock, profile, magasinId })
               {/* Date + Officiel */}
               <div className="grid grid-cols-2 gap-3">
                 <label className="space-y-1.5">
-                  <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Date commande</span>
+                  <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Date commande</span>
                   <input type="date" className="Input h-11" value={form.dateCommande} onChange={e => setF('dateCommande', e.target.value)} />
                 </label>
                 <div className="space-y-1.5">
-                  <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide block">Type</span>
+                  <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide block">Type</span>
                   <button type="button" onClick={() => setF('officiel', !form.officiel)}
                     className={['h-11 w-full rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors',
                       form.officiel
                         ? 'border-amber-400 bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/40'
                         : 'border-gray-200 dark:border-neutral-700 text-gray-500 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800',
                     ].join(' ')}>
-                    <svg className="h-3.5 w-3.5" fill={form.officiel ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg aria-hidden="true" className="h-3.5 w-3.5" fill={form.officiel ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
                     </svg>
                     {form.officiel ? 'Officiel ★' : 'Non officiel'}
@@ -534,7 +537,7 @@ function CommandeModal({ commande, onClose, onSave, stock, profile, magasinId })
 
               {/* Couleur du flocage */}
               <div className="space-y-1.5">
-                <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Couleur du flocage</span>
+                <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Couleur du flocage</span>
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     { key: 'blanc_contour_noir', label: 'Blanc contour noir', preview: ['white', '#111'] },
@@ -555,7 +558,7 @@ function CommandeModal({ commande, onClose, onSave, stock, profile, magasinId })
 
               {/* Jour de flocage */}
               <div className="space-y-2">
-                <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Jour de flocage</span>
+                <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Jour de flocage</span>
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     { key: 'mercredi', label: 'Mercredi', date: nextMer },
@@ -568,7 +571,7 @@ function CommandeModal({ commande, onClose, onSave, stock, profile, magasinId })
                           : 'border-gray-200 dark:border-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-800',
                       ].join(' ')}>
                       <p className="text-sm font-semibold text-gray-800 dark:text-neutral-200">{j.label}</p>
-                      <p className="text-[11px] text-gray-400 dark:text-neutral-500">{fmtDate(toDateStr(j.date))}</p>
+                      <p className="text-[11px] text-gray-500 dark:text-neutral-400">{fmtDate(toDateStr(j.date))}</p>
                     </button>
                   ))}
                 </div>
@@ -580,7 +583,7 @@ function CommandeModal({ commande, onClose, onSave, stock, profile, magasinId })
                       : 'border-gray-200 dark:border-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-800',
                   ].join(' ')}>
                   <p className="text-sm font-semibold text-gray-800 dark:text-neutral-200">Date personnalisée</p>
-                  <p className="text-[11px] text-gray-400 dark:text-neutral-500">Choisir une date manuellement</p>
+                  <p className="text-[11px] text-gray-500 dark:text-neutral-400">Choisir une date manuellement</p>
                 </button>
                 {form.jourFlocage === 'custom' && (
                   <input type="date" className="Input h-10 text-sm w-full" value={form.dateDispo}
@@ -590,7 +593,7 @@ function CommandeModal({ commande, onClose, onSave, stock, profile, magasinId })
 
               {/* Commentaire */}
               <label className="block space-y-1.5">
-                <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Commentaire</span>
+                <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Commentaire</span>
                 <textarea className="Input resize-none h-20 text-sm leading-relaxed" placeholder="Instructions particulières, couleur, placement…"
                   value={form.commentaire} onChange={e => setF('commentaire', e.target.value)} />
               </label>
@@ -606,7 +609,7 @@ function CommandeModal({ commande, onClose, onSave, stock, profile, magasinId })
                     className={['h-8 px-3 text-xs font-semibold border-b-2 transition-colors',
                       flocageSide === t.key
                         ? 'border-gray-900 text-gray-900 dark:border-white dark:text-white'
-                        : 'border-transparent text-gray-400 dark:text-neutral-500 hover:text-gray-700 dark:hover:text-neutral-300',
+                        : 'border-transparent text-gray-500 dark:text-neutral-400 hover:text-gray-700 dark:hover:text-neutral-300',
                     ].join(' ')}>
                     {t.label}
                   </button>
@@ -673,14 +676,14 @@ function CommandeModal({ commande, onClose, onSave, stock, profile, magasinId })
               {/* Aperçu */}
               <div className="space-y-2 mt-auto">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Aperçu</span>
+                  <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Aperçu</span>
                   <div className="flex items-center h-6 rounded-lg border border-gray-200 dark:border-neutral-700 overflow-hidden">
                     {['dos', 'devant'].map(s => (
                       <button key={s} type="button" onClick={() => setPreviewSide(s)}
                         className={['h-full px-2.5 text-[10px] font-semibold transition-colors',
                           previewSide === s
                             ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
-                            : 'text-gray-400 dark:text-neutral-500 hover:bg-gray-50 dark:hover:bg-neutral-800',
+                            : 'text-gray-500 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800',
                           s === 'devant' ? 'border-l border-gray-200 dark:border-neutral-700' : '',
                         ].join(' ')}>
                         {s === 'dos' ? 'Dos' : 'Devant'}
@@ -694,7 +697,7 @@ function CommandeModal({ commande, onClose, onSave, stock, profile, magasinId })
               {/* Caractères + warnings */}
               {Object.keys(charCounts).length > 0 && (
                 <div className="space-y-1.5">
-                  <span className="text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Caractères à décompter</span>
+                  <span className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Caractères à décompter</span>
                   <div className="flex flex-wrap gap-1">
                     {Object.entries(charCounts).map(([key, n]) => {
                       const [type, char] = key.split('.')
@@ -711,7 +714,7 @@ function CommandeModal({ commande, onClose, onSave, stock, profile, magasinId })
               {stockWarnings.length > 0 && (
                 <div className="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-3 space-y-1">
                   <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">⚠ Stock insuffisant</p>
-                  {stockWarnings.map((w, i) => <p key={i} className="text-[11px] text-amber-600 dark:text-amber-300/80">{w}</p>)}
+                  {stockWarnings.map((w, i) => <p key={i} className="text-[11px] text-amber-700 dark:text-amber-300/80">{w}</p>)}
                 </div>
               )}
             </div>
@@ -729,7 +732,7 @@ function CommandeModal({ commande, onClose, onSave, stock, profile, magasinId })
           </div>
         </form>
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -761,12 +764,12 @@ function StockAjoutModal({ magasinId, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <Dialog onClose={onClose} className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-2xl rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
           <span className="text-sm font-semibold text-gray-900 dark:text-white">Réapprovisionner le stock</span>
-          <button onClick={onClose} className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          <button aria-label="Fermer" onClick={onClose} className="h-8 w-8 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
         <div className="p-5 space-y-4">
@@ -782,7 +785,7 @@ function StockAjoutModal({ magasinId, onClose }) {
               </button>
             ))}
           </div>
-          <p className="text-[11px] text-gray-400 dark:text-neutral-500">Entrez la quantité à ajouter au stock actuel</p>
+          <p className="text-[11px] text-gray-500 dark:text-neutral-400">Entrez la quantité à ajouter au stock actuel</p>
           <div className="grid grid-cols-9 gap-2">
             {chars.map(c => (
               <div key={c} className="flex flex-col items-center gap-1.5">
@@ -807,7 +810,7 @@ function StockAjoutModal({ magasinId, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -823,7 +826,7 @@ function CommandeCard({ commande: c, canEdit, onEdit, onDelete, onToggle, magasi
     ].join(' ')}>
       {/* Mini aperçu maillot */}
       <div className="shrink-0 w-16">
-        <svg viewBox="0 0 200 220" className="w-full drop-shadow">
+        <svg aria-hidden="true" viewBox="0 0 200 220" className="w-full drop-shadow">
           <defs>
             <linearGradient id={`g${c.id}`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={c.officiel ? '#b45309' : '#1d4ed8'} />
@@ -853,34 +856,34 @@ function CommandeCard({ commande: c, canEdit, onEdit, onDelete, onToggle, magasi
               ].join(' ')}>
                 {c.jourFlocage === 'vendredi' ? '⚡ Ven.' : 'Mer.'} {fmtDate(c.dateDispo)}
               </span>
-              {c.vendeur && <span className="text-[10px] text-gray-400 dark:text-neutral-500">{c.vendeur}</span>}
+              {c.vendeur && <span className="text-[10px] text-gray-500 dark:text-neutral-400">{c.vendeur}</span>}
             </div>
           </div>
           <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-all">
             <button onClick={() => printCommande(c, magasinNom)}
-              className="h-6 w-6 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-600 dark:hover:text-neutral-200 dark:hover:bg-neutral-800"
+              className="h-6 w-6 grid place-items-center rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-400 dark:hover:text-neutral-200 dark:hover:bg-neutral-800"
               title="Imprimer">
-              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" /></svg>
+              <svg aria-hidden="true" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" /></svg>
             </button>
             {canEdit && (<>
-              <button onClick={onEdit}
-                className="h-6 w-6 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-600 dark:hover:text-neutral-200 dark:hover:bg-neutral-800">
-                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+              <button onClick={onEdit} aria-label="Modifier"
+                className="h-6 w-6 grid place-items-center rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-400 dark:hover:text-neutral-200 dark:hover:bg-neutral-800">
+                <svg aria-hidden="true" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
               </button>
-              <button onClick={onDelete}
-                className="h-6 w-6 grid place-items-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:text-neutral-600 dark:hover:text-red-400 dark:hover:bg-red-500/10">
-                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M8 6V4.8A1.8 1.8 0 019.8 3h4.4A1.8 1.8 0 0116 4.8V6m3 0l-1 13a2 2 0 01-2 1.8H8A2 2 0 016 19L5 6" /></svg>
+              <button onClick={onDelete} aria-label="Supprimer"
+                className="h-6 w-6 grid place-items-center rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 dark:text-neutral-400 dark:hover:text-red-400 dark:hover:bg-red-500/10">
+                <svg aria-hidden="true" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M8 6V4.8A1.8 1.8 0 019.8 3h4.4A1.8 1.8 0 0116 4.8V6m3 0l-1 13a2 2 0 01-2 1.8H8A2 2 0 016 19L5 6" /></svg>
               </button>
             </>)}
           </div>
         </div>
 
         <div className="text-[11px] space-y-0.5">
-          {haut?.texte && <p className="text-gray-500 dark:text-neutral-400">↑ <span className="font-medium text-gray-700 dark:text-neutral-300">{haut.texte}</span> <span className="text-gray-400">({tailleLabel(haut.taille)})</span></p>}
-          {numero?.texte && <p className="text-gray-500 dark:text-neutral-400"># <span className="font-bold text-gray-900 dark:text-white text-sm">{numero.texte}</span> <span className="text-gray-400">({tailleLabel(numero.taille)})</span></p>}
-          {bas?.texte && <p className="text-gray-500 dark:text-neutral-400">↓ <span className="font-medium text-gray-700 dark:text-neutral-300">{bas.texte}</span> <span className="text-gray-400">({tailleLabel(bas.taille)})</span></p>}
-          {(() => { const dc = c.lignes?.find(l => l.position === 'devant_coeur'); return dc?.texte ? <p className="text-gray-500 dark:text-neutral-400">♥ <span className="font-medium text-gray-700 dark:text-neutral-300">{dc.texte}</span> <span className="text-gray-400">({tailleLabel(dc.taille)})</span></p> : null })()}
-          {c.commentaire && <p className="text-[11px] text-gray-400 dark:text-neutral-500 italic mt-1 border-l-2 border-gray-200 dark:border-neutral-700 pl-2">{c.commentaire}</p>}
+          {haut?.texte && <p className="text-gray-500 dark:text-neutral-400">↑ <span className="font-medium text-gray-700 dark:text-neutral-300">{haut.texte}</span> <span className="text-gray-500 dark:text-neutral-400">({tailleLabel(haut.taille)})</span></p>}
+          {numero?.texte && <p className="text-gray-500 dark:text-neutral-400"># <span className="font-bold text-gray-900 dark:text-white text-sm">{numero.texte}</span> <span className="text-gray-500 dark:text-neutral-400">({tailleLabel(numero.taille)})</span></p>}
+          {bas?.texte && <p className="text-gray-500 dark:text-neutral-400">↓ <span className="font-medium text-gray-700 dark:text-neutral-300">{bas.texte}</span> <span className="text-gray-500 dark:text-neutral-400">({tailleLabel(bas.taille)})</span></p>}
+          {(() => { const dc = c.lignes?.find(l => l.position === 'devant_coeur'); return dc?.texte ? <p className="text-gray-500 dark:text-neutral-400">♥ <span className="font-medium text-gray-700 dark:text-neutral-300">{dc.texte}</span> <span className="text-gray-500 dark:text-neutral-400">({tailleLabel(dc.taille)})</span></p> : null })()}
+          {c.commentaire && <p className="text-[11px] text-gray-500 dark:text-neutral-400 italic mt-1 border-l-2 border-gray-200 dark:border-neutral-700 pl-2">{c.commentaire}</p>}
         </div>
 
         {canEdit && (
@@ -1001,14 +1004,14 @@ export default function Flocage() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
       <Navbar />
-      <main className="flex-1 p-6">
+      <main id="contenu" tabIndex={-1} className="focus:outline-none flex-1 p-6">
         <div className="max-w-6xl mx-auto space-y-5">
 
           {/* Header */}
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-lg font-bold text-gray-900 dark:text-white">Flocage</h1>
-              <p className="text-xs text-gray-400 dark:text-neutral-500 mt-0.5">Gestion des commandes et du stock de flocage</p>
+              <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">Gestion des commandes et du stock de flocage</p>
             </div>
             {canEdit && tab !== 'stock' && (
               <button onClick={() => setModal({})}
@@ -1035,11 +1038,11 @@ export default function Flocage() {
                 className={['h-9 px-4 text-xs font-semibold border-b-2 transition-colors',
                   tab === t.key
                     ? 'border-gray-900 text-gray-900 dark:border-white dark:text-white'
-                    : 'border-transparent text-gray-400 dark:text-neutral-500 hover:text-gray-700 dark:hover:text-neutral-300',
+                    : 'border-transparent text-gray-500 dark:text-neutral-400 hover:text-gray-700 dark:hover:text-neutral-300',
                 ].join(' ')}>
                 {t.label}
                 {t.count > 0 && (
-                  <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] bg-gray-100 text-gray-500 dark:bg-neutral-800 dark:text-neutral-400">
+                  <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-400">
                     {t.count}
                   </span>
                 )}
@@ -1050,7 +1053,7 @@ export default function Flocage() {
           {/* ── Commandes ── */}
           {tab === 'commandes' && (
             commandes.length === 0 ? (
-              <div className="text-center py-16 text-sm text-gray-400 dark:text-neutral-500">
+              <div className="text-center py-16 text-sm text-gray-500 dark:text-neutral-400">
                 Aucune commande.{canEdit && ' Cliquez sur "+ Nouveau flocage" pour commencer.'}
               </div>
             ) : (
@@ -1060,7 +1063,7 @@ export default function Flocage() {
                   if (!list.length) return null
                   return (
                     <div key={status}>
-                      <h3 className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide mb-2">
+                      <h3 className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide mb-2">
                         {status === 'en_attente' ? 'En attente' : 'Fait'} ({list.length})
                       </h3>
                       <div className="grid grid-cols-2 gap-3">
@@ -1083,14 +1086,14 @@ export default function Flocage() {
           {tab === 'planning' && (
             <div className="space-y-4">
               <div className="flex items-center gap-2">
-                <button onClick={prevWeek} className="h-7 w-7 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-neutral-800">
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                <button onClick={prevWeek} aria-label="Semaine précédente" className="h-7 w-7 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-neutral-800">
+                  <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
                 </button>
                 <span className="text-xs font-semibold text-gray-700 dark:text-neutral-300">
                   Semaine du {fmtDate(merStr)} au {fmtDate(venStr)}
                 </span>
-                <button onClick={nextWeek} className="h-7 w-7 grid place-items-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-neutral-800">
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                <button onClick={nextWeek} aria-label="Semaine suivante" className="h-7 w-7 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-neutral-800">
+                  <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
                 </button>
                 <button onClick={() => setRefDate(new Date())}
                   className="h-7 px-2.5 rounded-lg text-[11px] font-medium border border-gray-200 dark:border-neutral-700 text-gray-500 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800 ml-1">
@@ -1107,19 +1110,19 @@ export default function Flocage() {
                     <div className="px-4 py-3 border-b border-gray-100 dark:border-neutral-800 flex items-center justify-between">
                       <div>
                         <p className="text-xs font-bold text-gray-900 dark:text-white">{col.label}</p>
-                        <p className="text-[11px] text-gray-400 dark:text-neutral-500 capitalize">{fmtDayFull(col.date)}</p>
+                        <p className="text-[11px] text-gray-500 dark:text-neutral-400 capitalize">{fmtDayFull(col.date)}</p>
                       </div>
                       <span className={['text-[11px] font-semibold px-2 py-0.5 rounded-full',
                         parJour[col.key].length > 0
                           ? 'bg-pink-100 text-pink-700 dark:bg-pink-500/20 dark:text-pink-300'
-                          : 'bg-gray-100 text-gray-400 dark:bg-neutral-800 dark:text-neutral-500',
+                          : 'bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-400',
                       ].join(' ')}>
                         {parJour[col.key].length} flocage{parJour[col.key].length > 1 ? 's' : ''}
                       </span>
                     </div>
                     <div className="p-3 space-y-2">
                       {parJour[col.key].length === 0 ? (
-                        <p className="text-[11px] text-gray-400 dark:text-neutral-500 text-center py-6">Aucun flocage prévu</p>
+                        <p className="text-[11px] text-gray-500 dark:text-neutral-400 text-center py-6">Aucun flocage prévu</p>
                       ) : parJour[col.key].map(c => (
                         <CommandeCard key={c.id} commande={c} canEdit={canEdit}
                           magasinNom={magasinNom}
@@ -1144,7 +1147,7 @@ export default function Flocage() {
                   <div key={t.key} className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 overflow-hidden">
                     <div className="px-4 py-3 border-b border-gray-100 dark:border-neutral-800 flex items-center justify-between">
                       <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${TAILLE_COLORS[t.key]}`}>{t.label}</span>
-                      <span className="text-[11px] text-gray-400 dark:text-neutral-500">{total} pièces</span>
+                      <span className="text-[11px] text-gray-500 dark:text-neutral-400">{total} pièces</span>
                     </div>
                     <div className="p-3 grid gap-1.5" style={{ gridTemplateColumns: `repeat(${t.chars.length <= 10 ? t.chars.length : 9}, minmax(0, 1fr))` }}>
                       {t.chars.map(c => {
@@ -1157,13 +1160,13 @@ export default function Flocage() {
                           ].join(' ')}>
                             <span className={['text-xs font-bold',
                               qty <= 0 ? 'text-red-600 dark:text-red-400'
-                                : qty <= 3 ? 'text-amber-600 dark:text-amber-400'
+                                : qty <= 3 ? 'text-amber-700 dark:text-amber-400'
                                   : 'text-gray-700 dark:text-neutral-300',
                             ].join(' ')}>{c}</span>
                             <span className={['text-[10px] font-semibold tabular-nums',
-                              qty <= 0 ? 'text-red-500 dark:text-red-400'
-                                : qty <= 3 ? 'text-amber-500 dark:text-amber-400'
-                                  : 'text-gray-400 dark:text-neutral-500',
+                              qty <= 0 ? 'text-red-600 dark:text-red-400'
+                                : qty <= 3 ? 'text-amber-700 dark:text-amber-400'
+                                  : 'text-gray-500 dark:text-neutral-400',
                             ].join(' ')}>{Math.max(0, qty)}</span>
                           </div>
                         )

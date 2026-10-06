@@ -14,13 +14,15 @@ import {
   buildCredentialRows, credentialStores, exportFileName, exportTable, groupRows, moveItem, orderChanges, toCsv,
 } from '../lib/b2bExport'
 import { downloadText, downloadWorkbook } from '../lib/excel'
+import Dialog from '../components/Dialog'
+import RequiredHint from '../components/RequiredHint'
 
 const COLOR = {
-  indigo: { bg: 'bg-indigo-50 dark:bg-indigo-500/10', icon: 'text-indigo-600 dark:text-indigo-400', ring: 'hover:ring-indigo-200 dark:hover:ring-indigo-500/30', btn: 'bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600' },
-  emerald: { bg: 'bg-emerald-50 dark:bg-emerald-500/10', icon: 'text-emerald-600 dark:text-emerald-400', ring: 'hover:ring-emerald-200 dark:hover:ring-emerald-500/30', btn: 'bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600' },
-  amber: { bg: 'bg-amber-50 dark:bg-amber-500/10', icon: 'text-amber-600 dark:text-amber-400', ring: 'hover:ring-amber-200 dark:hover:ring-amber-500/30', btn: 'bg-amber-500 hover:bg-amber-600 dark:bg-amber-500 dark:hover:bg-amber-600' },
-  blue: { bg: 'bg-blue-50 dark:bg-blue-500/10', icon: 'text-blue-600 dark:text-blue-400', ring: 'hover:ring-blue-200 dark:hover:ring-blue-500/30', btn: 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600' },
-  violet: { bg: 'bg-violet-50 dark:bg-violet-500/10', icon: 'text-violet-600 dark:text-violet-400', ring: 'hover:ring-violet-200 dark:hover:ring-violet-500/30', btn: 'bg-violet-600 hover:bg-violet-700 dark:bg-violet-500 dark:hover:bg-violet-600' },
+  indigo: { bg: 'bg-indigo-50 dark:bg-indigo-500/10', icon: 'text-indigo-600 dark:text-indigo-400', ring: 'hover:ring-indigo-200 dark:hover:ring-indigo-500/30', btn: 'bg-indigo-600 hover:bg-indigo-700' },
+  emerald: { bg: 'bg-emerald-50 dark:bg-emerald-500/10', icon: 'text-emerald-700 dark:text-emerald-400', ring: 'hover:ring-emerald-200 dark:hover:ring-emerald-500/30', btn: 'bg-emerald-700 hover:bg-emerald-800' },
+  amber: { bg: 'bg-amber-50 dark:bg-amber-500/10', icon: 'text-amber-700 dark:text-amber-400', ring: 'hover:ring-amber-200 dark:hover:ring-amber-500/30', btn: 'bg-amber-700 hover:bg-amber-800' },
+  blue: { bg: 'bg-blue-50 dark:bg-blue-500/10', icon: 'text-blue-600 dark:text-blue-400', ring: 'hover:ring-blue-200 dark:hover:ring-blue-500/30', btn: 'bg-blue-600 hover:bg-blue-700' },
+  violet: { bg: 'bg-violet-50 dark:bg-violet-500/10', icon: 'text-violet-600 dark:text-violet-400', ring: 'hover:ring-violet-200 dark:hover:ring-violet-500/30', btn: 'bg-violet-600 hover:bg-violet-700' },
   gray: { bg: 'bg-gray-100 dark:bg-neutral-800', icon: 'text-gray-600 dark:text-neutral-300', ring: 'hover:ring-gray-200 dark:hover:ring-neutral-700', btn: 'bg-gray-800 hover:bg-gray-700 dark:bg-neutral-700 dark:hover:bg-neutral-600' },
 }
 const COLORS = Object.keys(COLOR)
@@ -28,7 +30,7 @@ const COLOR_LABELS = { indigo: 'Indigo', emerald: 'Vert', amber: 'Ambre', blue: 
 
 function PlaceholderIcon({ className = 'h-6 w-6' }) {
   return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round"
         d="M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349m-16.5 11.65V9.35m0 0a3.001 3.001 0 003.75-.615A2.993 2.993 0 009.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 002.25 1.016c.896 0 1.7-.393 2.25-1.016a3.001 3.001 0 003.75.614m-16.5 0a3.004 3.004 0 01-.621-4.72L4.318 3.44A1.5 1.5 0 015.378 3h13.243a1.5 1.5 0 011.06.44l1.19 1.189a3 3 0 01-.621 4.72m-13.5 8.65h3.75a.75.75 0 00.75-.75V13.5a.75.75 0 00-.75-.75H6.75a.75.75 0 00-.75.75v3.75c0 .415.336.75.75.75z" />
     </svg>
@@ -47,7 +49,7 @@ function normTool(data) {
 // ── Icons ────────────────────────────────────────────────────────────────────
 function PhoneIcon() {
   return (
-    <svg className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg aria-hidden="true" className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
     </svg>
   )
@@ -55,7 +57,7 @@ function PhoneIcon() {
 
 function MailIcon() {
   return (
-    <svg className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg aria-hidden="true" className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
     </svg>
   )
@@ -63,7 +65,7 @@ function MailIcon() {
 
 function LockIcon() {
   return (
-    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
     </svg>
   )
@@ -71,7 +73,7 @@ function LockIcon() {
 
 function LockOpenIcon() {
   return (
-    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
     </svg>
   )
@@ -79,13 +81,13 @@ function LockOpenIcon() {
 
 function EyeIcon({ open }) {
   if (open) return (
-    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
       <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
     </svg>
   )
   return (
-    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
     </svg>
   )
@@ -93,7 +95,7 @@ function EyeIcon({ open }) {
 
 function XIcon() {
   return (
-    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
     </svg>
   )
@@ -101,7 +103,7 @@ function XIcon() {
 
 function CloseBtn({ onClick }) {
   return (
-    <button onClick={onClick} className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
+    <button onClick={onClick} aria-label="Fermer" className="h-8 w-8 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
       <XIcon />
     </button>
   )
@@ -117,7 +119,7 @@ function ContactInfo({ phones, emails }) {
           className="flex items-start gap-1.5 py-0.5 text-[11px] text-gray-500 dark:text-neutral-400 hover:text-gray-800 dark:hover:text-neutral-200 transition-colors">
           <span className="mt-0.5"><PhoneIcon /></span>
           <span className="min-w-0 break-words">
-            {p.label && <span className="font-medium text-gray-400 dark:text-neutral-500">{p.label} : </span>}
+            {p.label && <span className="font-medium text-gray-500 dark:text-neutral-400">{p.label} : </span>}
             <span className="whitespace-nowrap">{p.value}</span>
           </span>
         </a>
@@ -127,7 +129,7 @@ function ContactInfo({ phones, emails }) {
           className="flex items-start gap-1.5 py-0.5 text-[11px] text-gray-500 dark:text-neutral-400 hover:text-gray-800 dark:hover:text-neutral-200 transition-colors">
           <span className="mt-0.5"><MailIcon /></span>
           <span className="min-w-0 break-all">
-            {e.label && <span className="font-medium text-gray-400 dark:text-neutral-500 break-normal">{e.label} : </span>}
+            {e.label && <span className="font-medium text-gray-500 dark:text-neutral-400 break-normal">{e.label} : </span>}
             {e.value}
           </span>
         </a>
@@ -192,11 +194,11 @@ function CredentialsModal({ tool, magasins, userMagasinId, isGlobal, onClose, on
 
   if (isGlobal) {
     return (
-      <div className="fixed inset-0 z-[400] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
+      <Dialog onClose={onClose} className="fixed inset-0 z-[400] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
         <div className="w-full max-w-lg rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl flex flex-col max-h-[85vh]">
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800 shrink-0">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="text-gray-400"><LockIcon /></span>
+              <span className="text-gray-500 dark:text-neutral-400"><LockIcon /></span>
               <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">Identifiants — {tool.label}</span>
             </div>
             <CloseBtn onClick={onClose} />
@@ -204,15 +206,15 @@ function CredentialsModal({ tool, magasins, userMagasinId, isGlobal, onClose, on
 
           <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
             {filteredMagasins.length === 0 && (
-              <p className="text-sm text-gray-400 text-center py-4">Aucun magasin sélectionné pour ce B2B</p>
+              <p className="text-sm text-gray-500 dark:text-neutral-400 text-center py-4">Aucun magasin sélectionné pour ce B2B</p>
             )}
-            {loadingCreds && <p className="text-sm text-gray-400 text-center py-4">Chargement…</p>}
+            {loadingCreds && <p className="text-sm text-gray-500 dark:text-neutral-400 text-center py-4">Chargement…</p>}
             {!loadingCreds && filteredMagasins.map(m => (
               <div key={m.id} className="space-y-2 pt-4 first:pt-0 border-t first:border-t-0 border-gray-100 dark:border-neutral-800">
                 <p className="text-xs font-semibold text-gray-700 dark:text-neutral-300 uppercase tracking-wide">{m.nom}</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <label className="space-y-1">
-                    <span className="text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Email</span>
+                    <span className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Email</span>
                     {/* Identifiants du magasin, pas ceux de la personne connectée : pas de remplissage automatique */}
                     <input className="Input text-xs" type="email" name={`b2b-login-${m.id}`}
                       autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
@@ -221,7 +223,7 @@ function CredentialsModal({ tool, magasins, userMagasinId, isGlobal, onClose, on
                       placeholder="email@exemple.com" />
                   </label>
                   <label className="space-y-1">
-                    <span className="text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Mot de passe</span>
+                    <span className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Mot de passe</span>
                     <div className="relative">
                       <input className="Input text-xs pr-8" name={`b2b-password-${m.id}`}
                         autoComplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
@@ -229,8 +231,8 @@ function CredentialsModal({ tool, magasins, userMagasinId, isGlobal, onClose, on
                         value={creds[m.id]?.password ?? ''}
                         onChange={e => setCreds(p => ({ ...p, [m.id]: { ...p[m.id], password: e.target.value } }))}
                         placeholder="••••••••" />
-                      <button type="button" onClick={() => togglePwd(m.id)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-neutral-300">
+                      <button type="button" onClick={() => togglePwd(m.id)} aria-label={showPwd[m.id] ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 dark:text-neutral-400 hover:text-gray-600 dark:hover:text-neutral-300">
                         <EyeIcon open={showPwd[m.id]} />
                       </button>
                     </div>
@@ -256,44 +258,44 @@ function CredentialsModal({ tool, magasins, userMagasinId, isGlobal, onClose, on
             </button>
           </div>
         </div>
-      </div>
+      </Dialog>
     )
   }
 
   // Store view — read-only
   const sc = creds[userMagasinId]
   return (
-    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <Dialog onClose={onClose} className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-sm rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-gray-400"><LockIcon /></span>
+            <span className="text-gray-500 dark:text-neutral-400"><LockIcon /></span>
             <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">Identifiants — {tool.label}</span>
           </div>
           <CloseBtn onClick={onClose} />
         </div>
         <div className="p-5 space-y-4">
           {loadingCreds ? (
-            <p className="text-sm text-gray-400 dark:text-neutral-500 text-center py-2">Chargement…</p>
+            <p className="text-sm text-gray-500 dark:text-neutral-400 text-center py-2">Chargement…</p>
           ) : !sc ? (
-            <p className="text-sm text-gray-400 dark:text-neutral-500 text-center py-2">
+            <p className="text-sm text-gray-500 dark:text-neutral-400 text-center py-2">
               Aucun identifiant configuré pour votre magasin.
             </p>
           ) : (
             <>
               <div className="space-y-1">
-                <span className="text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Email</span>
+                <span className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Email</span>
                 <p className="text-sm font-mono text-gray-900 dark:text-white">{sc.email || '—'}</p>
               </div>
               <div className="space-y-1">
-                <span className="text-[10px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Mot de passe</span>
+                <span className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Mot de passe</span>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-mono text-gray-900 dark:text-white">
                     {showPwd[userMagasinId] ? (sc.password || '—') : (sc.password ? '••••••••' : '—')}
                   </p>
                   {sc.password && (
-                    <button type="button" onClick={() => togglePwd(userMagasinId)}
-                      className="text-gray-400 hover:text-gray-600 dark:hover:text-neutral-300 transition-colors">
+                    <button type="button" onClick={() => togglePwd(userMagasinId)} aria-label={showPwd[userMagasinId] ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                      className="text-gray-500 dark:text-neutral-400 hover:text-gray-600 dark:hover:text-neutral-300 transition-colors">
                       <EyeIcon open={showPwd[userMagasinId]} />
                     </button>
                   )}
@@ -309,7 +311,7 @@ function CredentialsModal({ tool, magasins, userMagasinId, isGlobal, onClose, on
           </button>
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -358,7 +360,7 @@ function ToolCard({ t, featured, canEdit, onEdit, onExport, userMagasinId, isGlo
             {t.label}
           </p>
           {t.description && (
-            <p className="text-[11px] text-gray-400 dark:text-neutral-500 mt-1 leading-relaxed">{t.description}</p>
+            <p className="text-[11px] text-gray-500 dark:text-neutral-400 mt-1 leading-relaxed">{t.description}</p>
           )}
         </div>
 
@@ -366,13 +368,13 @@ function ToolCard({ t, featured, canEdit, onEdit, onExport, userMagasinId, isGlo
 
         {!hasAccess ? (
           <div className="w-full rounded-lg bg-gray-50 dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 px-3 py-2">
-            <p className="text-[10px] text-gray-400 dark:text-neutral-500 mb-1">Disponible chez :</p>
+            <p className="text-[10px] text-gray-500 dark:text-neutral-400 mb-1">Disponible chez :</p>
             <p className="text-[10px] font-semibold text-gray-600 dark:text-neutral-300 leading-snug">
               {accessStores.length > 0 ? accessStores.map(m => m.nom).join(', ') : '—'}
             </p>
           </div>
         ) : (
-          <span className={`w-full ${btnH} flex items-center justify-center rounded-lg text-xs font-semibold transition-colors ${t.url ? `text-white ${c.btn}` : 'text-gray-400 dark:text-neutral-500 bg-gray-100 dark:bg-neutral-800'}`}>
+          <span className={`w-full ${btnH} flex items-center justify-center rounded-lg text-xs font-semibold transition-colors ${t.url ? `text-white ${c.btn}` : 'text-gray-600 dark:text-neutral-400 bg-gray-100 dark:bg-neutral-800'}`}>
             {t.url ? 'Accéder →' : 'Bientôt disponible'}
           </span>
         )}
@@ -399,9 +401,9 @@ function ToolCard({ t, featured, canEdit, onEdit, onExport, userMagasinId, isGlo
         <button
           onClick={e => { e.stopPropagation(); onEdit(t) }}
           aria-label={`Modifier ${t.label}`}
-          className="absolute top-3 right-3 h-7 w-7 grid place-items-center rounded-lg bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 text-gray-400 hover:text-gray-700 dark:hover:text-neutral-200 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-all shadow-sm"
+          className="absolute top-3 right-3 h-7 w-7 grid place-items-center rounded-lg bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 text-gray-500 dark:text-neutral-400 hover:text-gray-700 dark:hover:text-neutral-200 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-all shadow-sm"
         >
-          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
           </svg>
         </button>
@@ -443,13 +445,13 @@ function ContactListEditor({ items, onChange, type }) {
             value={item.value}
             onChange={e => update(i, 'value', e.target.value)} placeholder={valuePlaceholder} />
           <button type="button" onClick={() => remove(i)} aria-label="Retirer"
-            className="h-9 w-9 sm:h-8 sm:w-8 shrink-0 grid place-items-center rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors">
+            className="h-9 w-9 sm:h-8 sm:w-8 shrink-0 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors">
             <XIcon />
           </button>
         </div>
       ))}
       <button type="button" onClick={add}
-        className="text-[11px] font-medium text-indigo-500 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors">
+        className="text-[11px] font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors">
         {addLabel}
       </button>
     </div>
@@ -499,7 +501,7 @@ function EditModal({ tool, magasins, onClose, onSave, onDelete }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[400] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
+    <Dialog onClose={onClose} className="fixed inset-0 z-[400] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh]">
         <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800 shrink-0">
           <span className="text-sm font-semibold text-gray-900 dark:text-white">
@@ -509,34 +511,35 @@ function EditModal({ tool, magasins, onClose, onSave, onDelete }) {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+          <RequiredHint />
           <label className="block space-y-1">
-            <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Nom *</span>
+            <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Nom *</span>
             <input className="Input" value={form.label} onChange={e => set('label', e.target.value)} />
           </label>
 
           <label className="block space-y-1">
-            <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Description</span>
+            <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Description</span>
             <input className="Input" value={form.description} onChange={e => set('description', e.target.value)} />
           </label>
 
           <label className="block space-y-1">
-            <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">URL</span>
+            <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">URL</span>
             <input className="Input" type="url" value={form.url} onChange={e => set('url', e.target.value)} placeholder="https://…" />
           </label>
 
           <div className="space-y-1">
-            <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Téléphones</span>
+            <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Téléphones</span>
             <ContactListEditor items={form.phones} type="phone" onChange={v => set('phones', v)} />
           </div>
 
           <div className="space-y-1">
-            <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Emails</span>
+            <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Emails</span>
             <ContactListEditor items={form.emails} type="email" onChange={v => set('emails', v)} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Couleur</span>
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Couleur</span>
               <select className="Input" value={form.color} onChange={e => set('color', e.target.value)}>
                 {COLORS.map(c => <option key={c} value={c}>{COLOR_LABELS[c] || c}</option>)}
               </select>
@@ -550,8 +553,8 @@ function EditModal({ tool, magasins, onClose, onSave, onDelete }) {
           {magasins.length > 0 && (
             <div className="space-y-2">
               <div>
-                <span className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Accès magasins</span>
-                <p className="text-[10px] text-gray-400 dark:text-neutral-600 mt-0.5">Laisser vide = visible pour tous</p>
+                <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Accès magasins</span>
+                <p className="text-[10px] text-gray-500 dark:text-neutral-400 mt-0.5">Laisser vide = visible pour tous</p>
               </div>
               <div className="grid grid-cols-2 gap-1">
                 {magasins.map(m => (
@@ -584,7 +587,7 @@ function EditModal({ tool, magasins, onClose, onSave, onDelete }) {
           </div>
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -592,11 +595,11 @@ function EditModal({ tool, magasins, onClose, onSave, onDelete }) {
 function AccessInfoModal({ tool, magasins, onClose }) {
   const stores = credentialStores(tool, magasins)
   return (
-    <div className="fixed inset-0 z-[400] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
+    <Dialog onClose={onClose} className="fixed inset-0 z-[400] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-sm rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-gray-400"><LockIcon /></span>
+            <span className="text-gray-500 dark:text-neutral-400"><LockIcon /></span>
             <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">Identifiants — {tool.label}</span>
           </div>
           <CloseBtn onClick={onClose} />
@@ -606,7 +609,7 @@ function AccessInfoModal({ tool, magasins, onClose }) {
             Votre magasin n’a pas d’identifiants pour <span className="font-semibold">{tool.label}</span>.
           </p>
           <div className="space-y-2">
-            <p className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">
+            <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">
               {stores.length > 1 ? 'Magasins qui ont les accès' : 'Magasin qui a les accès'}
             </p>
             {stores.length > 0 ? (
@@ -618,7 +621,7 @@ function AccessInfoModal({ tool, magasins, onClose }) {
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-gray-400 dark:text-neutral-500">Aucun magasin pour le moment.</p>
+              <p className="text-xs text-gray-500 dark:text-neutral-400">Aucun magasin pour le moment.</p>
             )}
           </div>
           <p className="text-[11px] text-gray-500 dark:text-neutral-400">
@@ -633,7 +636,7 @@ function AccessInfoModal({ tool, magasins, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -645,7 +648,7 @@ function PickList({ title, items, selected, onChange }) {
     <div className="rounded-xl border border-gray-200 dark:border-neutral-800 overflow-hidden">
       <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-gray-100 dark:border-neutral-800 bg-gray-50/60 dark:bg-neutral-800/30">
         <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">
-          {title} <span className="font-medium normal-case text-gray-400">· {selected.length}/{items.length}</span>
+          {title} <span className="font-medium normal-case text-gray-500 dark:text-neutral-400">· {selected.length}/{items.length}</span>
         </span>
         <button type="button" onClick={() => onChange(all ? [] : items.map(i => i.id))}
           className="text-[11px] font-semibold text-gray-600 hover:text-gray-900 dark:text-neutral-300 dark:hover:text-white">
@@ -658,10 +661,10 @@ function PickList({ title, items, selected, onChange }) {
             <label className="flex-1 min-w-0 flex items-center gap-2 cursor-pointer">
               <input type="checkbox" className="h-3.5 w-3.5 accent-gray-900 dark:accent-white" checked={selected.includes(it.id)} onChange={() => toggle(it.id)} />
               <span className="text-xs text-gray-800 dark:text-neutral-200 truncate">{it.label}</span>
-              {it.sub && <span className="text-[10px] text-gray-400 dark:text-neutral-500 shrink-0">{it.sub}</span>}
+              {it.sub && <span className="text-[10px] text-gray-500 dark:text-neutral-400 shrink-0">{it.sub}</span>}
             </label>
             <button type="button" onClick={() => onChange([it.id])}
-              className="text-[10px] font-semibold text-gray-400 hover:text-gray-800 dark:hover:text-neutral-200 sm:opacity-0 sm:group-hover:opacity-100">
+              className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400 hover:text-gray-800 dark:hover:text-neutral-200 sm:opacity-0 sm:group-hover:opacity-100">
               Seulement
             </button>
           </div>
@@ -720,10 +723,10 @@ function ExportModal({ tools, magasins, initialToolIds, onClose }) {
       {label}
     </button>
   )
-  const LABEL = 'text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide'
+  const LABEL = 'text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide'
 
   return (
-    <div className="fixed inset-0 z-[400] flex items-start sm:items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
+    <Dialog onClose={onClose} className="fixed inset-0 z-[400] flex items-start sm:items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
       <div className="w-full max-w-3xl rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl">
         <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
           <span className="text-sm font-semibold text-gray-900 dark:text-white">Exporter les identifiants</span>
@@ -807,10 +810,10 @@ function ExportModal({ tools, magasins, initialToolIds, onClose }) {
                     <span className="font-medium text-gray-800 dark:text-neutral-200 truncate">{r.b2b}</span>
                     <span className="text-gray-600 dark:text-neutral-300 truncate text-right sm:text-left">{r.magasin}</span>
                     <span className="col-span-2 sm:col-span-1 font-mono text-gray-600 dark:text-neutral-300 truncate">{r.identifiant || '—'}</span>
-                    <span className={`col-span-2 sm:col-span-1 font-mono text-gray-400 whitespace-nowrap ${r.statut ? '' : 'hidden sm:block'}`}>{r.statut || (r.motDePasse ? '••••••' : '—')}</span>
+                    <span className={`col-span-2 sm:col-span-1 font-mono text-gray-500 dark:text-neutral-400 whitespace-nowrap ${r.statut ? '' : 'hidden sm:block'}`}>{r.statut || (r.motDePasse ? '••••••' : '—')}</span>
                   </div>
                 ))}
-                {rows.length > 5 && <p className="px-3 py-1.5 text-[11px] text-gray-400">+ {rows.length - 5} autre{rows.length - 5 > 1 ? 's' : ''} ligne{rows.length - 5 > 1 ? 's' : ''}</p>}
+                {rows.length > 5 && <p className="px-3 py-1.5 text-[11px] text-gray-500 dark:text-neutral-400">+ {rows.length - 5} autre{rows.length - 5 > 1 ? 's' : ''} ligne{rows.length - 5 > 1 ? 's' : ''}</p>}
               </div>
             )}
           </div>
@@ -818,7 +821,7 @@ function ExportModal({ tools, magasins, initialToolIds, onClose }) {
           <p className="text-[11px] text-amber-700 dark:text-amber-300">
             Le fichier contient les mots de passe en clair : ne l’envoyez pas par mail et supprimez-le après usage.
           </p>
-          {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+          {error && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{error}</p>}
         </div>
 
         <div className="flex justify-end gap-2 px-4 sm:px-5 py-3.5 border-t border-gray-100 dark:border-neutral-800">
@@ -831,7 +834,7 @@ function ExportModal({ tools, magasins, initialToolIds, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -889,8 +892,8 @@ function OrderModal({ tools, onClose }) {
   const section = (key, title, hint) => (
     <div className="space-y-2">
       <div>
-        <p className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">{title}</p>
-        <p className="text-[11px] text-gray-400 dark:text-neutral-500">{hint}</p>
+        <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">{title}</p>
+        <p className="text-[11px] text-gray-500 dark:text-neutral-400">{hint}</p>
       </div>
       <Droppable droppableId={key}>
         {(provided, snapshot) => (
@@ -904,10 +907,10 @@ function OrderModal({ tools, onClose }) {
                     className={['flex items-center gap-1 sm:gap-2 rounded-lg border bg-white dark:bg-neutral-900 px-1 sm:px-2 py-1.5',
                       s.isDragging ? 'shadow-lg border-gray-300 dark:border-neutral-600' : 'border-gray-200 dark:border-neutral-800'].join(' ')}>
                     <span {...p.dragHandleProps} aria-label={`Déplacer ${t.label}`}
-                      className="h-7 w-5 sm:w-6 shrink-0 grid place-items-center text-gray-300 hover:text-gray-500 dark:text-neutral-600 cursor-grab">
-                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" /><circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" /><circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" /></svg>
+                      className="h-7 w-5 sm:w-6 shrink-0 grid place-items-center text-gray-500 hover:text-gray-500 dark:text-neutral-400 cursor-grab">
+                      <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" /><circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" /><circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" /></svg>
                     </span>
-                    <span className="w-4 sm:w-5 shrink-0 text-[11px] font-semibold text-gray-400 tabular-nums text-right">{i + 1}</span>
+                    <span className="w-4 sm:w-5 shrink-0 text-[11px] font-semibold text-gray-500 dark:text-neutral-400 tabular-nums text-right">{i + 1}</span>
                     {t.imageUrl
                       ? <img src={safeUrl(t.imageUrl)} alt="" className="hidden sm:block h-6 w-10 object-contain shrink-0" />
                       : <span className={`hidden sm:block h-6 w-6 rounded-md shrink-0 ${(COLOR[t.color] || COLOR.gray).bg}`} />}
@@ -915,25 +918,25 @@ function OrderModal({ tools, onClose }) {
                     <button type="button" onClick={() => switchSection(key, i)}
                       title={key === 'featured' ? 'Retirer des principaux' : 'Mettre dans les principaux'}
                       aria-label={key === 'featured' ? `Retirer ${t.label} des principaux` : `Mettre ${t.label} dans les principaux`}
-                      className={`h-8 w-7 sm:h-7 shrink-0 grid place-items-center rounded-md hover:bg-gray-100 dark:hover:bg-neutral-800 ${key === 'featured' ? 'text-amber-500' : 'text-gray-300 hover:text-amber-500 dark:text-neutral-600'}`}>
-                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill={key === 'featured' ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={1.8}>
+                      className={`h-8 w-7 sm:h-7 shrink-0 grid place-items-center rounded-md hover:bg-gray-100 dark:hover:bg-neutral-800 ${key === 'featured' ? 'text-amber-700' : 'text-gray-500 hover:text-amber-500 dark:text-neutral-400'}`}>
+                      <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill={key === 'featured' ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={1.8}>
                         <path strokeLinejoin="round" d="M11.48 3.5a.56.56 0 011.04 0l2.12 5.11 5.52.44c.5.04.7.66.32.99l-4.2 3.6 1.28 5.38a.56.56 0 01-.84.61L12 16.73l-4.72 2.9a.56.56 0 01-.84-.61l1.28-5.38-4.2-3.6a.56.56 0 01.32-.99l5.52-.44 2.12-5.11z" />
                       </svg>
                     </button>
                     <button type="button" onClick={() => move(key, i, i - 1)} disabled={i === 0} aria-label="Monter"
-                      className="h-8 w-7 sm:h-7 shrink-0 grid place-items-center rounded-md text-gray-400 hover:text-gray-800 hover:bg-gray-100 dark:hover:bg-neutral-800 disabled:opacity-30">
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" /></svg>
+                      className="h-8 w-7 sm:h-7 shrink-0 grid place-items-center rounded-md text-gray-500 dark:text-neutral-400 hover:text-gray-800 hover:bg-gray-100 dark:hover:bg-neutral-800 disabled:opacity-30">
+                      <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" /></svg>
                     </button>
                     <button type="button" onClick={() => move(key, i, i + 1)} disabled={i === lists[key].length - 1} aria-label="Descendre"
-                      className="h-8 w-7 sm:h-7 shrink-0 grid place-items-center rounded-md text-gray-400 hover:text-gray-800 hover:bg-gray-100 dark:hover:bg-neutral-800 disabled:opacity-30">
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                      className="h-8 w-7 sm:h-7 shrink-0 grid place-items-center rounded-md text-gray-500 dark:text-neutral-400 hover:text-gray-800 hover:bg-gray-100 dark:hover:bg-neutral-800 disabled:opacity-30">
+                      <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
                     </button>
                   </div>
                 )}
               </Draggable>
             ))}
             {provided.placeholder}
-            {lists[key].length === 0 && <p className="text-[11px] text-center text-gray-400 py-2">Glissez un B2B ici</p>}
+            {lists[key].length === 0 && <p className="text-[11px] text-center text-gray-500 dark:text-neutral-400 py-2">Glissez un B2B ici</p>}
           </div>
         )}
       </Droppable>
@@ -941,7 +944,7 @@ function OrderModal({ tools, onClose }) {
   )
 
   return (
-    <div className="fixed inset-0 z-[400] flex items-start sm:items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
+    <Dialog onClose={onClose} className="fixed inset-0 z-[400] flex items-start sm:items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
       <div className="w-full max-w-lg rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl">
         <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
           <span className="text-sm font-semibold text-gray-900 dark:text-white">Ordre d’affichage des B2B</span>
@@ -954,7 +957,7 @@ function OrderModal({ tools, onClose }) {
           </div>
         </DragDropContext>
         <div className="flex items-center justify-end sm:justify-between gap-2 px-4 sm:px-5 py-3.5 border-t border-gray-100 dark:border-neutral-800">
-          <p className="hidden sm:block text-[11px] text-gray-400 dark:text-neutral-500">Glissez, ou utilisez les flèches et l’étoile.</p>
+          <p className="hidden sm:block text-[11px] text-gray-500 dark:text-neutral-400">Glissez, ou utilisez les flèches et l’étoile.</p>
           <div className="flex gap-2">
             <button onClick={onClose} className="h-8 px-3 rounded-lg text-xs font-medium border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors">
               Annuler
@@ -966,7 +969,7 @@ function OrderModal({ tools, onClose }) {
           </div>
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -1016,11 +1019,11 @@ export default function B2B() {
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
       <Navbar />
 
-      <main className="flex-1 p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6">
+      <main id="contenu" tabIndex={-1} className="focus:outline-none flex-1 p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
             <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">Espace B2B</h1>
-            <p className="text-xs sm:text-sm text-gray-400 dark:text-neutral-500 mt-1">
+            <p className="text-xs sm:text-sm text-gray-500 dark:text-neutral-400 mt-1">
               Accédez aux outils et plateformes partenaires du Groupe Nivault
             </p>
           </div>
@@ -1044,7 +1047,7 @@ export default function B2B() {
 
         {featured.length > 0 && (
           <div>
-            <p className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide mb-3">Principaux</p>
+            <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide mb-3">Principaux</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               {featured.map(t => <ToolCard key={t.id} t={t} featured {...cardProps} />)}
             </div>
@@ -1053,7 +1056,7 @@ export default function B2B() {
 
         {secondary.length > 0 && (
           <div>
-            <p className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide mb-3">Autres</p>
+            <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide mb-3">Autres</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               {secondary.map(t => <ToolCard key={t.id} t={t} featured={false} {...cardProps} />)}
             </div>
@@ -1061,7 +1064,7 @@ export default function B2B() {
         )}
 
         {tools.length === 0 && (
-          <div className="text-center py-16 text-sm text-gray-400 dark:text-neutral-500">
+          <div className="text-center py-16 text-sm text-gray-500 dark:text-neutral-400">
             Aucun outil B2B configuré.{canEdit && ' Cliquez sur "+ Ajouter un outil" pour commencer.'}
           </div>
         )}

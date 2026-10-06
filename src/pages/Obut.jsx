@@ -23,6 +23,7 @@ import {
   OBUT_VISIBLE_DAYS, emptyObutForm, isObutListed, isObutOpen, obutClientName, obutFormErrors, obutFormFromCmd,
   obutLines, obutMatches, obutPayload, obutRemaining, obutStatus, obutStatusSince, obutTotal,
 } from '../lib/obut'
+import Dialog from '../components/Dialog'
 
 /* ── Helpers ──────────────────────────────────────────────────────────────── */
 function fmtYmd(ymd) {
@@ -51,10 +52,10 @@ function StatusBadge({ status }) {
   )
 }
 
-function StatusSelect({ value, onChange }) {
+function StatusSelect({ value, onChange, label = 'Statut de la commande' }) {
   const meta = OBUT_STATUS_META[value]
   return (
-    <select value={value} onChange={e => onChange(e.target.value)} onClick={e => e.stopPropagation()} aria-label="Statut"
+    <select value={value} onChange={e => onChange(e.target.value)} onClick={e => e.stopPropagation()} aria-label={label}
       className={`max-w-full rounded-lg border text-xs font-medium px-2 py-1 cursor-pointer focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/20 ${meta.badge}`}>
       {OBUT_STATUSES.map(s => (
         <option key={s} value={s} className="bg-white dark:bg-neutral-900 text-gray-900 dark:text-white">{OBUT_STATUS_META[s].label}</option>
@@ -75,7 +76,7 @@ function StatCard({ status, value, active, onClick }) {
         <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide truncate">{meta.label}</span>
       </div>
       <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white tabular-nums">{value}</p>
-      <p className="hidden sm:block text-[11px] text-gray-400 dark:text-neutral-500 truncate">{meta.hint}</p>
+      <p className="hidden sm:block text-[11px] text-gray-500 dark:text-neutral-400 truncate">{meta.hint}</p>
     </button>
   )
 }
@@ -95,7 +96,7 @@ function Card({ title, children, className = '' }) {
 function Info({ label, children, full = false }) {
   return (
     <div className={full ? 'col-span-full' : ''}>
-      <p className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide mb-1">{label}</p>
+      <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide mb-1">{label}</p>
       <div className="text-sm text-gray-900 dark:text-white break-words">{children || '—'}</div>
     </div>
   )
@@ -104,10 +105,10 @@ function Info({ label, children, full = false }) {
 function IconBtn({ title, onClick, danger = false, d }) {
   return (
     <button type="button" onClick={onClick} title={title} aria-label={title}
-      className={`h-8 w-8 grid place-items-center rounded-lg text-gray-400 transition-colors ${danger
-        ? 'hover:text-red-600 hover:bg-red-50 dark:text-neutral-500 dark:hover:text-red-400 dark:hover:bg-red-500/10'
-        : 'hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-500 dark:hover:text-neutral-200 dark:hover:bg-neutral-800'}`}>
-      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d={d} /></svg>
+      className={`h-8 w-8 grid place-items-center rounded-lg text-gray-500 transition-colors ${danger
+        ? 'hover:text-red-600 hover:bg-red-50 dark:text-neutral-400 dark:hover:text-red-400 dark:hover:bg-red-500/10'
+        : 'hover:text-gray-700 hover:bg-gray-100 dark:text-neutral-400 dark:hover:text-neutral-200 dark:hover:bg-neutral-800'}`}>
+      <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d={d} /></svg>
     </button>
   )
 }
@@ -123,7 +124,7 @@ function Sheet({ onClose, children, footer, closeOnOverlay = true }) {
     return () => window.removeEventListener('keydown', fn)
   }, [onClose])
   return (
-    <div ref={overlayRef} onMouseDown={e => { if (closeOnOverlay && e.target === overlayRef.current) onClose() }}
+    <Dialog ref={overlayRef} onMouseDown={e => { if (closeOnOverlay && e.target === overlayRef.current) onClose() }}
       className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm flex items-start justify-center p-2 sm:p-4 sm:pt-[4vh] overflow-y-auto">
       <div className="w-full max-w-4xl rounded-2xl border shadow-2xl bg-white border-gray-200 dark:bg-neutral-900 dark:border-neutral-800">
         {children}
@@ -133,7 +134,7 @@ function Sheet({ onClose, children, footer, closeOnOverlay = true }) {
           </div>
         )}
       </div>
-    </div>
+    </Dialog>
   )
 }
 
@@ -157,21 +158,21 @@ function NewOrder({ catalogue, staff, onSubmit, onClose }) {
   return (
     <Sheet onClose={onClose} closeOnOverlay={false} footer={<>
       {tried && Object.keys(errors).length > 0 && <p className="text-xs text-red-600 dark:text-red-400 mr-auto">Corrigez les champs en rouge.</p>}
-      {error && <p className="text-xs text-red-600 dark:text-red-400 mr-auto">{error}</p>}
+      {error && <p role="alert" className="text-xs text-red-600 dark:text-red-400 mr-auto">{error}</p>}
       <button type="button" onClick={onClose} className={BTN_SECONDARY}>Annuler</button>
       <button type="button" onClick={submit} disabled={busy} className={BTN_PRIMARY}>{busy ? 'Enregistrement…' : 'Créer la commande'}</button>
     </>}>
       <div className="flex items-start justify-between gap-3 px-4 sm:px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
         <div>
           <p className="text-sm font-semibold text-gray-900 dark:text-white">Nouvelle commande OBUT</p>
-          <p className="text-[11px] text-gray-400 dark:text-neutral-500 mt-0.5">Les prix viennent du catalogue ; ils restent modifiables pour cette commande.</p>
+          <p className="text-[11px] text-gray-500 dark:text-neutral-400 mt-0.5">Les prix viennent du catalogue ; ils restent modifiables pour cette commande.</p>
         </div>
         <IconBtn title="Fermer" onClick={onClose} d={ICON_CLOSE} />
       </div>
       <div className="p-3 sm:p-5 space-y-3 sm:space-y-4">
         <ObutFields form={form} setForm={setForm} catalogue={catalogue} staff={staff} errors={errors} autoFocus />
         <div className="space-y-1.5">
-          <p className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Statut de départ</p>
+          <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Statut de départ</p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
             {OBUT_OPEN_STATUSES.map(s => (
               <button key={s} type="button" onClick={() => setStatut(s)} title={OBUT_STATUS_META[s].hint}
@@ -227,7 +228,7 @@ function OrderSheet({ cmd, catalogue, staff, magasinNom, canDelete, onClose, onC
       <div className="flex items-start justify-between gap-3 px-4 sm:px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-gray-400 dark:text-neutral-500">Commande du {fmtYmd(cmd.dateCommande)}{magasinNom ? ` · ${magasinNom}` : ''}</span>
+            <span className="text-xs text-gray-500 dark:text-neutral-400">Commande du {fmtYmd(cmd.dateCommande)}{magasinNom ? ` · ${magasinNom}` : ''}</span>
             <StatusBadge status={status} />
           </div>
           <p className="font-semibold text-sm text-gray-900 dark:text-white break-words">{name || 'Client anonymisé'}</p>
@@ -239,7 +240,7 @@ function OrderSheet({ cmd, catalogue, staff, magasinNom, canDelete, onClose, onC
           {canDelete && !editing && (confirmDelete ? (
             <span className="flex items-center gap-1">
               <button type="button" onClick={onDelete} className="h-8 px-2.5 rounded-lg text-xs font-semibold text-white bg-red-600 hover:bg-red-700">Supprimer</button>
-              <button type="button" onClick={() => setConfirmDelete(false)} className="h-8 px-2 rounded-lg text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-neutral-800">Non</button>
+              <button type="button" onClick={() => setConfirmDelete(false)} className="h-8 px-2 rounded-lg text-xs text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800">Non</button>
             </span>
           ) : <IconBtn title="Supprimer la commande" danger onClick={() => setConfirmDelete(true)} d={ICON_DELETE} />)}
           {!editing && <IconBtn title="Fermer" onClick={onClose} d={ICON_CLOSE} />}
@@ -310,22 +311,22 @@ function OrderSheet({ cmd, catalogue, staff, magasinNom, canDelete, onClose, onC
                 <Info label="Total TTC"><span className="font-bold tabular-nums">{formatEuro(total)}</span></Info>
                 <Info label="Acompte"><span className="tabular-nums">{acompte ? formatEuro(acompte) : 'Aucun'}</span></Info>
                 <div className="text-right">
-                  <p className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide mb-1">Reste</p>
-                  <p className={`text-sm font-bold tabular-nums ${reste > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{formatEuro(reste)}</p>
+                  <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide mb-1">Reste</p>
+                  <p className={`text-sm font-bold tabular-nums ${reste > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'}`}>{formatEuro(reste)}</p>
                 </div>
               </div>
             </Card>
 
             <Card title="Historique">
               <div className="max-h-48 overflow-y-auto divide-y divide-gray-100 dark:divide-neutral-800 sm:divide-y-0">
-                {history.length === 0 && <p className="text-xs text-gray-400 dark:text-neutral-500">Commande du {fmtYmd(cmd.dateCommande)}.</p>}
+                {history.length === 0 && <p className="text-xs text-gray-500 dark:text-neutral-400">Commande du {fmtYmd(cmd.dateCommande)}.</p>}
                 {history.map((h, i) => (
                   <div key={i} className="flex flex-col sm:flex-row sm:gap-2 text-xs py-1.5 sm:py-1">
-                    <span className="text-gray-400 dark:text-neutral-500 shrink-0 sm:w-36">
+                    <span className="text-gray-500 dark:text-neutral-400 shrink-0 sm:w-36">
                       {toDate(h.at)?.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) || '—'}<span className="sm:hidden"> · {h.by}</span>
                     </span>
                     <span className="text-gray-700 dark:text-neutral-300">{h.note}</span>
-                    <span className="hidden sm:block text-gray-400 dark:text-neutral-500 ml-auto shrink-0">{h.by}</span>
+                    <span className="hidden sm:block text-gray-500 dark:text-neutral-400 ml-auto shrink-0">{h.by}</span>
                   </div>
                 ))}
               </div>
@@ -347,7 +348,7 @@ function OrderCard({ cmd, magasin, onOpen, onChangeStatut }) {
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-gray-900 dark:text-white break-words">{obutClientName(cmd) || 'Client anonymisé'}</p>
-          <p className="text-[11px] text-gray-400 dark:text-neutral-500">
+          <p className="text-[11px] text-gray-500 dark:text-neutral-400">
             {fmtYmd(cmd.dateCommande)}{cmd.clientTel ? ` · ${cmd.clientTel}` : ''}
           </p>
         </div>
@@ -358,12 +359,12 @@ function OrderCard({ cmd, magasin, onOpen, onChangeStatut }) {
       </div>
       <p className="text-xs text-gray-700 dark:text-neutral-300 break-words">
         <span className="font-semibold">{cmd.modele}</span>
-        {specs(cmd) && <span className="text-gray-400 dark:text-neutral-500"> · {specs(cmd)}</span>}
+        {specs(cmd) && <span className="text-gray-500 dark:text-neutral-400"> · {specs(cmd)}</span>}
         {cmd.marquage && <span className="block text-gray-500 dark:text-neutral-400 truncate">Marquage « {cmd.marquage} »</span>}
       </p>
       <div className="flex items-center justify-between gap-2 pt-1" onClick={e => e.stopPropagation()}>
-        <StatusSelect value={obutStatus(cmd)} onChange={onChangeStatut} />
-        <span className="text-[11px] text-right text-gray-400 dark:text-neutral-500">
+        <StatusSelect value={obutStatus(cmd)} onChange={onChangeStatut} label={`Statut de la commande de ${obutClientName(cmd) || 'client anonymisé'}`} />
+        <span className="text-[11px] text-right text-gray-500 dark:text-neutral-400">
           {sinceLabel(obutStatusSince(cmd))}
           {magasin && <span className="block">{magasin}</span>}
         </span>
@@ -478,14 +479,14 @@ export default function Obut() {
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
       <Navbar />
 
-      <main className="flex-1 p-4 sm:p-5">
+      <main id="contenu" tabIndex={-1} className="focus:outline-none flex-1 p-4 sm:p-5">
         <div className="max-w-7xl mx-auto space-y-4">
 
           {/* En-tête */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">Commandes OBUT</h1>
-              <p className="text-xs sm:text-sm text-gray-400 dark:text-neutral-500 mt-0.5">Boules de pétanque sur mesure</p>
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-neutral-400 mt-0.5">Boules de pétanque sur mesure</p>
             </div>
             <div className="flex items-center gap-2">
               {isGlobal && (
@@ -505,20 +506,20 @@ export default function Obut() {
               <button key={k} onClick={() => { setTab(k); setFilterStatut('') }}
                 className={`h-9 px-3 -mb-px border-b-2 text-xs font-semibold whitespace-nowrap transition-colors ${tab === k
                   ? 'border-gray-900 text-gray-900 dark:border-white dark:text-white'
-                  : 'border-transparent text-gray-400 hover:text-gray-700 dark:text-neutral-500 dark:hover:text-neutral-300'}`}>
-                {label}{n != null && <span className="ml-1 font-medium text-gray-400 dark:text-neutral-500">{n}</span>}
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-neutral-400 dark:hover:text-neutral-300'}`}>
+                {label}{n != null && <span className="ml-1 font-medium text-gray-500 dark:text-neutral-400">{n}</span>}
               </button>
             ))}
           </div>
 
-          {loadError && <p className="text-xs text-red-600 dark:text-red-400">{loadError}</p>}
+          {loadError && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{loadError}</p>}
 
           {tab === 'stats' ? (
             <ObutStats commandes={commandes} magasins={Object.entries(magasins).map(([id, nom]) => ({ id, nom }))} />
           ) : (
             <>
               {tab === 'done' && (
-                <p className="text-[11px] text-gray-400 dark:text-neutral-500">
+                <p className="text-[11px] text-gray-500 dark:text-neutral-400">
                   Les commandes terminées restent affichées {OBUT_VISIBLE_DAYS} jours. Ensuite, les données du client sont effacées (RGPD)
                   et la commande ne sert plus qu’aux statistiques.
                 </p>
@@ -535,14 +536,14 @@ export default function Obut() {
               {/* Recherche */}
               <div className="flex flex-wrap items-center gap-2">
                 <input className="Input h-9 sm:h-8 flex-1 sm:flex-none sm:!w-72 text-xs" value={q} onChange={e => setQ(e.target.value)}
-                  placeholder="Rechercher : client, téléphone, modèle, marquage…" />
+                  aria-label="Rechercher" placeholder="Rechercher : client, téléphone, modèle, marquage…" />
                 {hasFilters && (
                   <button onClick={() => { setQ(''); setFilterStatut('') }}
                     className="h-8 px-3 rounded-lg text-xs text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:text-neutral-400 dark:hover:text-neutral-200 dark:hover:bg-neutral-800">
                     Effacer
                   </button>
                 )}
-                <span className="ml-auto text-xs text-gray-400 dark:text-neutral-500">{filtered.length} résultat{filtered.length !== 1 ? 's' : ''}</span>
+                <span className="ml-auto text-xs text-gray-500 dark:text-neutral-400">{filtered.length} résultat{filtered.length !== 1 ? 's' : ''}</span>
               </div>
 
               {/* Téléphone : cartes */}
@@ -551,7 +552,7 @@ export default function Obut() {
                   <OrderCard key={c.id} cmd={c} magasin={showMagasin ? magasins[c.magasinId] : null}
                     onOpen={() => setActiveId(c.id)} onChangeStatut={s => changeStatut(c, s)} />
                 ))}
-                {filtered.length === 0 && <p className="py-8 text-center text-xs text-gray-400 dark:text-neutral-500">{empty}</p>}
+                {filtered.length === 0 && <p className="py-8 text-center text-xs text-gray-500 dark:text-neutral-400">{empty}</p>}
               </div>
 
               {/* Ordinateur : tableau */}
@@ -561,7 +562,7 @@ export default function Obut() {
                     <thead>
                       <tr className="border-b border-gray-100 dark:border-neutral-800 text-left">
                         {['Client', 'Boules', 'Marquage', 'Total TTC / reste', 'Statut', 'Vendeur', ...(showMagasin ? ['Magasin'] : [])].map((h, i) => (
-                          <th key={h} className={`px-3 py-2.5 text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide whitespace-nowrap ${i === 3 ? 'text-right' : ''}`}>{h}</th>
+                          <th key={h} className={`px-3 py-2.5 text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide whitespace-nowrap ${i === 3 ? 'text-right' : ''}`}>{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -574,9 +575,14 @@ export default function Obut() {
                           <tr key={c.id} onClick={() => setActiveId(c.id)}
                             className="border-t border-gray-100 dark:border-neutral-800 hover:bg-gray-50 dark:hover:bg-neutral-800/50 cursor-pointer transition-colors align-top">
                             <td className="px-3 py-2.5 whitespace-nowrap">
-                              <p className="font-medium text-gray-900 dark:text-white">{obutClientName(c) || 'Client anonymisé'}</p>
+                              {/* Ouverture au clavier : le nom est un bouton (la ligne reste cliquable à la souris) */}
+                              <button type="button" onClick={e => { e.stopPropagation(); setActiveId(c.id) }}
+                                aria-label={`Ouvrir la commande OBUT de ${obutClientName(c) || 'client anonymisé'}`}
+                                className="font-medium text-left text-gray-900 dark:text-white hover:underline rounded">
+                                {obutClientName(c) || 'Client anonymisé'}
+                              </button>
                               <p className="text-gray-500 dark:text-neutral-400">{c.clientTel || ''}</p>
-                              <p className="text-[11px] text-gray-400 dark:text-neutral-500">{fmtYmd(c.dateCommande)}</p>
+                              <p className="text-[11px] text-gray-500 dark:text-neutral-400">{fmtYmd(c.dateCommande)}</p>
                             </td>
                             <td className="px-3 py-2.5">
                               <p className="font-semibold text-gray-900 dark:text-white whitespace-nowrap">{c.modele || '—'}</p>
@@ -585,16 +591,16 @@ export default function Obut() {
                             <td className="px-3 py-2.5 max-w-[200px]">
                               {c.marquage ? <>
                                 <p className="text-gray-800 dark:text-neutral-200 truncate">« {c.marquage} »</p>
-                                <p className="text-[11px] text-gray-400 dark:text-neutral-500 truncate">{c.marquageLabel || (c.marquageType === 'stylisee' ? 'Stylisé' : 'Classique')}</p>
-                              </> : <span className="text-gray-400 dark:text-neutral-500">—</span>}
+                                <p className="text-[11px] text-gray-500 dark:text-neutral-400 truncate">{c.marquageLabel || (c.marquageType === 'stylisee' ? 'Stylisé' : 'Classique')}</p>
+                              </> : <span className="text-gray-500 dark:text-neutral-400">—</span>}
                             </td>
                             <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
                               <p className="text-gray-800 dark:text-neutral-200 font-medium">{formatEuro(total)}</p>
                               {acompte > 0 && <p className="text-[11px] text-gray-500 dark:text-neutral-400">acompte {formatEuro(acompte)} · reste {formatEuro(reste)}</p>}
                             </td>
                             <td className="px-3 py-2.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                              <StatusSelect value={obutStatus(c)} onChange={s => changeStatut(c, s)} />
-                              <p className="mt-0.5 text-[11px] text-gray-400 dark:text-neutral-500">{sinceLabel(obutStatusSince(c))}</p>
+                              <StatusSelect value={obutStatus(c)} onChange={s => changeStatut(c, s)} label={`Statut de la commande de ${obutClientName(c) || 'client anonymisé'}`} />
+                              <p className="mt-0.5 text-[11px] text-gray-500 dark:text-neutral-400">{sinceLabel(obutStatusSince(c))}</p>
                             </td>
                             <td className="px-3 py-2.5 text-gray-500 dark:text-neutral-400 whitespace-nowrap">{c.vendeur || c.etabliePar || '—'}</td>
                             {showMagasin && <td className="px-3 py-2.5 text-gray-500 dark:text-neutral-400 whitespace-nowrap">{magasins[c.magasinId] || '—'}</td>}
@@ -602,7 +608,7 @@ export default function Obut() {
                         )
                       })}
                       {filtered.length === 0 && (
-                        <tr><td colSpan={7} className="px-3 py-8 text-center text-xs text-gray-400 dark:text-neutral-500">{empty}</td></tr>
+                        <tr><td colSpan={7} className="px-3 py-8 text-center text-xs text-gray-500 dark:text-neutral-400">{empty}</td></tr>
                       )}
                     </tbody>
                   </table>

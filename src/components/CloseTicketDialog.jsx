@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { collection, getDocs, orderBy, query } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { toDate } from '../lib/ticketStats'
+import Dialog from './Dialog'
 
 // Message à reporter dans la fiche atelier de l'outil du magasin avant la clôture
 export function buildClosingMessage(ticket, comments) {
@@ -68,8 +69,8 @@ export default function CloseTicketDialog({ ticket, nextStatus = 'Ready', onCanc
   }
 
   return (
-    <div className="fixed inset-0 z-[400] flex items-start justify-center p-3 sm:p-4 sm:pt-[8vh] bg-black/60 backdrop-blur-sm overflow-y-auto"
-      role="dialog" aria-modal="true" aria-labelledby="close-ticket-title">
+    <Dialog className="fixed inset-0 z-[400] flex items-start justify-center p-3 sm:p-4 sm:pt-[8vh] bg-black/60 backdrop-blur-sm overflow-y-auto"
+      aria-labelledby="close-ticket-title">
       <div className="w-full max-w-xl rounded-2xl overflow-hidden shadow-2xl border-2 border-amber-400 dark:border-amber-500/70 bg-white dark:bg-neutral-900">
         <div className="flex items-start gap-3 px-4 sm:px-5 py-4 bg-amber-50 border-b border-amber-200 dark:bg-amber-500/10 dark:border-amber-500/30">
           <span aria-hidden className="h-9 w-9 shrink-0 rounded-full grid place-items-center bg-amber-400 text-amber-950 text-lg font-bold">!</span>
@@ -90,12 +91,12 @@ export default function CloseTicketDialog({ ticket, nextStatus = 'Ready', onCanc
             readOnly
             rows={10}
             value={message ?? 'Préparation du récapitulatif…'}
-            className="w-full rounded-xl border border-gray-200 dark:border-neutral-700 bg-gray-50 dark:bg-neutral-800 p-3 font-mono text-xs text-gray-800 dark:text-neutral-100 resize-none focus:outline-none"
+            className="w-full rounded-xl border border-gray-200 dark:border-neutral-700 bg-gray-50 dark:bg-neutral-800 p-3 font-mono text-xs text-gray-800 dark:text-neutral-100 resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-black/80 dark:focus-visible:ring-white/70"
           />
           <div className="flex flex-wrap items-center gap-3">
             <button onClick={copy} disabled={!message}
               className={`h-9 px-4 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${copied
-                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                ? 'bg-emerald-700 text-white hover:bg-emerald-800'
                 : 'bg-amber-500 text-amber-950 hover:bg-amber-400'}`}>
               {copied ? '✓ Copié' : 'Copier le récapitulatif'}
             </button>
@@ -120,6 +121,6 @@ export default function CloseTicketDialog({ ticket, nextStatus = 'Ready', onCanc
           </button>
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }

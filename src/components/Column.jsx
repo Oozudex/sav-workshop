@@ -28,15 +28,15 @@ export default function Column({ title, children, isActive = false, count = 0, s
           </span>
         </div>
         <span className="text-xs font-medium px-1.5 py-0.5 rounded-full
-                         bg-gray-100 text-gray-400
-                         dark:bg-neutral-800 dark:text-neutral-500">
+                         bg-gray-100 text-gray-500
+                         dark:bg-neutral-800 dark:text-neutral-400">
           {count}
         </span>
       </div>
 
       {/* Rappel RGPD sous la colonne des tickets clôturés (anonymisation : lib/cleanup.js) */}
       {status === 'Closed' && (
-        <p className="px-4 pt-2 text-[11px] leading-snug text-gray-400 dark:text-neutral-500">
+        <p className="px-4 pt-2 text-[11px] leading-snug text-gray-500 dark:text-neutral-400">
           Affichés 14 jours, puis les données du client sont effacées : le ticket ne sert plus qu'aux statistiques.
         </p>
       )}
@@ -53,7 +53,7 @@ function EmptyState() {
   return (
     <div className="rounded-xl border border-dashed py-8 text-center
                     border-gray-200 dark:border-neutral-700">
-      <p className="text-xs text-gray-400 dark:text-neutral-600">Aucun ticket</p>
+      <p className="text-xs text-gray-500 dark:text-neutral-400">Aucun ticket</p>
     </div>
   )
 }

@@ -15,9 +15,9 @@ function dueDateInfo(ymd) {
     const due = new Date(ymd)
     const diffDays = Math.ceil((due - Date.now()) / 86400000)
     const label = due.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
-    if (diffDays < 0)  return { label: `En retard · ${label}`, cls: 'text-red-500 dark:text-red-400', dot: 'bg-red-500' }
-    if (diffDays <= 2) return { label, cls: 'text-amber-500 dark:text-amber-400', dot: 'bg-amber-400' }
-    return { label, cls: 'text-gray-400 dark:text-neutral-500', dot: 'bg-gray-300 dark:bg-neutral-600' }
+    if (diffDays < 0)  return { label: `En retard · ${label}`, cls: 'text-red-600 dark:text-red-400', dot: 'bg-red-500' }
+    if (diffDays <= 2) return { label, cls: 'text-amber-700 dark:text-amber-400', dot: 'bg-amber-400' }
+    return { label, cls: 'text-gray-500 dark:text-neutral-400', dot: 'bg-gray-300 dark:bg-neutral-600' }
   } catch { return null }
 }
 
@@ -36,7 +36,7 @@ export function TicketCardBody({ ticket }) {
       <div className="p-3 pl-4">
         {/* Top row: ticket # + urgent badge */}
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs font-mono font-semibold text-gray-400 dark:text-neutral-500">
+          <span className="text-xs font-mono font-semibold text-gray-500 dark:text-neutral-400">
             #{ticket.ticketNumber || ticket.id.slice(0, 6)}
           </span>
           {urgent && (
@@ -67,7 +67,7 @@ export function TicketCardBody({ ticket }) {
 
         {/* Issue description */}
         {ticket.issueDescription && (
-          <p className="text-xs text-gray-400 dark:text-neutral-500 line-clamp-2 mt-2 leading-relaxed">
+          <p className="text-xs text-gray-500 dark:text-neutral-400 line-clamp-2 mt-2 leading-relaxed">
             {ticket.issueDescription}
           </p>
         )}
@@ -76,7 +76,7 @@ export function TicketCardBody({ ticket }) {
         {(ticket.createdByName || due) && (
           <div className="flex items-center justify-between gap-2 mt-3 pt-2 border-t border-gray-100 dark:border-neutral-700/50">
             {ticket.createdByName ? (
-              <span className="text-[11px] font-medium text-gray-400 dark:text-neutral-500 truncate">
+              <span className="text-[11px] font-medium text-gray-500 dark:text-neutral-400 truncate">
                 {ticket.createdByName}
               </span>
             ) : <span />}
@@ -108,6 +108,8 @@ export default function TicketCard({ ticket, onOpen, index }) {
           {...provided.draggableProps}
           {...provided.dragHandleProps}
           onClick={() => onOpen(ticket)}
+          // Entrée ouvre la fiche ; Espace reste réservé au déplacement au clavier
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onOpen(ticket) } }}
           className={`${CARD_CLASS} ${snapshot.isDragging ? 'shadow-xl rotate-1 scale-[1.02]' : 'shadow-sm'}`}
         >
           <TicketCardBody ticket={ticket} />

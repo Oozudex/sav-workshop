@@ -29,7 +29,7 @@ function PageLoader() {
     <div className="min-h-screen grid place-items-center bg-gray-50 dark:bg-neutral-950" role="status" aria-live="polite">
       <div className="flex flex-col items-center gap-3">
         <span className="h-6 w-6 rounded-full border-2 border-gray-300 border-t-gray-900 dark:border-neutral-700 dark:border-t-white animate-spin" />
-        <span className="text-xs text-gray-400 dark:text-neutral-500">Chargement…</span>
+        <span className="text-xs text-gray-500 dark:text-neutral-400">Chargement…</span>
       </div>
     </div>
   )

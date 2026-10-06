@@ -100,14 +100,14 @@ export default function StoreSettings() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
       <Navbar />
-      <main className="flex-1 p-4 sm:p-6">
+      <main id="contenu" tabIndex={-1} className="focus:outline-none flex-1 p-4 sm:p-6">
         <div className="max-w-7xl mx-auto space-y-4 sm:space-y-5">
 
           {/* En-tête */}
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
             <div>
               <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">{title}</h1>
-              <p className="text-xs sm:text-sm text-gray-400 dark:text-neutral-500 mt-0.5">{subtitle}</p>
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-neutral-400 mt-0.5">{subtitle}</p>
             </div>
             {isDirecteurGen && tab === 'magasins' && (
               <button onClick={() => setShowNewMagasin(true)} className={`${BTN_PRIMARY} h-9 sm:h-8`}>+ Nouveau magasin</button>
@@ -121,9 +121,9 @@ export default function StoreSettings() {
                 <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key)}
                   className={['h-9 px-3 sm:px-4 -mb-px border-b-2 text-xs font-semibold transition-colors whitespace-nowrap',
                     tab === key ? 'border-gray-900 text-gray-900 dark:border-white dark:text-white'
-                      : 'border-transparent text-gray-400 hover:text-gray-700 dark:text-neutral-500 dark:hover:text-neutral-300'].join(' ')}>
+                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-neutral-400 dark:hover:text-neutral-300'].join(' ')}>
                   {label}
-                  {n != null && <span className="ml-1.5 font-medium text-gray-400 dark:text-neutral-500">{n}</span>}
+                  {n != null && <span className="ml-1.5 font-medium text-gray-500 dark:text-neutral-400">{n}</span>}
                 </button>
               ))}
             </div>
@@ -165,7 +165,7 @@ export default function StoreSettings() {
                             <span className="min-w-0">
                               <span className="block text-sm font-medium truncate">{m.nom}</span>
                               {isDirecteurGen && (
-                                <span className={`block text-[11px] truncate ${active ? 'opacity-70' : dir ? 'text-gray-400 dark:text-neutral-500' : 'text-amber-600 dark:text-amber-400'}`}>
+                                <span className={`block text-[11px] truncate ${active ? 'opacity-70' : dir ? 'text-gray-500 dark:text-neutral-400' : 'text-amber-700 dark:text-amber-400'}`}>
                                   {dir || 'Aucun directeur'}
                                 </span>
                               )}
@@ -191,7 +191,7 @@ export default function StoreSettings() {
           )}
 
           {isGlobal && !isDirecteurGen && (
-            <p className="text-[11px] text-gray-400 dark:text-neutral-500"><Tag>Acheteur</Tag> Vous gérez les rayons et les équipes ; les comptes de direction sont gérés par l’administration.</p>
+            <p className="text-[11px] text-gray-500 dark:text-neutral-400"><Tag>Acheteur</Tag> Vous gérez les rayons et les équipes ; les comptes de direction sont gérés par l’administration.</p>
           )}
         </div>
       </main>

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { enrichIlvSources } from '../lib/ilvSources'
 import { ILV_TYPES, opIlvBatch } from '../lib/ilv'
 import { nomAffiche } from '../lib/opImport'
+import Dialog from './Dialog'
 
 // Raison affichée pour un produit sans ILV
 function raison(reason) {
@@ -56,26 +57,26 @@ export default function IlvBatchDialog({ sources, nom, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[450] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="ilv-batch-title">
+    <Dialog className="fixed inset-0 z-[450] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" aria-labelledby="ilv-batch-title">
       <div className="w-full max-w-md rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl flex flex-col max-h-[85vh]">
         <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-100 dark:border-neutral-800">
           <div className="min-w-0">
             <p id="ilv-batch-title" className="text-sm font-semibold text-gray-900 dark:text-white">Télécharger toutes les ILV</p>
-            <p className="text-[11px] text-gray-400 dark:text-neutral-500 mt-0.5 truncate">{nom} · un seul PDF, une ILV par page</p>
+            <p className="text-[11px] text-gray-500 dark:text-neutral-400 mt-0.5 truncate">{nom} · un seul PDF, une ILV par page</p>
           </div>
           <button type="button" onClick={onClose} disabled={busy} aria-label="Fermer"
-            className="h-8 w-8 -mr-1 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800 shrink-0">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            className="h-8 w-8 -mr-1 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800 shrink-0">
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          {loadError && <p className="text-sm text-red-600 dark:text-red-400">{loadError}</p>}
-          {!batch && !loadError && <p className="text-sm text-gray-400 dark:text-neutral-500">Chargement des produits…</p>}
+          {loadError && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{loadError}</p>}
+          {!batch && !loadError && <p className="text-sm text-gray-500 dark:text-neutral-400">Chargement des produits…</p>}
           {batch && (
             <>
               <div className="space-y-1.5">
-                <p className="text-[11px] font-semibold text-gray-400 dark:text-neutral-500 uppercase tracking-wide">Pack inclus dans le prix</p>
+                <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Pack inclus dans le prix</p>
                 <div className="flex gap-2">
                   {[1, 2].map(d => (
                     <button key={d} type="button" onClick={() => setDuree(d)} className={choice(duree === d)}>{d === 1 ? '1 an' : '2 ans'}</button>
@@ -103,13 +104,13 @@ export default function IlvBatchDialog({ sources, nom, onClose }) {
                     {batch.skipped.map(({ item, reason }) => (
                       <li key={item.key}>
                         <span className="font-medium">{nomAffiche(item)}</span>
-                        {item.couleur ? ` · ${item.couleur}` : ''} — <span className="text-gray-400 dark:text-neutral-500">{raison(reason)}</span>
+                        {item.couleur ? ` · ${item.couleur}` : ''} — <span className="text-gray-500 dark:text-neutral-400">{raison(reason)}</span>
                       </li>
                     ))}
                   </ul>
                 </div>
               )}
-              {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+              {error && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>}
             </>
           )}
         </div>
@@ -125,6 +126,6 @@ export default function IlvBatchDialog({ sources, nom, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }

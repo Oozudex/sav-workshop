@@ -8,6 +8,9 @@ import { CATALOGUE_SEGMENTS, catalogueData, catalogueFormErrors, catalogueFormVa
 import { BIKE_FAMILLES } from '../lib/constants'
 import { packPourFamille } from '../lib/stockImport'
 import BikeBrandSelect from './BikeBrandSelect'
+import Dialog from './Dialog'
+import RequiredHint from './RequiredHint'
+import { markInvalid } from './markInvalid'
 
 const euro = v => `${String(v).replace('.', ',')} €`
 
@@ -15,8 +18,8 @@ function Field({ label, error, children, className = '' }) {
   return (
     <label className={`block space-y-1 ${className}`}>
       <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400">{label}</span>
-      {children}
-      {error && <span className="block text-[11px] text-red-500">{error}</span>}
+      {markInvalid(children, !!error)}
+      {error && <span className="block text-[11px] text-red-600">{error}</span>}
     </label>
   )
 }
@@ -33,7 +36,7 @@ function PriceInput({ value, onChange, invalid, ...props }) {
   return (
     <div className="relative">
       <TextInput value={value} onChange={onChange} invalid={invalid} inputMode="decimal" className="pr-8" {...props} />
-      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">€</span>
+      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500 dark:text-neutral-400 pointer-events-none">€</span>
     </div>
   )
 }
@@ -43,7 +46,7 @@ function Section({ title, hint, children }) {
     <section className="space-y-3">
       <div>
         <h3 className="text-xs font-bold text-gray-900 dark:text-white">{title}</h3>
-        {hint && <p className="text-[11px] text-gray-400 dark:text-neutral-500">{hint}</p>}
+        {hint && <p className="text-[11px] text-gray-500 dark:text-neutral-400">{hint}</p>}
       </div>
       {children}
     </section>
@@ -170,20 +173,21 @@ export default function CatalogueProductModal({ produit, produits, start, onClos
   const input = k => ({ value: form[k], onChange: v => set(k, v), invalid: !!shown[k] })
 
   return (
-    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="produit-title">
+    <Dialog className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" aria-labelledby="produit-title">
       <form onSubmit={handleSave} noValidate
         className="w-full max-w-xl max-h-[92vh] flex flex-col rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl overflow-hidden">
+        <RequiredHint />
         <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-100 dark:border-neutral-800 shrink-0">
           <div>
             <h2 id="produit-title" className="text-sm font-semibold text-gray-900 dark:text-white">{edit ? 'Modifier le produit' : 'Ajouter un produit'}</h2>
-            <p className="text-[11px] text-gray-400 dark:text-neutral-500">
+            <p className="text-[11px] text-gray-500 dark:text-neutral-400">
               {edit ? `${produit.nom} · ${produit.chrono || 'sans chrono'}`
                 : produit?.chrono ? 'Ce vélo n’est pas encore dans la base de données : l’enregistrer l’y ajoute.'
                 : 'Nouveau vélo dans la base de données'}
             </p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Fermer" className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          <button type="button" onClick={onClose} aria-label="Fermer" className="h-8 w-8 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
@@ -242,7 +246,7 @@ export default function CatalogueProductModal({ produit, produits, start, onClos
                   )
                 })}
               </div>
-              {shown.pack && <span className="block text-[11px] text-red-500">{shown.pack}</span>}
+              {shown.pack && <span className="block text-[11px] text-red-600">{shown.pack}</span>}
             </div>}
           </Section>
 
@@ -275,7 +279,7 @@ export default function CatalogueProductModal({ produit, produits, start, onClos
           ) : <span />}
           <div className="flex items-center gap-2">
             {(error || (submitted && Object.keys(errors).length > 0)) && (
-              <span className="text-[11px] text-red-500">{error || 'Complète les champs en rouge.'}</span>
+              <span className="text-[11px] text-red-600">{error || 'Complète les champs en rouge.'}</span>
             )}
             <button type="button" onClick={onClose} className="h-9 px-4 rounded-lg text-xs border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800">Annuler</button>
             <button type="submit" disabled={saving || !bonPlanLoaded}
@@ -285,6 +289,6 @@ export default function CatalogueProductModal({ produit, produits, start, onClos
           </div>
         </div>
       </form>
-    </div>
+    </Dialog>
   )
 }

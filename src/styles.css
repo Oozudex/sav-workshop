@@ -23,6 +23,36 @@ body {
     @apply w-full rounded-xl px-3 py-2 border bg-white text-gray-900 border-gray-300 focus:outline-none focus:ring-2 focus:ring-black/80 focus:border-black/80 dark:bg-neutral-900 dark:text-neutral-100 dark:border-neutral-700 dark:focus:ring-white/70 dark:focus:border-white/70;
 }
 
+/* Textes d'exemple des champs lisibles (contraste 4,5:1, RGAA 3.2) */
+input::placeholder,
+textarea::placeholder {
+    color: #6b7280;
+    opacity: 1;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+    color: #a3a3a3;
+}
+
+/* Lien d'évitement : caché jusqu'à ce qu'il reçoive le focus (RGAA 12.7) */
+.lien-evitement {
+    position: absolute;
+    left: 0.5rem;
+    top: -4rem;
+    z-index: 1000;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    background: #111827;
+    color: #fff;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.lien-evitement:focus {
+    top: 0.5rem;
+}
+
 /* Scrollbars fines */
 *::-webkit-scrollbar {
     height: 8px;

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import Portal from '../Portal'
 import { confetti } from '../../lib/celebrate'
+import Dialog from '../Dialog'
 
 const EMOJIS = ['🐯', '🐅', '🔥', '💪', '🏆', '⭐', '🎉', '🐯']
 
@@ -28,7 +29,7 @@ export default function TigerScreen({ onClose }) {
 
   return (
     <Portal>
-      <div onClick={onClose} role="dialog" aria-modal="true" aria-label="Toute la liste est faite"
+      <Dialog onClick={onClose} aria-label="Toute la liste est faite"
         className="fixed inset-0 z-[999] flex flex-col items-center justify-center cursor-pointer overflow-hidden"
         style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #ea580c 45%, #b91c1c 100%)' }}>
         {/* Rayures de tigre qui défilent */}
@@ -69,7 +70,7 @@ export default function TigerScreen({ onClose }) {
             .tigre-monte, .tigre-titre, .tigre-pop, .tigre-rayures { animation: none; }
           }
         `}</style>
-      </div>
+      </Dialog>
     </Portal>
   )
 }
