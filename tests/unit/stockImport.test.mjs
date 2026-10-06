@@ -109,8 +109,9 @@ describe('export Excel', () => {
     assert.equal(table.find(r => r[0] === '0-1')[10], 179.99)
   })
   it("se réimporte à l'identique", () => {
-    const again = parseStockSheet(table).produits.map(({ stock: _s, pack: _p, ...p }) => p)
-    assert.deepEqual(again, produits.map(({ stock: _s, pack: _p, ...p }) => p))
+    // Le stock et le pack ne sont pas dans l'export
+    const sansStockNiPack = p => { const q = { ...p }; delete q.stock; delete q.pack; return q }
+    assert.deepEqual(parseStockSheet(table).produits.map(sansStockNiPack), produits.map(sansStockNiPack))
   })
 })
 
