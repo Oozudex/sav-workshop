@@ -206,3 +206,15 @@ export function opIlvBatch(items, { duree = 1 } = {}) {
   }
   return { ilvs, skipped }
 }
+
+/**
+ * ILV d'un produit selon les choix faits dans la fenêtre ILV : modèle, pack 1 ou 2 ans, Oney (ILV normale
+ * uniquement), pack choisi à la main quand la base n'en a pas. Même calcul pour l'aperçu, le téléchargement
+ * et l'historique d'impression. Renvoie { error } si le modèle n'est plus possible (OP terminée, bon plan retiré…).
+ */
+export function ilvChoisie(item, { type, duree = 1, oney = null, packChoisi = null }) {
+  if (!ilvTypesFor(item).includes(type)) return { error: 'Ce modèle d’ILV n’est plus possible pour ce produit.' }
+  const noPack = sansPack(item.segment, item.famille)
+  return buildIlv({ ...item, type, pack: noPack ? null : item.pack || packChoisi || null },
+    { duree, oney: type === 'normal' ? oney : null })
+}

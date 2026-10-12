@@ -271,6 +271,18 @@ service cloud.firestore {
       allow delete: if isSignedIn() && canTodo(resource.data);
     }
 
+    /* ── Historique d'impression des ILV (par compte) ───────────────────── */
+    // Chaque compte ne voit que ses envois ; seule la date d'impression peut changer ensuite.
+    match /ilv_impressions/{impressionId} {
+      allow read:   if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid &&
+        request.resource.data.imprimeAt == null &&
+        request.resource.data.keys().hasOnly(['uid', 'magasinId', 'source', 'type', 'duree', 'oney', 'packChoisi', 'envoyeAt', 'imprimeAt']);
+      allow update: if isSignedIn() && resource.data.uid == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['imprimeAt']);
+      allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+
     /* ── Calendrier ─────────────────────────────────────────────────────── */
     match /calendar_events/{eventId} {
       allow read: if isSignedIn() && (

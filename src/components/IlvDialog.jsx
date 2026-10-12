@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
+import { db } from '../lib/firebase'
+import { useAuth } from '../store/useAuth'
+import { useShallow } from 'zustand/react/shallow'
 import { enrichIlvSources } from '../lib/ilvSources'
-import { ILV_TYPES, PACKS, buildIlv, ilvTypesFor, oneyAllowed, packPrice, sansPack } from '../lib/ilv'
+import { ILV_TYPES, PACKS, ilvChoisie, ilvTypesFor, oneyAllowed, packPrice, sansPack } from '../lib/ilv'
+import { IMPRESSION_COLLECTION, impressionData } from '../lib/ilvImpressions'
 import { nomAffiche } from '../lib/opImport'
 import Dialog from './Dialog'
 
@@ -16,7 +21,8 @@ const choice = active => ['h-8 px-3 rounded-lg text-xs font-semibold border tran
 ].join(' ')
 
 /**
- * Téléchargement d'une ILV prête à imprimer (PDF A4 paysage).
+ * Téléchargement d'une ILV prête à imprimer (PDF A4 paysage), ou envoi dans l'historique d'impression
+ * du compte pour l'imprimer plus tard depuis un ordinateur.
  * sources : déclinaisons proposées ; initialKey : celle choisie au départ ;
  * preferredType : modèle proposé par défaut selon l'endroit d'où l'on vient.
  */
@@ -31,7 +37,9 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
   const [pdf, setPdf] = useState(null) // { url, name, bytes }
   const [rendering, setRendering] = useState(false)
   const [previewError, setPreviewError] = useState(false)
+  const [envoi, setEnvoi] = useState(null) // null | 'envoi' | { ok: nombre envoyé } | { error }
   const canvasRef = useRef(null)
+  const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
 
   useEffect(() => {
     enrichIlvSources(sources).then(setItems).catch(() => setLoadError('Impossible de charger les données du produit.'))
@@ -51,10 +59,9 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
   const packAjoute = noPack ? 0 : product?.pack ? packPrice(product.pack, duree) : null
   const total = product?.prixFort != null && packAjoute != null
     ? Math.round((product.prixFort + packAjoute) * 100) / 100 : null
-  const ilv = useMemo(() => product && current
-    ? buildIlv(product, { duree, oney: current === 'normal' ? oney : null }) : null,
+  const ilv = useMemo(() => item && current ? ilvChoisie(item, { type: current, duree, oney, packChoisi }) : null,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [JSON.stringify(product), current, duree, oney])
+  [JSON.stringify(item), current, duree, oney, packChoisi])
 
   // Aperçu : le PDF est régénéré à chaque changement d'option
   useEffect(() => {
@@ -85,6 +92,22 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
     return () => { cancelled = true }
   }, [pdf])
 
+  // Historique d'impression : les choix faits ici sont gardés, l'ILV sera imprimée depuis l'onglet « À imprimer »
+  async function sendToPrint() {
+    if (!ilv || ilv.error || !user) return
+    setEnvoi('envoi')
+    try {
+      const source = sources.find(s => s.key === item.key) || item
+      await addDoc(collection(db, IMPRESSION_COLLECTION), {
+        ...impressionData({ uid: user.uid, magasinId: profile?.magasinId, source, choix: { type: current, duree, oney, packChoisi } }),
+        envoyeAt: serverTimestamp(),
+      })
+      setEnvoi(e => ({ ok: (e?.ok || 0) + 1 }))
+    } catch {
+      setEnvoi({ error: 'L’envoi à l’impression a échoué. Réessaie.' })
+    }
+  }
+
   function download() {
     if (!pdf?.url) return
     const a = document.createElement('a')
@@ -100,7 +123,7 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
       <div className="w-full max-w-5xl max-h-[92vh] rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800 shrink-0">
           <span id="ilv-title" className="text-sm font-semibold text-gray-900 dark:text-white">
-            Télécharger l’ILV{item ? ` · ${nomAffiche(item)}` : ''}
+            ILV{item ? ` · ${nomAffiche(item)}` : ''}
           </span>
           <button onClick={onClose} aria-label="Fermer" className="h-8 w-8 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800">
             <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
@@ -170,6 +193,10 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
                 )}
 
                 {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
+                <p role="status" className="text-xs empty:hidden">
+                  {envoi?.ok ? <span className="font-semibold text-emerald-700 dark:text-emerald-400">✓ Ajoutée à « À imprimer »{envoi.ok > 1 ? ` (${envoi.ok} envois)` : ''}. Imprime-la depuis ton ordinateur, onglet « À imprimer » des OP.</span>
+                    : envoi?.error ? <span className="text-red-600 dark:text-red-400">{envoi.error}</span> : ''}
+                </p>
               </div>
 
               <div className="rounded-xl border border-gray-200 dark:border-neutral-700 bg-gray-100 dark:bg-neutral-800 overflow-hidden aspect-[297/210] relative">
@@ -188,11 +215,15 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
           )}
         </div>
 
-        <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-gray-100 dark:border-neutral-800 shrink-0">
+        <div className="flex flex-wrap justify-end gap-2 px-5 py-3.5 border-t border-gray-100 dark:border-neutral-800 shrink-0">
           <button onClick={onClose} className="h-9 px-4 rounded-lg text-xs border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800">Fermer</button>
           <button onClick={download} disabled={!pdf?.url || !!error || rendering}
-            className="h-9 px-4 rounded-lg text-xs font-semibold disabled:opacity-50 bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
+            className="h-9 px-4 rounded-lg text-xs font-semibold disabled:opacity-50 border border-gray-300 text-gray-800 hover:bg-gray-50 dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800">
             Télécharger le PDF
+          </button>
+          <button onClick={sendToPrint} disabled={!ilv || !!ilv.error || !!loadError || envoi === 'envoi'}
+            className="h-9 px-4 rounded-lg text-xs font-semibold disabled:opacity-50 bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100">
+            {envoi === 'envoi' ? 'Envoi…' : '🖨️ Envoyer à l’impression'}
           </button>
         </div>
       </div>

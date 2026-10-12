@@ -5,7 +5,8 @@
 //   et le rayon en choisit un autre dès sa première connexion (users/{uid}.motDePasseTemporaire).
 // La coupure est immédiate grâce aux règles Firestore (users/{uid}.sessionsRevokedAt) ; la révocation
 // des jetons empêche en plus de rouvrir une session sans se reconnecter.
-import { initializeApp } from 'firebase-admin/app'
+// - lireEtiquette : recherche des OP par photo, le texte de l'étiquette est lu par Cloud Vision.
+import { applicationDefault, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { setGlobalOptions } from 'firebase-functions/v2'
@@ -47,6 +48,15 @@ export const deconnexionNocturne = onSchedule(
       await batch.commit()
     }
     logger.info(`Déconnexion nocturne : ${total} comptes, ${users.size} profils`)
+
+    // Compteurs de lectures d'étiquettes des mois passés
+    const mois = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Paris' }).slice(0, 7)
+    const anciens = await db.collection('lectures_etiquettes').where('mois', '<', mois).get()
+    for (let i = 0; i < anciens.docs.length; i += 400) {
+      const batch = db.batch()
+      anciens.docs.slice(i, i + 400).forEach(d => batch.delete(d.ref))
+      await batch.commit()
+    }
   },
 )
 
@@ -86,4 +96,51 @@ export const retirerCollaborateur = onCall(async request => {
   }
   logger.info('Collaborateur retiré', { magasinId, rayonId, par: uid, motDePasseChange: !!compte })
   return { rayon: rayon.get('nom') || null, compte }
+})
+
+/* ── Recherche par photo : lecture du texte d'une étiquette (Cloud Vision, serveur européen) ── */
+// Une seule fonction Cloud Vision est demandée (TEXT_DETECTION) : une photo = une unité facturable,
+// les 1 000 premières du mois sont gratuites. La photo n'est ni stockée ni journalisée.
+// Lectures plafonnées par compte et par mois (coût maîtrisé) : le plafond est vérifié avant tout appel.
+// En émulateur, Cloud Vision n'est pas joignable : la lecture est simulée avec une étiquette d'exemple.
+const LECTURES_PAR_MOIS = 100
+const ETIQUETTE_SIMULEE = 'INTERSPORT\nCROSSOVER XV\nNAKAMURA THULIUM\nYH60WY\n0-254888/662331/60608\n2 000016 742299\nVTC HOMME'
+
+export const lireEtiquette = onCall({ memory: '256MiB', timeoutSeconds: 30 }, async request => {
+  const uid = request.auth?.uid
+  if (!uid) throw new HttpsError('unauthenticated', 'Connexion requise.')
+  const image = request.data?.image
+  if (typeof image !== 'string' || !image || image.length > 3_000_000) {
+    throw new HttpsError('invalid-argument', 'Photo illisible ou trop lourde.')
+  }
+
+  const mois = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Paris' }).slice(0, 7) // AAAA-MM
+  const quota = db.doc(`lectures_etiquettes/${uid}_${mois}`)
+  const n = await db.runTransaction(async tx => {
+    const count = ((await tx.get(quota)).data()?.n || 0) + 1
+    if (count <= LECTURES_PAR_MOIS) tx.set(quota, { uid, mois, n: count })
+    return count
+  })
+  if (n > LECTURES_PAR_MOIS) {
+    throw new HttpsError('resource-exhausted', `Limite de ${LECTURES_PAR_MOIS} photos par mois atteinte pour ce compte. Tape le chrono à la main.`)
+  }
+
+  if (process.env.FUNCTIONS_EMULATOR === 'true') return { texte: ETIQUETTE_SIMULEE }
+
+  const { access_token: token } = await applicationDefault().getAccessToken()
+  const res = await fetch('https://eu-vision.googleapis.com/v1/images:annotate', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests: [{ image: { content: image }, features: [{ type: 'TEXT_DETECTION' }] }] }),
+  })
+  if (!res.ok) {
+    logger.error(`Cloud Vision : erreur ${res.status}`, (await res.text()).slice(0, 500))
+    throw new HttpsError('unavailable', 'La lecture de la photo a échoué. Réessaie.')
+  }
+  const reponse = (await res.json()).responses?.[0] || {}
+  if (reponse.error) {
+    logger.error('Cloud Vision', reponse.error)
+    throw new HttpsError('unavailable', 'La lecture de la photo a échoué. Réessaie.')
+  }
+  return { texte: reponse.fullTextAnnotation?.text || '' }
 })

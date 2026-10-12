@@ -345,6 +345,25 @@ describe('opérations commerciales', () => {
   })
 })
 
+describe("historique d'impression des ILV", () => {
+  const envoi = uid => ({ uid, magasinId: 'A', source: { chrono: '0-1', nom: 'X' }, type: 'normal', duree: 1, oney: null, packChoisi: null, envoyeAt: serverTimestamp(), imprimeAt: null })
+  it("chaque compte crée, lit, marque et supprime seulement ses propres envois", async () => {
+    await assertSucceeds(setDoc(doc(as('veloA'), 'ilv_impressions', 'i1'), envoi('veloA')))
+    await assertFails(setDoc(doc(as('veloA'), 'ilv_impressions', 'i2'), envoi('chaussureA')))
+    await assertSucceeds(getDocs(query(collection(as('veloA'), 'ilv_impressions'), where('uid', '==', 'veloA'))))
+    await assertFails(getDocs(query(collection(as('chaussureA'), 'ilv_impressions'), where('uid', '==', 'veloA'))))
+    await assertFails(getDoc(doc(as('dirmagA'), 'ilv_impressions', 'i1')))
+    await assertSucceeds(updateDoc(doc(as('veloA'), 'ilv_impressions', 'i1'), { imprimeAt: serverTimestamp() }))
+    await assertFails(updateDoc(doc(as('veloA'), 'ilv_impressions', 'i1'), { type: 'promo' }))
+    await assertFails(deleteDoc(doc(as('chaussureA'), 'ilv_impressions', 'i1')))
+    await assertSucceeds(deleteDoc(doc(as('veloA'), 'ilv_impressions', 'i1')))
+  })
+  it("pas de champ inconnu ni d'envoi déjà marqué imprimé", async () => {
+    await assertFails(setDoc(doc(as('veloA'), 'ilv_impressions', 'i3'), { ...envoi('veloA'), uid2: 'x' }))
+    await assertFails(setDoc(doc(as('veloA'), 'ilv_impressions', 'i4'), { ...envoi('veloA'), imprimeAt: serverTimestamp() }))
+  })
+})
+
 describe('collections supprimées', () => {
   it("purchase_requests et notifications ne sont plus accessibles", async () => {
     await assertFails(getDocs(collection(as('veloA'), 'notifications')))

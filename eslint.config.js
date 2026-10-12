@@ -32,7 +32,7 @@ export default [
 
   // Scripts Node, tests et fichiers de configuration
   {
-    files: ['scripts/**/*.{js,mjs}', 'tests/**/*.mjs', '*.config.js'],
+    files: ['scripts/**/*.{js,mjs}', 'tests/**/*.mjs', '*.config.js', 'functions/**/*.js'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',

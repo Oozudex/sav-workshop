@@ -3,7 +3,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import { useAuth } from '../store/useAuth'
 import { useShallow } from 'zustand/react/shallow'
-import { db } from '../lib/firebase'
+import { db, functions } from '../lib/firebase'
+import { httpsCallable } from 'firebase/functions'
+import { termeEtiquette } from '../lib/etiquette'
+import { photoEnBase64 } from '../lib/photo'
 import {
   collection, onSnapshot, query, orderBy, where,
   addDoc, updateDoc, doc, serverTimestamp,
@@ -11,6 +14,7 @@ import {
 } from 'firebase/firestore'
 import { GLOBAL_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
 import IlvDialog from '../components/IlvDialog'
+import ImpressionsPanel, { useImpressions } from '../components/ImpressionsPanel'
 import { familleSansPack, sansPack } from '../lib/ilv'
 import CatalogueProductModal from '../components/CatalogueProductModal'
 import ActionsMenu from '../components/ActionsMenu'
@@ -1294,12 +1298,35 @@ function OpPromoLine({ s, allCouleurs, onOpenOp, onIlv }) {
  * Réponse à « ce vélo est-il en remise, ou va-t-il l'être ? » : une carte par produit avec
  * ses OP en cours et à venir et son prix bon plan (carte fidélité).
  */
-function PromoResults({ results, term, loading, error, onOpenOp, onIlv }) {
+function PromoResults({ results, term, catalogueMatches = [], loading, error, onOpenOp, onIlv }) {
   const MAX = 30
   if (error) {
     return (
       <div className="rounded-2xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 py-6 text-center text-sm text-red-700 dark:text-red-400">
         La recherche est indisponible pour le moment. Vérifie la connexion et recharge la page.
+      </div>
+    )
+  }
+  // Vélo de la base sans aucune remise (trouvé par son chrono, souvent via la photo) : ILV normale
+  if (!results.length && !loading && catalogueMatches.length) {
+    return (
+      <div className="space-y-3">
+        {catalogueMatches.map(c => (
+          <div key={c.id} className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white"><NomVelo v={c} /></p>
+                <p className="text-[11px] text-gray-500 dark:text-neutral-400">{[c.marque, c.couleur, c.reference, c.chrono].filter(Boolean).join(' · ')}</p>
+              </div>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">Pas de remise</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 dark:bg-neutral-800/60 px-3 py-2">
+              <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">{c.prixFort != null ? formatEuro(c.prixFort) : 'Prix fort non renseigné'}</span>
+              <IlvButton title="ILV de ce vélo" disabled={c.prixFort == null}
+                onClick={() => onIlv({ sources: [catalogueSource(c)], initialKey: c.id, preferredType: 'normal' })} />
+            </div>
+          </div>
+        ))}
       </div>
     )
   }
@@ -1400,6 +1427,9 @@ export default function Operations() {
   const setSection = key => setParams(key === 'en_cours' ? {} : { onglet: key }, { replace: true })
   const [search, setSearch] = useState('')
   const searchRef = useRef(null)
+  // Historique d'impression du compte (onglet « À imprimer »)
+  const impressions = useImpressions(user?.uid)
+  const aImprimer = (impressions || []).filter(i => !i.imprimeAt).length
 
   useEffect(() => {
     const q = query(collection(db, 'op_commerciales'), orderBy('dateDebut', 'desc'))
@@ -1433,7 +1463,7 @@ export default function Operations() {
   useEffect(() => {
     if (!searchUsed) return
     getDocs(collection(db, 'catalogue_produits'))
-      .then(snap => setCatalogueList(snap.docs.map(d => ({ chrono: d.get('chrono'), prixFort: d.get('prixFort') }))))
+      .then(snap => setCatalogueList(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
       .catch(() => setBonPlanError(true))
   }, [searchUsed])
 
@@ -1442,6 +1472,43 @@ export default function Operations() {
     [visibleOps, opProduits.produits, bonPlanList, engageList, catalogueList, bonPlansLoaded],
   )
   const searchResults = useMemo(() => searchPromos(promoIndex, search), [promoIndex, search])
+  // Vélos de la base au chrono ou à la référence recherchés : affichés même sans remise (ILV normale)
+  const catalogueMatches = useMemo(() => {
+    const terme = cleanRef(search)
+    return terme ? catalogueList.filter(c => cleanRef(c.chrono) === terme || cleanRef(c.reference) === terme) : []
+  }, [catalogueList, search])
+
+  // Recherche par photo : le chrono (ou la réf.) est lu sur l'étiquette et devient la recherche
+  const photoRef = useRef(null)
+  const [photo, setPhoto] = useState(null) // null | 'lecture' | { error }
+  async function rechercheParPhoto(file) {
+    if (!file) return
+    setPhoto('lecture')
+    try {
+      const image = await photoEnBase64(file)
+      const { data } = await httpsCallable(functions, 'lireEtiquette')({ image })
+      let catalogue = catalogueList
+      if (!catalogue.length) {
+        catalogue = (await getDocs(collection(db, 'catalogue_produits'))).docs.map(d => ({ id: d.id, ...d.data() }))
+        setCatalogueList(catalogue)
+      }
+      const connus = new Set([
+        ...catalogue.flatMap(c => [c.chrono, c.reference]),
+        ...promoIndex.flatMap(g => [...g.chronos, ...g.refs, ...g.references]),
+      ].filter(Boolean).map(cleanRef))
+      const terme = termeEtiquette(data?.texte, t => connus.has(t))
+      if (!terme) {
+        setPhoto({ error: 'Aucun chrono lu sur la photo. Reprends l’étiquette de plus près, bien à plat, ou tape le chrono.' })
+        return
+      }
+      setSearch(terme)
+      setPhoto(null)
+    } catch (e) {
+      setPhoto({ error: e?.code === 'functions/resource-exhausted' ? e.message : 'La lecture de la photo a échoué. Vérifie la connexion et réessaie.' })
+    } finally {
+      if (photoRef.current) photoRef.current.value = ''
+    }
+  }
 
   async function handleSave(form) {
     const data = opFormData(form)
@@ -1477,8 +1544,9 @@ export default function Operations() {
     { key: 'engages', label: 'Prix engagés', dot: 'bg-blue-800 dark:bg-blue-400' },
   ]
   const vuePrix = section === 'catalogue' // Liste des vélos (ILV)
+  const vueImpression = section === 'imprimer' // À imprimer (historique d'impression)
   const vueListeOp = ['en_cours', 'a_venir', 'terminee'].includes(section)
-  const tabs = vuePrix ? [] : OP_TABS
+  const tabs = vuePrix || vueImpression ? [] : OP_TABS
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
@@ -1491,11 +1559,14 @@ export default function Operations() {
           {/* Choix du bloc : opérations ou listes de prix */}
           <div className="flex items-center justify-between gap-3">
             <div className="inline-flex p-1 rounded-xl bg-gray-200/70 dark:bg-neutral-800" role="tablist" aria-label="Affichage">
-              {[['en_cours', 'Opérations', !vuePrix], ['catalogue', 'Liste des vélos (ILV)', vuePrix]].map(([key, label, active]) => (
+              {[['en_cours', 'Opérations', !vuePrix && !vueImpression], ['catalogue', 'Liste des vélos (ILV)', vuePrix],
+                ['imprimer', 'À imprimer', vueImpression, aImprimer]].map(([key, label, active, count]) => (
                 <button key={key} role="tab" aria-selected={active} onClick={() => { setSection(key); setSearch('') }}
-                  className={['h-8 px-3 sm:px-4 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap',
-                    active ? 'bg-white text-gray-900 shadow-sm dark:bg-neutral-950 dark:text-white' : 'text-gray-500 hover:text-gray-800 dark:text-neutral-400 dark:hover:text-neutral-200'].join(' ')}>
+                  className={['h-8 px-3 sm:px-4 inline-flex items-center gap-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap',
+                    active ? 'bg-white text-gray-900 shadow-sm dark:bg-neutral-950 dark:text-white' : 'text-gray-600 hover:text-gray-800 dark:text-neutral-400 dark:hover:text-neutral-200'].join(' ')}>
                   {label}
+                  {count > 0 && <span className="min-w-[18px] h-[18px] px-1 grid place-items-center rounded-full text-[10px] font-bold bg-red-600 text-white"
+                    aria-label={`${count} à imprimer`}>{count}</span>}
                 </button>
               ))}
             </div>
@@ -1565,19 +1636,36 @@ export default function Operations() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               aria-label="Rechercher une remise" placeholder="Un vélo est-il en remise ? Nom, réf. fournisseur, chrono, couleur…"
-              className="w-full h-9 pl-9 pr-4 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-neutral-500 outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-white/10"
+              className="w-full h-9 pl-9 pr-24 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-neutral-500 outline-none focus:ring-2 focus:ring-gray-900/10 dark:focus:ring-white/10"
             />
-            {search && (
-              <button aria-label="Fermer" onClick={() => setSearch('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 h-5 w-5 grid place-items-center rounded text-gray-500 hover:text-gray-600 dark:text-neutral-400 dark:hover:text-neutral-300">
-                <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              {search && (
+                <button aria-label="Effacer la recherche" onClick={() => setSearch('')}
+                  className="h-6 w-6 grid place-items-center rounded text-gray-500 hover:text-gray-600 dark:text-neutral-400 dark:hover:text-neutral-300">
+                  <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              )}
+              {/* Photo de l'étiquette : l'appareil photo s'ouvre sur téléphone, le choix d'une image sur ordinateur */}
+              <button type="button" onClick={() => photoRef.current?.click()} disabled={photo === 'lecture'}
+                aria-label="Rechercher par photo de l’étiquette" title="Rechercher par photo de l’étiquette"
+                className="h-7 px-2 inline-flex items-center gap-1 rounded-lg text-[11px] font-semibold bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-60 dark:bg-white dark:text-black dark:hover:bg-gray-100">
+                <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8.5A2.5 2.5 0 015.5 6h1.6l1.2-1.8A1.5 1.5 0 019.55 3.5h4.9a1.5 1.5 0 011.25.7L16.9 6h1.6A2.5 2.5 0 0121 8.5v9a2.5 2.5 0 01-2.5 2.5h-13A2.5 2.5 0 013 17.5v-9z" /><circle cx="12" cy="13" r="3.5" /></svg>
+                {photo === 'lecture' ? 'Lecture…' : 'Photo'}
               </button>
-            )}
+              <input ref={photoRef} type="file" accept="image/*" capture="environment" className="hidden" tabIndex={-1} aria-hidden="true"
+                onChange={e => rechercheParPhoto(e.target.files?.[0])} />
+            </div>
           </div>}
+          {vueListeOp && (
+            <p role="status" className="-mt-4 text-xs empty:hidden">
+              {photo === 'lecture' ? <span className="text-gray-600 dark:text-neutral-300">Lecture de l’étiquette…</span>
+                : photo?.error ? <span className="text-red-600 dark:text-red-400">{photo.error}</span> : ''}
+            </p>
+          )}
 
           {/* Résultats de recherche */}
           {vueListeOp && search.trim() && (
-            <PromoResults results={searchResults} term={search.trim()}
+            <PromoResults results={searchResults} term={search.trim()} catalogueMatches={catalogueMatches}
               loading={opProduits.loading} error={opProduits.error || bonPlanError}
               onOpenOp={id => navigate(`/operations/${id}`)} onIlv={setIlv} />
           )}
@@ -1619,6 +1707,7 @@ export default function Operations() {
             {section === 'presque_parfait' && <ProduitsSection key="pp" canCreate={canCreate} mode="pp" />}
             {section === 'catalogue' && <ProduitsSection key="catalogue" canCreate={canCreate} mode="catalogue" />}
             {section === 'engages' && <ProduitsSection key="engages" canCreate={canCreate} mode="engages" />}
+            {vueImpression && <ImpressionsPanel impressions={impressions} />}
 
             {/* Liste des OPs (sections standard) */}
             {['en_cours', 'a_venir', 'terminee'].includes(section) && (
