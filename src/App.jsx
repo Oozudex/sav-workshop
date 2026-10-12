@@ -6,6 +6,7 @@ import { useTheme } from './store/useTheme'
 import Login from './pages/Login'
 import AlertsWatcher from './components/AlertsWatcher'
 import ChangePasswordScreen from './components/ChangePasswordScreen'
+import { peutVoirAssistant } from './lib/assistant'
 
 // Pages chargées à la demande : chaque route devient un fichier JS séparé
 const Home            = lazy(() => import('./pages/Home'))
@@ -22,6 +23,8 @@ const Flocage         = lazy(() => import('./pages/Flocage'))
 const Transfert       = lazy(() => import('./pages/Transfert'))
 const Obut            = lazy(() => import('./pages/Obut'))
 const Todo            = lazy(() => import('./pages/Todo'))
+// Bulle de l'assistant vélo : téléchargée seulement pour les comptes qui la voient
+const AssistantBulle  = lazy(() => import('./components/AssistantBulle'))
 
 // Écran d'attente (session en cours de vérification, page en téléchargement)
 function PageLoader() {
@@ -61,6 +64,7 @@ export default function App() {
   const initTheme = useTheme(s => s.init)
   // Mot de passe donné par le directeur : le rayon doit d'abord choisir le sien
   const mustChangePassword = useAuth(s => !!s.user && !!s.profile?.motDePasseTemporaire)
+  const assistant = useAuth(s => !!s.user && peutVoirAssistant(s.profile))
   useEffect(() => {
     const unsub = initAuth()
     initTheme()
@@ -72,6 +76,7 @@ export default function App() {
   return (
     <>
       <AlertsWatcher />
+      {assistant && <Suspense fallback={null}><AssistantBulle /></Suspense>}
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/login" element={<Login />} />

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { addDoc, collection, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import Navbar from '../components/Navbar'
 import AccountsPanel from '../components/admin/AccountsPanel'
+import AssistantPanel from '../components/admin/AssistantPanel'
 import StorePanel from '../components/admin/StorePanel'
 import { BTN_PRIMARY, BTN_SECONDARY, EmptyState, Field, INVALID, Modal, Notice, Section, Tag } from '../components/admin/ui'
 import { useAuth } from '../store/useAuth'
@@ -117,7 +118,8 @@ export default function StoreSettings() {
           {/* Onglets (direction) */}
           {isDirecteurGen && (
             <div className="flex items-center gap-1 border-b border-gray-200 dark:border-neutral-800" role="tablist">
-              {[['magasins', 'Magasins', magasins.length], ['comptes', 'Comptes', null]].map(([key, label, n]) => (
+              {[['magasins', 'Magasins', magasins.length], ['comptes', 'Comptes', null],
+                ...(profile?.isAdmin ? [['assistant', 'Assistant', null]] : [])].map(([key, label, n]) => (
                 <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key)}
                   className={['h-9 px-3 sm:px-4 -mb-px border-b-2 text-xs font-semibold transition-colors whitespace-nowrap',
                     tab === key ? 'border-gray-900 text-gray-900 dark:border-white dark:text-white'
@@ -133,6 +135,8 @@ export default function StoreSettings() {
 
           {tab === 'comptes' && isDirecteurGen ? (
             <AccountsPanel me={user.uid} isAdmin={!!profile?.isAdmin} magasins={magasins} />
+          ) : tab === 'assistant' && profile?.isAdmin ? (
+            <AssistantPanel />
           ) : isGlobal ? (
             magasins.length === 0 ? (
               <Section title="Magasins" count={0}>

@@ -403,3 +403,23 @@ describe('accès anonyme', () => {
     await assertFails(getDoc(doc(db, 'users', 'veloA')))
   })
 })
+
+describe('assistant vélo', () => {
+  it("seul l'administrateur lit les questions, l'état du Drive et les fichiers", async () => {
+    await assertSucceeds(getDocs(collection(as('admin'), 'assistant_questions')))
+    await assertSucceeds(getDoc(doc(as('admin'), 'assistant_etat', 'indexation')))
+    await assertSucceeds(getDocs(collection(as('admin'), 'assistant_fichiers')))
+    for (const uid of ['veloA', 'dirgen', 'dirmagA']) {
+      await assertFails(getDocs(collection(as(uid), 'assistant_questions')))
+      await assertFails(getDoc(doc(as(uid), 'assistant_etat', 'indexation')))
+    }
+  })
+  it("passages et compteurs : aucun accès depuis l'appli, écriture réservée aux Cloud Functions", async () => {
+    await assertFails(getDocs(collection(as('admin'), 'assistant_passages')))
+    await assertFails(getDocs(collection(as('veloA'), 'assistant_passages')))
+    await assertFails(getDoc(doc(as('veloA'), 'assistant_quotas', 'veloA_2026-10-12')))
+    await assertFails(setDoc(doc(as('veloA'), 'assistant_quotas', 'veloA_2026-10-12'), { n: 0 }))
+    await assertFails(setDoc(doc(as('admin'), 'assistant_questions', 'q'), { question: 'x' }))
+    await assertFails(updateDoc(doc(as('veloA'), 'assistant_questions', 'q'), { avis: 'utile' }))
+  })
+})

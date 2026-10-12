@@ -6,6 +6,7 @@
 // La coupure est immédiate grâce aux règles Firestore (users/{uid}.sessionsRevokedAt) ; la révocation
 // des jetons empêche en plus de rouvrir une session sans se reconnecter.
 // - lireEtiquette : recherche des OP par photo, le texte de l'étiquette est lu par Cloud Vision.
+// - assistant* : assistant vélo (questions sur les procédures du Drive, Gemini), voir assistant.js.
 import { applicationDefault, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
@@ -14,6 +15,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { logger } from 'firebase-functions'
 import { canManageStaff, newPassword } from './lib.js'
+import { donnerAvis, indexerProcedures, miseAJourManuelle, poserQuestion, purgerAssistant } from './assistant.js'
 
 initializeApp()
 setGlobalOptions({ region: 'europe-west1', maxInstances: 2 })
@@ -148,3 +150,20 @@ export const lireEtiquette = onCall({ memory: '256MiB', timeoutSeconds: 30, enfo
   }
   return { texte: reponse.fullTextAnnotation?.text || '' }
 })
+
+/* ── Assistant vélo (procédures du Drive + Gemini) ───────────────────────── */
+export const assistantQuestion = onCall({ memory: '512MiB', timeoutSeconds: 60, enforceAppCheck: APP_CHECK_OBLIGATOIRE }, poserQuestion)
+export const assistantAvis = onCall({ enforceAppCheck: APP_CHECK_OBLIGATOIRE }, donnerAvis)
+
+// Bouton « Mettre à jour maintenant » de l'administrateur
+export const assistantMiseAJour = onCall({ memory: '1GiB', timeoutSeconds: 1800, enforceAppCheck: APP_CHECK_OBLIGATOIRE }, miseAJourManuelle)
+
+// Chaque nuit à 2 h 30 : documents modifiés relus, questions de plus de 30 jours effacées
+export const assistantIndexationNocturne = onSchedule(
+  { schedule: '30 2 * * *', timeZone: 'Europe/Paris', memory: '1GiB', timeoutSeconds: 1800 },
+  async () => {
+    const effaces = await purgerAssistant()
+    logger.info(`Assistant : ${effaces} questions ou compteurs effacés`)
+    await indexerProcedures('nuit')
+  },
+)

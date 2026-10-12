@@ -404,5 +404,13 @@ service cloud.firestore {
       allow update: if isSignedIn() && (isGlobal() || (obutLocal() && inMyStore(resource.data) && inMyStoreNew()));
       allow delete: if isSignedIn() && (isGlobal() || (isDirMag() && inMyStore(resource.data)));
     }
+
+    /* ── Assistant vélo ──────────────────────────────────────────────────── */
+    // Tout est écrit par les Cloud Functions (assistant.js) : les vendeurs passent par elles.
+    // L'administrateur consulte les questions (sans compte), l'état du Drive et l'avancement.
+    match /assistant_questions/{id} { allow read: if isSignedIn() && isAdmin(); }
+    match /assistant_fichiers/{id}  { allow read: if isSignedIn() && isAdmin(); }
+    match /assistant_etat/{id}      { allow read: if isSignedIn() && isAdmin(); }
+    // assistant_passages (procédures découpées) et assistant_quotas : aucun accès depuis l'appli
   }
 }
