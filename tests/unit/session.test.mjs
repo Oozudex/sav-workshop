@@ -46,6 +46,8 @@ describe('retrait d\'un collaborateur', () => {
     const p = newPassword()
     assert.match(p, /^[A-HJ-NP-Za-hj-np-z2-9]{4}-[A-HJ-NP-Za-hj-np-z2-9]{4}-[A-HJ-NP-Za-hj-np-z2-9]{4}$/)
     assert.notEqual(p, newPassword())
+    // Toujours conforme à la politique de mot de passe
+    for (let i = 0; i < 200; i++) { const q = newPassword(); assert.equal(passwordErrors(q, q), null) }
   })
   it('droits : directeur de son magasin, direction et acheteurs', () => {
     assert.equal(canManageStaff({ role: 'directeurmag', magasinId: 'A' }, 'A'), true)
@@ -59,8 +61,9 @@ describe('retrait d\'un collaborateur', () => {
 
 describe('nouveau mot de passe du rayon', () => {
   it('8 caractères minimum et confirmation identique', () => {
-    assert.equal(passwordErrors('court', 'court'), 'Le mot de passe doit faire au moins 8 caractères.')
-    assert.equal(passwordErrors('assez-long', 'autre-chose'), 'Les deux mots de passe ne sont pas identiques.')
-    assert.equal(passwordErrors('assez-long', 'assez-long'), null)
+    assert.equal(passwordErrors('Court1', 'Court1'), 'Le mot de passe doit faire au moins 12 caractères.')
+    assert.equal(passwordErrors('assez-long-sans-chiffre', 'assez-long-sans-chiffre'), 'Le mot de passe doit contenir une majuscule, une minuscule et un chiffre.')
+    assert.equal(passwordErrors('Assez-Long-2026', 'Autre-Chose-2026'), 'Les deux mots de passe ne sont pas identiques.')
+    assert.equal(passwordErrors('Assez-Long-2026', 'Assez-Long-2026'), null)
   })
 })

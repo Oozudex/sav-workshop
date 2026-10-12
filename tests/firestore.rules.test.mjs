@@ -371,6 +371,31 @@ describe('collections supprimées', () => {
   })
 })
 
+describe('comptes hors de l’outil', () => {
+  it("un compte sans profil (inscription directe) ne lit rien, pas même les OP ni l'annuaire", async () => {
+    const db = as('intrus')
+    await assertFails(getDocs(collection(db, 'users')))
+    await assertFails(getDoc(doc(db, 'users', 'veloA')))
+    await assertFails(getDoc(doc(db, 'magasins', 'A')))
+    await assertFails(getDocs(collectionGroup(db, 'staff')))
+    await assertFails(getDoc(doc(db, 'b2b_tools', 'tool')))
+    await assertFails(getDocs(collection(db, 'op_commerciales')))
+    await assertFails(getDocs(collection(db, 'catalogue_produits')))
+    await assertFails(setDoc(doc(db, 'users', 'intrus'), { role: 'admin' }))
+  })
+  it("un compte désactivé ne lit plus que sa propre fiche", async () => {
+    await assertSucceeds(getDoc(doc(as('inactifA'), 'users', 'inactifA')))
+    await assertFails(getDoc(doc(as('inactifA'), 'users', 'veloA')))
+    await assertFails(getDoc(doc(as('inactifA'), 'magasins', 'A')))
+    await assertFails(getDocs(collection(as('inactifA'), 'op_commerciales')))
+  })
+  it("un compte actif garde ses accès", async () => {
+    await assertSucceeds(getDoc(doc(as('veloA'), 'magasins', 'A')))
+    await assertSucceeds(getDocs(collection(as('veloA'), 'op_commerciales')))
+    await assertSucceeds(getDoc(doc(as('veloA'), 'users', 'chaussureA')))
+  })
+})
+
 describe('accès anonyme', () => {
   it("un visiteur non connecté ne lit rien", async () => {
     const db = env.unauthenticatedContext().firestore()

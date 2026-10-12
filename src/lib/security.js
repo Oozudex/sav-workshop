@@ -24,5 +24,5 @@ export function safeUrl(url) {
 // Mot de passe temporaire robuste (remplacé ensuite via l'email de réinitialisation)
 export function randomPassword(length = 24) {
   const bytes = crypto.getRandomValues(new Uint8Array(length))
-  return Array.from(bytes, b => b.toString(36).padStart(2, '0')).join('').slice(0, length) + 'A9!'
+  return Array.from(bytes, b => b.toString(36).padStart(2, '0')).join('').slice(0, length) + 'aA9!'
 }

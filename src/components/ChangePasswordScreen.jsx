@@ -5,7 +5,7 @@ import { updatePassword } from 'firebase/auth'
 import { doc, updateDoc } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
 import { useAuth } from '../store/useAuth'
-import { passwordErrors } from '../lib/session'
+import { PASSWORD_RULES, passwordErrors } from '../lib/session'
 import BrandScreen, { BLEU, BRAND_BUTTON, BrandMessage, PasswordInput, ROUGE } from './BrandScreen'
 
 export default function ChangePasswordScreen() {
@@ -26,7 +26,7 @@ export default function ChangePasswordScreen() {
     } catch (error) {
       setErr(error?.code === 'auth/requires-recent-login'
         ? 'Par sécurité, reconnecte-toi avec le mot de passe donné par ton directeur, puis choisis le nouveau.'
-        : error?.code === 'auth/weak-password' ? 'Mot de passe trop simple : choisis-en un plus long.'
+        : ['auth/weak-password', 'auth/password-does-not-meet-requirements'].includes(error?.code) ? `Mot de passe trop simple : ${PASSWORD_RULES}`
         : 'Enregistrement impossible. Réessaie dans un instant.')
     } finally { setSaving(false) }
   }
@@ -39,7 +39,7 @@ export default function ChangePasswordScreen() {
         <label className="block">
           <span className="text-sm font-medium text-gray-700">Nouveau mot de passe</span>
           <PasswordInput value={pwd} onChange={setPwd} autoComplete="new-password" autoFocus />
-          <span className="block mt-1 text-[11px] text-gray-500">8 caractères minimum.</span>
+          <span className="block mt-1 text-[11px] text-gray-500">{PASSWORD_RULES}</span>
         </label>
         <label className="block">
           <span className="text-sm font-medium text-gray-700">Confirme le mot de passe</span>

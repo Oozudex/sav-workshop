@@ -6,7 +6,16 @@ service cloud.firestore {
     // Connecté, avec une session encore valable : ouverte il y a moins de 24 h et après la dernière
     // coupure (users/{uid}.sessionsRevokedAt, écrit chaque nuit à 0 h et quand le mot de passe
     // du rayon change). auth_time = date de la connexion, en secondes (une seconde de tolérance).
-    function isSignedIn() { return request.auth != null && sessionValid(); }
+    // Il faut aussi un profil actif dans l'outil : un compte créé hors de l'outil (inscription directe
+    // avec la clé publique du site) ou désactivé n'a aucun droit.
+    function isSignedIn() { return request.auth != null && sessionValid() && isMember(); }
+
+    function isMember() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) && isActive();
+    }
+
+    // Sa propre fiche reste lisible (session valable) : l'appli peut afficher un compte désactivé
+    function isOwnSession(uid) { return request.auth != null && request.auth.uid == uid && sessionValid(); }
 
     function sessionValid() {
       let authMs = request.auth.token.auth_time * 1000;
@@ -71,7 +80,7 @@ service cloud.firestore {
     // - directeurmag : gère les comptes rayon de son magasin, et peut se rattacher
     //                  au magasin qu'il vient de créer s'il n'en a pas encore
     match /users/{uid} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() || isOwnSession(uid);
 
       allow create: if isSignedIn() && (
         isAdmin() ||

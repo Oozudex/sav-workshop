@@ -38,9 +38,16 @@ export function sessionExpired(authTime, { now = new Date(), revokedAt = null } 
   return !!revokedAt && start + 999 < revokedAt.getTime()
 }
 
+// Politique de mot de passe (la même est réglée dans Firebase pour les nouveaux mots de passe ;
+// les mots de passe déjà en place restent valables)
+export const PASSWORD_RULES = '12 caractères minimum, avec une majuscule, une minuscule et un chiffre.'
+
 // Nouveau mot de passe choisi par le rayon : null si correct, sinon le problème à afficher
 export function passwordErrors(password, confirmation) {
-  if (!password || password.length < 8) return 'Le mot de passe doit faire au moins 8 caractères.'
+  if (!password || password.length < 12) return 'Le mot de passe doit faire au moins 12 caractères.'
+  if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password)) {
+    return 'Le mot de passe doit contenir une majuscule, une minuscule et un chiffre.'
+  }
   if (password !== confirmation) return 'Les deux mots de passe ne sont pas identiques.'
   return null
 }

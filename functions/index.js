@@ -18,6 +18,10 @@ import { canManageStaff, newPassword } from './lib.js'
 initializeApp()
 setGlobalOptions({ region: 'europe-west1', maxInstances: 2 })
 
+// App Check : passe à true une fois que la console Firebase montre que les requêtes du site arrivent
+// toutes avec un jeton valide ; les appels sans jeton (scripts, copies du site) sont alors refusés.
+const APP_CHECK_OBLIGATOIRE = false
+
 const db = getFirestore()
 const auth = getAuth()
 
@@ -61,7 +65,7 @@ export const deconnexionNocturne = onSchedule(
 )
 
 /* ── Retrait d'un collaborateur : nouveau mot de passe pour le compte du rayon ── */
-export const retirerCollaborateur = onCall(async request => {
+export const retirerCollaborateur = onCall({ enforceAppCheck: APP_CHECK_OBLIGATOIRE }, async request => {
   const uid = request.auth?.uid
   if (!uid) throw new HttpsError('unauthenticated', 'Connexion requise.')
   const { magasinId, rayonId, staffId } = request.data || {}
@@ -106,7 +110,7 @@ export const retirerCollaborateur = onCall(async request => {
 const LECTURES_PAR_MOIS = 100
 const ETIQUETTE_SIMULEE = 'INTERSPORT\nCROSSOVER XV\nNAKAMURA THULIUM\nYH60WY\n0-254888/662331/60608\n2 000016 742299\nVTC HOMME'
 
-export const lireEtiquette = onCall({ memory: '256MiB', timeoutSeconds: 30 }, async request => {
+export const lireEtiquette = onCall({ memory: '256MiB', timeoutSeconds: 30, enforceAppCheck: APP_CHECK_OBLIGATOIRE }, async request => {
   const uid = request.auth?.uid
   if (!uid) throw new HttpsError('unauthenticated', 'Connexion requise.')
   const image = request.data?.image
