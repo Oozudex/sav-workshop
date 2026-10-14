@@ -1,6 +1,6 @@
 // Bouton « Contact » de l'en-tête : un e-mail à l'administrateur de l'outil (tests/unit/contact.test.mjs).
 // En attendant les tickets de réclamation dans l'outil.
-export const CONTACT_EMAIL = 'sinivault@reseau-intersport.fr'
+export const CONTACT_EMAIL = 'sinivault0414@reseau-intersport.fr'
 
 /**
  * Lien mailto prérempli : objet « Atelier SAV », et en bas du message la page et le compte d'où l'on écrit
