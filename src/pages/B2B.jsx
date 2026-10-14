@@ -6,14 +6,17 @@ import { GLOBAL_ROLES } from '../lib/constants'
 import { safeUrl } from '../lib/security'
 import { db } from '../lib/firebase'
 import {
-  collection, onSnapshot, addDoc, updateDoc, deleteDoc,
+  collection, onSnapshot, addDoc, updateDoc, deleteDoc, arrayRemove, arrayUnion,
   doc, getDoc, getDocs, orderBy, query, serverTimestamp, writeBatch,
 } from 'firebase/firestore'
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd'
 import {
-  buildCredentialRows, credentialStores, exportFileName, exportTable, groupRows, moveItem, orderChanges, toCsv,
+  buildCredentialRows, credentialStores, exportFileName, exportTable, groupRows, magasinsModifies, mentionModification,
+  moveItem, orderChanges, peutSaisirIdentifiants, toCsv,
 } from '../lib/b2bExport'
 import { downloadText, downloadWorkbook } from '../lib/excel'
+import { DESCRIPTION_MAX, b2bFormErrors, b2bFormInitial, b2bPayload } from '../lib/b2bForm'
+import { normalizeUrl } from '../lib/services'
 import Dialog from '../components/Dialog'
 import RequiredHint from '../components/RequiredHint'
 
@@ -139,7 +142,8 @@ function ContactInfo({ phones, emails }) {
 }
 
 // ── CredentialsModal ─────────────────────────────────────────────────────────
-function CredentialsModal({ tool, magasins, userMagasinId, isGlobal, onClose, onExport }) {
+// Acheteurs et direction : identifiants de tous les magasins du B2B
+function CredentialsModal({ tool, magasins, auteur, onClose, onExport }) {
   // N'afficher que les magasins sélectionnés sur le B2B (si vide = tous)
   const filteredMagasins = tool.storeIds?.length
     ? magasins.filter(m => tool.storeIds.includes(m.id))
@@ -148,122 +152,187 @@ function CredentialsModal({ tool, magasins, userMagasinId, isGlobal, onClose, on
   // Identifiants stockés dans b2b_tools/{id}/credentials/{magasinId} :
   // les règles Firestore ne laissent un magasin lire que son propre document.
   const [creds, setCreds] = useState({})
+  const [initial, setInitial] = useState({}) // documents tels qu'à l'ouverture (date, auteur de la dernière modification)
   const [loadingCreds, setLoadingCreds] = useState(true)
   const [showPwd, setShowPwd] = useState({})
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
   useEffect(() => {
-    const credsCol = collection(db, 'b2b_tools', tool.id, 'credentials')
-    const load = isGlobal
-      ? getDocs(credsCol).then(snap => {
-          const base = Object.fromEntries(snap.docs.map(d => [d.id, d.data()]))
-          const obj = {}
-          filteredMagasins.forEach(m => {
-            obj[m.id] = { email: base[m.id]?.email ?? '', password: base[m.id]?.password ?? '' }
-          })
-          return obj
-        })
-      : getDoc(doc(credsCol, userMagasinId)).then(snap => (snap.exists() ? { [userMagasinId]: snap.data() } : {}))
-    load.then(setCreds).catch(() => setCreds({})).finally(() => setLoadingCreds(false))
+    getDocs(collection(db, 'b2b_tools', tool.id, 'credentials')).then(snap => {
+      const base = Object.fromEntries(snap.docs.map(d => [d.id, d.data()]))
+      const obj = {}
+      filteredMagasins.forEach(m => {
+        obj[m.id] = { email: base[m.id]?.email ?? '', password: base[m.id]?.password ?? '' }
+      })
+      setInitial(base)
+      setCreds(obj)
+    }).catch(() => setCreds({})).finally(() => setLoadingCreds(false))
     // Chargé une seule fois à l'ouverture pour ne pas écraser une saisie en cours
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tool.id, isGlobal, userMagasinId])
+  }, [tool.id])
 
   function togglePwd(id) { setShowPwd(p => ({ ...p, [id]: !p[id] })) }
 
   async function handleSave() {
-    setSaving(true)
+    setSaving(true); setError('')
     try {
       const batch = writeBatch(db)
-      const withCreds = []
-      Object.entries(creds).forEach(([magId, v]) => {
+      // Seuls les magasins modifiés sont réenregistrés : la mention « modifié par » des autres reste juste
+      magasinsModifies(initial, creds).forEach(magId => {
+        const v = creds[magId]
         const ref = doc(db, 'b2b_tools', tool.id, 'credentials', magId)
-        if (v.email || v.password) {
-          batch.set(ref, { email: v.email || '', password: v.password || '', updatedAt: serverTimestamp() })
-          withCreds.push(magId)
+        if (v.email.trim() || v.password) {
+          batch.set(ref, { email: v.email.trim(), password: v.password, updatedAt: serverTimestamp(), updatedBy: auteur.uid, updatedByName: auteur.nom })
         } else {
           batch.delete(ref)
         }
       })
       // Liste non sensible des magasins configurés (pour afficher le cadenas)
+      const withCreds = Object.entries(creds).filter(([, v]) => v.email.trim() || v.password).map(([id]) => id)
       batch.update(doc(db, 'b2b_tools', tool.id), { credentialStoreIds: withCreds, updatedAt: serverTimestamp() })
       await batch.commit()
       onClose()
+    } catch {
+      setError('Enregistrement impossible. Réessaie.')
     } finally { setSaving(false) }
   }
 
-  if (isGlobal) {
-    return (
-      <Dialog onClose={onClose} className="fixed inset-0 z-[400] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
-        <div className="w-full max-w-lg rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl flex flex-col max-h-[85vh]">
-          <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800 shrink-0">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-gray-500 dark:text-neutral-400"><LockIcon /></span>
-              <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">Identifiants — {tool.label}</span>
-            </div>
-            <CloseBtn onClick={onClose} />
+  return (
+    <Dialog onClose={onClose} className="fixed inset-0 z-[400] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl flex flex-col max-h-[85vh]">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-gray-500 dark:text-neutral-400"><LockIcon /></span>
+            <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">Identifiants — {tool.label}</span>
           </div>
-
-          <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
-            {filteredMagasins.length === 0 && (
-              <p className="text-sm text-gray-500 dark:text-neutral-400 text-center py-4">Aucun magasin sélectionné pour ce B2B</p>
-            )}
-            {loadingCreds && <p className="text-sm text-gray-500 dark:text-neutral-400 text-center py-4">Chargement…</p>}
-            {!loadingCreds && filteredMagasins.map(m => (
-              <div key={m.id} className="space-y-2 pt-4 first:pt-0 border-t first:border-t-0 border-gray-100 dark:border-neutral-800">
-                <p className="text-xs font-semibold text-gray-700 dark:text-neutral-300 uppercase tracking-wide">{m.nom}</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <label className="space-y-1">
-                    <span className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Email</span>
-                    {/* Identifiants du magasin, pas ceux de la personne connectée : pas de remplissage automatique */}
-                    <input className="Input text-xs" type="email" name={`b2b-login-${m.id}`}
-                      autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
-                      value={creds[m.id]?.email ?? ''}
-                      onChange={e => setCreds(p => ({ ...p, [m.id]: { ...p[m.id], email: e.target.value } }))}
-                      placeholder="email@exemple.com" />
-                  </label>
-                  <label className="space-y-1">
-                    <span className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Mot de passe</span>
-                    <div className="relative">
-                      <input className="Input text-xs pr-8" name={`b2b-password-${m.id}`}
-                        autoComplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
-                        type={showPwd[m.id] ? 'text' : 'password'}
-                        value={creds[m.id]?.password ?? ''}
-                        onChange={e => setCreds(p => ({ ...p, [m.id]: { ...p[m.id], password: e.target.value } }))}
-                        placeholder="••••••••" />
-                      <button type="button" onClick={() => togglePwd(m.id)} aria-label={showPwd[m.id] ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 dark:text-neutral-400 hover:text-gray-600 dark:hover:text-neutral-300">
-                        <EyeIcon open={showPwd[m.id]} />
-                      </button>
-                    </div>
-                  </label>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-2 px-4 sm:px-5 py-3.5 border-t border-gray-100 dark:border-neutral-800 shrink-0">
-            {onExport && (
-              <button onClick={() => { onClose(); onExport(tool.id) }}
-                className="mr-auto h-8 px-2 sm:px-3 rounded-lg text-xs font-medium whitespace-nowrap text-gray-600 dark:text-neutral-300 hover:bg-gray-100 dark:hover:bg-neutral-800 transition-colors">
-                Exporter<span className="hidden sm:inline"> ce B2B</span>
-              </button>
-            )}
-            <button onClick={onClose} className="ml-auto h-8 px-3 rounded-lg text-xs font-medium border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors">
-              Annuler
-            </button>
-            <button onClick={handleSave} disabled={saving || loadingCreds}
-              className="h-8 px-4 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100 disabled:opacity-50 transition-colors">
-              {saving ? 'Enregistrement…' : 'Enregistrer'}
-            </button>
-          </div>
+          <CloseBtn onClick={onClose} />
         </div>
-      </Dialog>
-    )
+
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+          {filteredMagasins.length === 0 && (
+            <p className="text-sm text-gray-500 dark:text-neutral-400 text-center py-4">Aucun magasin sélectionné pour ce B2B</p>
+          )}
+          {loadingCreds && <p className="text-sm text-gray-500 dark:text-neutral-400 text-center py-4">Chargement…</p>}
+          {!loadingCreds && filteredMagasins.map(m => (
+            <div key={m.id} className="space-y-2 pt-4 first:pt-0 border-t first:border-t-0 border-gray-100 dark:border-neutral-800">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                <p className="text-xs font-semibold text-gray-700 dark:text-neutral-300 uppercase tracking-wide">{m.nom}</p>
+                {mentionModification(initial[m.id]) && <p className="text-[10px] text-gray-500 dark:text-neutral-400">{mentionModification(initial[m.id])}</p>}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <label className="space-y-1">
+                  <span className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Email</span>
+                  {/* Identifiants du magasin, pas ceux de la personne connectée : pas de remplissage automatique */}
+                  <input className="Input text-xs" type="email" name={`b2b-login-${m.id}`}
+                    autoComplete="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
+                    value={creds[m.id]?.email ?? ''}
+                    onChange={e => setCreds(p => ({ ...p, [m.id]: { ...p[m.id], email: e.target.value } }))}
+                    placeholder="email@exemple.com" />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Mot de passe</span>
+                  <div className="relative">
+                    <input className="Input text-xs pr-8" name={`b2b-password-${m.id}`}
+                      autoComplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
+                      type={showPwd[m.id] ? 'text' : 'password'}
+                      value={creds[m.id]?.password ?? ''}
+                      onChange={e => setCreds(p => ({ ...p, [m.id]: { ...p[m.id], password: e.target.value } }))}
+                      placeholder="••••••••" />
+                    <button type="button" onClick={() => togglePwd(m.id)} aria-label={showPwd[m.id] ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 dark:text-neutral-400 hover:text-gray-600 dark:hover:text-neutral-300">
+                      <EyeIcon open={showPwd[m.id]} />
+                    </button>
+                  </div>
+                </label>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {error && <p role="alert" className="px-5 pt-3 text-xs text-red-600 dark:text-red-400">{error}</p>}
+        <div className="flex items-center gap-2 px-4 sm:px-5 py-3.5 border-t border-gray-100 dark:border-neutral-800 shrink-0">
+          {onExport && (
+            <button onClick={() => { onClose(); onExport(tool.id) }}
+              className="mr-auto h-8 px-2 sm:px-3 rounded-lg text-xs font-medium whitespace-nowrap text-gray-600 dark:text-neutral-300 hover:bg-gray-100 dark:hover:bg-neutral-800 transition-colors">
+              Exporter<span className="hidden sm:inline"> ce B2B</span>
+            </button>
+          )}
+          <button onClick={onClose} className="ml-auto h-8 px-3 rounded-lg text-xs font-medium border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors">
+            Annuler
+          </button>
+          <button onClick={handleSave} disabled={saving || loadingCreds}
+            className="h-8 px-4 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100 disabled:opacity-50 transition-colors">
+            {saving ? 'Enregistrement…' : 'Enregistrer'}
+          </button>
+        </div>
+      </div>
+    </Dialog>
+  )
+}
+
+const PWD_INPUT = { autoComplete: 'new-password', 'data-lpignore': 'true', 'data-1p-ignore': 'true', 'data-form-type': 'other' }
+
+// Magasin : ses identifiants du B2B, qu'il saisit et modifie lui-même (directeur et comptes rayon)
+function IdentifiantsMagasinModal({ tool, magasins, magasinId, peutSaisir, auteur, onClose }) {
+  const ref = doc(db, 'b2b_tools', tool.id, 'credentials', magasinId)
+  const [actuel, setActuel] = useState(null) // document enregistré (null = aucun)
+  const [chargement, setChargement] = useState(true)
+  const [edition, setEdition] = useState(false)
+  const [saisie, setSaisie] = useState({ email: '', password: '' })
+  const [voirMdp, setVoirMdp] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [erreur, setErreur] = useState('')
+  const autres = credentialStores(tool, magasins).filter(m => m.id !== magasinId)
+
+  useEffect(() => {
+    getDoc(ref).then(snap => setActuel(snap.exists() ? snap.data() : null)).catch(() => setActuel(null)).finally(() => setChargement(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tool.id, magasinId])
+
+  function modifier() {
+    setSaisie({ email: actuel?.email || '', password: actuel?.password || '' })
+    setVoirMdp(false); setErreur(''); setEdition(true)
   }
 
-  // Store view — read-only
-  const sc = creds[userMagasinId]
+  async function ecrire(valeurs) {
+    setBusy(true); setErreur('')
+    try {
+      const batch = writeBatch(db)
+      const outil = doc(db, 'b2b_tools', tool.id)
+      if (valeurs) {
+        const data = { ...valeurs, updatedAt: serverTimestamp(), updatedBy: auteur.uid, updatedByName: auteur.nom }
+        batch.set(ref, data)
+        batch.update(outil, { credentialStoreIds: arrayUnion(magasinId) })
+        await batch.commit()
+        setActuel({ ...data, updatedAt: { toMillis: () => Date.now() } })
+      } else {
+        batch.delete(ref)
+        batch.update(outil, { credentialStoreIds: arrayRemove(magasinId) })
+        await batch.commit()
+        setActuel(null)
+      }
+      setEdition(false)
+    } catch {
+      setErreur('Enregistrement impossible. Réessaie.')
+    } finally { setBusy(false) }
+  }
+
+  function enregistrer(e) {
+    e.preventDefault()
+    const email = saisie.email.trim()
+    if (!email && !saisie.password) { setErreur('Renseigne au moins l’identifiant ou le mot de passe.'); return }
+    ecrire({ email, password: saisie.password })
+  }
+
+  function effacer() {
+    if (confirm(`Effacer les identifiants de ${tool.label} pour votre magasin ?`)) ecrire(null)
+  }
+
+  const bouton = 'h-8 px-4 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50'
+  const principal = `${bouton} bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100`
+  const secondaire = `${bouton} border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800`
+
   return (
     <Dialog onClose={onClose} className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="w-full max-w-sm rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl">
@@ -274,55 +343,103 @@ function CredentialsModal({ tool, magasins, userMagasinId, isGlobal, onClose, on
           </div>
           <CloseBtn onClick={onClose} />
         </div>
-        <div className="p-5 space-y-4">
-          {loadingCreds ? (
-            <p className="text-sm text-gray-500 dark:text-neutral-400 text-center py-2">Chargement…</p>
-          ) : !sc ? (
-            <p className="text-sm text-gray-500 dark:text-neutral-400 text-center py-2">
-              Aucun identifiant configuré pour votre magasin.
-            </p>
-          ) : (
-            <>
-              <div className="space-y-1">
-                <span className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Email</span>
-                <p className="text-sm font-mono text-gray-900 dark:text-white">{sc.email || '—'}</p>
-              </div>
-              <div className="space-y-1">
+
+        {chargement ? (
+          <p className="p-5 text-sm text-gray-500 dark:text-neutral-400 text-center">Chargement…</p>
+        ) : edition ? (
+          <form onSubmit={enregistrer} noValidate>
+            <div className="p-5 space-y-3">
+              <p className="text-[11px] text-gray-500 dark:text-neutral-400">Identifiants de votre magasin pour {tool.label}, visibles par les comptes du magasin.</p>
+              <label className="block space-y-1">
+                <span className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Identifiant / e-mail</span>
+                {/* Identifiants du magasin, pas ceux de la personne connectée : pas de remplissage automatique */}
+                <input className="Input text-sm" name={`b2b-login-${magasinId}`} autoComplete="off" data-lpignore="true" data-1p-ignore="true"
+                  data-form-type="other" maxLength={200} autoFocus
+                  value={saisie.email} onChange={e => setSaisie(v => ({ ...v, email: e.target.value }))} />
+              </label>
+              <label className="block space-y-1">
                 <span className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Mot de passe</span>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-mono text-gray-900 dark:text-white">
-                    {showPwd[userMagasinId] ? (sc.password || '—') : (sc.password ? '••••••••' : '—')}
-                  </p>
-                  {sc.password && (
-                    <button type="button" onClick={() => togglePwd(userMagasinId)} aria-label={showPwd[userMagasinId] ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-                      className="text-gray-500 dark:text-neutral-400 hover:text-gray-600 dark:hover:text-neutral-300 transition-colors">
-                      <EyeIcon open={showPwd[userMagasinId]} />
-                    </button>
+                <span className="relative block">
+                  <input className="Input text-sm pr-9" name={`b2b-password-${magasinId}`} {...PWD_INPUT} maxLength={200}
+                    type={voirMdp ? 'text' : 'password'}
+                    value={saisie.password} onChange={e => setSaisie(v => ({ ...v, password: e.target.value }))} />
+                  <button type="button" onClick={() => setVoirMdp(v => !v)} aria-label={voirMdp ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 dark:text-neutral-400 hover:text-gray-700 dark:hover:text-neutral-200">
+                    <EyeIcon open={voirMdp} />
+                  </button>
+                </span>
+              </label>
+              {erreur && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{erreur}</p>}
+            </div>
+            <div className="flex items-center gap-2 px-5 py-3.5 border-t border-gray-100 dark:border-neutral-800">
+              {actuel && (
+                <button type="button" onClick={effacer} disabled={busy}
+                  className="mr-auto text-xs font-medium text-red-600 hover:underline dark:text-red-400 disabled:opacity-50">Effacer</button>
+              )}
+              <button type="button" onClick={() => setEdition(false)} disabled={busy} className={`${secondaire} ${actuel ? '' : 'ml-auto'}`}>Annuler</button>
+              <button type="submit" disabled={busy} className={principal}>{busy ? 'Enregistrement…' : 'Enregistrer'}</button>
+            </div>
+          </form>
+        ) : (
+          <>
+            <div className="p-5 space-y-4">
+              {!actuel ? (
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-700 dark:text-neutral-200">Aucun identifiant enregistré pour votre magasin.</p>
+                  {autres.length > 0 && (
+                    <p className="text-[11px] text-gray-500 dark:text-neutral-400">
+                      Ont déjà des accès : {autres.map(m => m.nom).join(', ')}.
+                    </p>
                   )}
                 </div>
-              </div>
-            </>
-          )}
-        </div>
-        <div className="flex justify-end px-5 py-3.5 border-t border-gray-100 dark:border-neutral-800">
-          <button onClick={onClose}
-            className="h-8 px-4 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100 transition-colors">
-            Fermer
-          </button>
-        </div>
+              ) : (
+                <>
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Identifiant / e-mail</span>
+                    <p className="text-sm font-mono text-gray-900 dark:text-white break-all">{actuel.email || '—'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Mot de passe</span>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-mono text-gray-900 dark:text-white break-all">
+                        {voirMdp ? (actuel.password || '—') : (actuel.password ? '••••••••' : '—')}
+                      </p>
+                      {actuel.password && (
+                        <button type="button" onClick={() => setVoirMdp(v => !v)} aria-label={voirMdp ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                          className="text-gray-500 dark:text-neutral-400 hover:text-gray-700 dark:hover:text-neutral-200 transition-colors">
+                          <EyeIcon open={voirMdp} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {mentionModification(actuel) && <p className="text-[11px] text-gray-500 dark:text-neutral-400">{mentionModification(actuel)}</p>}
+                </>
+              )}
+              {erreur && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{erreur}</p>}
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-gray-100 dark:border-neutral-800">
+              <button type="button" onClick={onClose} className={peutSaisir ? secondaire : principal}>Fermer</button>
+              {peutSaisir && (
+                <button type="button" onClick={modifier} className={principal}>{actuel ? 'Modifier' : 'Ajouter les identifiants'}</button>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </Dialog>
   )
 }
 
 // ── ToolCard ─────────────────────────────────────────────────────────────────
-function ToolCard({ t, featured, canEdit, onEdit, onExport, userMagasinId, isGlobal, magasins }) {
+function ToolCard({ t, featured, canEdit, onEdit, onExport, userMagasinId, isGlobal, magasins, peutSaisir, auteur }) {
   const c = COLOR[t.color] || COLOR.gray
   const [showCreds, setShowCreds] = useState(false)
 
   const hasAccess    = isGlobal || !t.storeIds?.length || (userMagasinId && t.storeIds.includes(userMagasinId))
   // Le cadenas est toujours affiché : ouvert = identifiants du magasin, fermé = qui a les accès
   const hasCreds     = isGlobal || !!(userMagasinId && t.credentialStoreIds?.includes(userMagasinId))
+  // Magasin qui a accès au B2B : voit ses identifiants, ou les ajoute
+  const vueMagasin   = !isGlobal && !!userMagasinId && hasAccess && (hasCreds || peutSaisir)
   const toolUrl      = safeUrl(t.url)
   const accessStores = !hasAccess ? magasins.filter(m => t.storeIds?.includes(m.id)) : []
 
@@ -383,8 +500,9 @@ function ToolCard({ t, featured, canEdit, onEdit, onExport, userMagasinId, isGlo
       {/* Cadenas : identifiants du magasin, ou magasins qui ont les accès */}
       <button
         onClick={e => { e.stopPropagation(); setShowCreds(true) }}
-        title={hasCreds ? (isGlobal ? 'Identifiants des magasins' : 'Voir vos identifiants') : 'Pas d’identifiants pour votre magasin : voir qui a les accès'}
-        aria-label={hasCreds ? 'Identifiants' : 'Accès non disponible'}
+        title={hasCreds ? (isGlobal ? 'Identifiants des magasins' : 'Voir vos identifiants')
+          : vueMagasin ? 'Ajouter les identifiants de votre magasin' : 'Pas d’identifiants pour votre magasin : voir qui a les accès'}
+        aria-label={hasCreds ? `Identifiants ${t.label}` : vueMagasin ? `Ajouter les identifiants ${t.label}` : `Accès ${t.label} non disponible`}
         className={[
           'absolute top-3 h-7 w-7 grid place-items-center rounded-lg border shadow-sm transition-colors',
           hasCreds
@@ -409,15 +527,11 @@ function ToolCard({ t, featured, canEdit, onEdit, onExport, userMagasinId, isGlo
         </button>
       )}
 
-      {showCreds && (hasCreds ? (
-        <CredentialsModal
-          tool={t}
-          magasins={magasins}
-          userMagasinId={userMagasinId}
-          isGlobal={isGlobal}
-          onExport={isGlobal ? onExport : null}
-          onClose={() => setShowCreds(false)}
-        />
+      {showCreds && (isGlobal ? (
+        <CredentialsModal tool={t} magasins={magasins} auteur={auteur} onExport={onExport} onClose={() => setShowCreds(false)} />
+      ) : vueMagasin ? (
+        <IdentifiantsMagasinModal tool={t} magasins={magasins} magasinId={userMagasinId} peutSaisir={peutSaisir} auteur={auteur}
+          onClose={() => setShowCreds(false)} />
       ) : (
         <AccessInfoModal tool={t} magasins={magasins} onClose={() => setShowCreds(false)} />
       ))}
@@ -426,167 +540,279 @@ function ToolCard({ t, featured, canEdit, onEdit, onExport, userMagasinId, isGlo
 }
 
 // ── ContactListEditor ─────────────────────────────────────────────────────────
-function ContactListEditor({ items, onChange, type }) {
+const ETIQUETTE = 'text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide'
+const AIDE = 'text-[11px] text-gray-500 dark:text-neutral-400'
+const ROUGE = '!border-red-400 dark:!border-red-500/70'
+
+function Champ({ label, aide, erreur, children, id }) {
+  return (
+    <div className="space-y-1">
+      <label htmlFor={id} className={ETIQUETTE}>{label}</label>
+      {children}
+      {erreur ? <p id={`${id}-erreur`} className="text-[11px] text-red-600 dark:text-red-400">{erreur}</p>
+        : aide && <p className={AIDE}>{aide}</p>}
+    </div>
+  )
+}
+
+function Bloc({ titre, children }) {
+  return (
+    <fieldset className="pt-4 first:pt-0 border-t first:border-t-0 border-gray-100 dark:border-neutral-800">
+      <legend className="sr-only">{titre}</legend>
+      <p aria-hidden="true" className="text-xs font-semibold text-gray-900 dark:text-white mb-2">{titre}</p>
+      <div className="space-y-3">{children}</div>
+    </fieldset>
+  )
+}
+
+// Numéros ou e-mails : une ligne par contact (libellé facultatif + valeur)
+function ContactListEditor({ items, onChange, type, erreurs = {} }) {
+  const tel = type === 'phone'
   function add() { onChange([...items, { label: '', value: '' }]) }
   function remove(i) { onChange(items.filter((_, idx) => idx !== i)) }
   function update(i, k, val) { onChange(items.map((item, idx) => idx === i ? { ...item, [k]: val } : item)) }
 
-  const valuePlaceholder = type === 'phone' ? '01 23 45 67 89' : 'contact@exemple.com'
-  const labelPlaceholder = type === 'phone' ? 'ex : Commercial' : 'ex : Standard'
-  const addLabel = type === 'phone' ? '+ Ajouter un numéro' : '+ Ajouter un email'
-
   return (
     <div className="space-y-2">
       {items.map((item, i) => (
-        <div key={i} className="flex flex-wrap sm:flex-nowrap items-center gap-1.5 pb-2 sm:pb-0 border-b sm:border-0 border-gray-100 dark:border-neutral-800">
-          <input className="Input text-xs basis-full sm:basis-auto sm:flex-[2]" value={item.label}
-            onChange={e => update(i, 'label', e.target.value)} placeholder={labelPlaceholder} aria-label="Libellé" />
-          <input className="Input text-xs flex-1 min-w-0 sm:flex-[3]" type={type === 'phone' ? 'tel' : 'email'}
-            value={item.value}
-            onChange={e => update(i, 'value', e.target.value)} placeholder={valuePlaceholder} />
-          <button type="button" onClick={() => remove(i)} aria-label="Retirer"
-            className="h-9 w-9 sm:h-8 sm:w-8 shrink-0 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors">
-            <XIcon />
-          </button>
+        <div key={i} className="space-y-1">
+          <div className="flex items-center gap-1.5">
+            <input className="Input text-xs w-28 sm:w-32 shrink-0" value={item.label} maxLength={30}
+              onChange={e => update(i, 'label', e.target.value)} placeholder={tel ? 'Commercial' : 'SAV'}
+              aria-label={`${tel ? 'Numéro' : 'E-mail'} ${i + 1} : libellé (facultatif)`} />
+            <input className={`Input text-xs flex-1 min-w-0 ${erreurs[i] ? ROUGE : ''}`} type={tel ? 'tel' : 'email'}
+              inputMode={tel ? 'tel' : 'email'} value={item.value} maxLength={tel ? 30 : 120}
+              onChange={e => update(i, 'value', e.target.value)} placeholder={tel ? '02 41 00 00 00' : 'contact@fournisseur.fr'}
+              aria-label={`${tel ? 'Numéro' : 'E-mail'} ${i + 1}`} aria-invalid={!!erreurs[i]} />
+            <button type="button" onClick={() => remove(i)} aria-label={`Retirer ${tel ? 'le numéro' : 'l’e-mail'} ${i + 1}`}
+              className="h-9 w-9 shrink-0 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors">
+              <XIcon />
+            </button>
+          </div>
+          {erreurs[i] && <p className="text-[11px] text-red-600 dark:text-red-400 sm:pl-[8.6rem]">{erreurs[i]}</p>}
         </div>
       ))}
       <button type="button" onClick={add}
-        className="text-[11px] font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors">
-        {addLabel}
+        className="h-8 px-2.5 rounded-lg border border-dashed border-gray-300 dark:border-neutral-700 text-xs font-medium text-gray-600 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors">
+        {tel ? '+ Ajouter un numéro' : '+ Ajouter un e-mail'}
       </button>
     </div>
   )
 }
 
+// Aperçu de la carte telle qu'elle apparaîtra sur la page
+function ApercuCarte({ form }) {
+  const c = COLOR[form.color] || COLOR.gray
+  const image = safeUrl(normalizeUrl(form.imageUrl))
+  const [imageOk, setImageOk] = useState(true)
+  useEffect(() => { setImageOk(true) }, [image])
+  const contacts = list => list.filter(x => x.value.trim()).map(x => ({ label: x.label.trim(), value: x.value.trim() }))
+  return (
+    <div className={`w-full flex flex-col items-start gap-3 ${form.featured ? 'p-5' : 'p-4'} rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800`}>
+      {image && imageOk ? (
+        <img src={image} alt="" onError={() => setImageOk(false)} className={`object-contain max-w-full ${form.featured ? 'h-12' : 'h-8'}`} />
+      ) : (
+        <div className={`${form.featured ? 'p-3' : 'p-2'} rounded-xl ${c.bg}`}>
+          <span className={c.icon}><PlaceholderIcon className={form.featured ? 'h-7 w-7' : 'h-5 w-5'} /></span>
+        </div>
+      )}
+      <div className="min-w-0 w-full">
+        <p className={`font-semibold text-gray-900 dark:text-white leading-snug break-words ${form.featured ? 'text-sm' : 'text-xs'}`}>
+          {form.label.trim() || 'Nom du B2B'}
+        </p>
+        {form.description.trim() && <p className="text-[11px] text-gray-500 dark:text-neutral-400 mt-1 leading-relaxed break-words">{form.description.trim()}</p>}
+      </div>
+      <ContactInfo phones={contacts(form.phones)} emails={contacts(form.emails)} />
+      <span className={`w-full h-8 flex items-center justify-center rounded-lg text-xs font-semibold ${form.url.trim() ? `text-white ${c.btn}` : 'text-gray-600 dark:text-neutral-400 bg-gray-100 dark:bg-neutral-800'}`}>
+        {form.url.trim() ? 'Accéder →' : 'Bientôt disponible'}
+      </span>
+    </div>
+  )
+}
+
 // ── EditModal ────────────────────────────────────────────────────────────────
+// Ajout / modification d'un B2B (acheteurs et direction), avec l'aperçu de la carte
 function EditModal({ tool, magasins, onClose, onSave, onDelete }) {
-  const [form, setForm] = useState({
-    label: tool?.label ?? '',
-    description: tool?.description ?? '',
-    url: tool?.url ?? '',
-    phones: tool?.phones ?? [],
-    emails: tool?.emails ?? [],
-    color: tool?.color ?? 'indigo',
-    featured: tool?.featured ?? false,
-    storeIds: tool?.storeIds ?? [],
-  })
+  const [form, setForm] = useState(() => b2bFormInitial(tool))
+  const [tried, setTried] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const errors = tried ? b2bFormErrors(form) : {}
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })) }
-
   function toggleStore(id) {
-    setForm(f => ({
-      ...f,
-      storeIds: f.storeIds.includes(id) ? f.storeIds.filter(s => s !== id) : [...f.storeIds, id],
-    }))
+    setForm(f => ({ ...f, storeIds: f.storeIds.includes(id) ? f.storeIds.filter(s => s !== id) : [...f.storeIds, id] }))
   }
 
-  async function handleSave() {
-    if (!form.label.trim()) return
+  async function handleSave(e) {
+    e.preventDefault()
+    setTried(true); setError('')
+    if (Object.keys(b2bFormErrors(form)).length) {
+      // Premier champ en erreur : affiché et sélectionné (il peut être plus bas dans le formulaire)
+      const formulaire = e.currentTarget
+      setTimeout(() => {
+        const champ = formulaire.querySelector('[aria-invalid="true"]') || formulaire.querySelector('[data-erreur]')
+        champ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        if (champ?.matches('input')) champ.focus({ preventScroll: true })
+      }, 0)
+      return
+    }
     setSaving(true)
     try {
-      await onSave({
-        label: form.label.trim(),
-        description: form.description.trim() || null,
-        url: form.url.trim() || null,
-        phones: form.phones.filter(p => p.value.trim()),
-        emails: form.emails.filter(e => e.value.trim()),
-        color: form.color,
-        featured: form.featured,
-        imageUrl: tool?.imageUrl || null,
-        storeIds: form.storeIds,
-      })
+      await onSave(b2bPayload(form, magasins.map(m => m.id)))
       onClose()
-    } finally { setSaving(false) }
+    } catch {
+      setError('Enregistrement impossible. Réessaie.')
+      setSaving(false)
+    }
   }
+
+  const inv = k => (errors[k] ? { 'aria-invalid': true, 'aria-describedby': `b2b-${k}-erreur` } : {})
 
   return (
     <Dialog onClose={onClose} className="fixed inset-0 z-[400] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh]">
+      <form onSubmit={handleSave} noValidate
+        className="w-full max-w-3xl rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh]">
         <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800 shrink-0">
-          <span className="text-sm font-semibold text-gray-900 dark:text-white">
-            {tool?.id ? "Modifier l'outil" : 'Nouvel outil'}
-          </span>
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-white">{tool?.id ? `Modifier ${tool.label}` : 'Nouveau B2B'}</h2>
           <CloseBtn onClick={onClose} />
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
-          <RequiredHint />
-          <label className="block space-y-1">
-            <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Nom *</span>
-            <input className="Input" value={form.label} onChange={e => set('label', e.target.value)} />
-          </label>
+        <div className="flex-1 overflow-y-auto">
+          <div className="grid md:grid-cols-[minmax(0,1fr)_16rem]">
+            <div className="p-4 sm:p-5 space-y-4">
+              <RequiredHint />
+              <div className="space-y-4">
+                <Bloc titre="Informations">
+                  <Champ id="b2b-label" label="Nom *" erreur={errors.label}>
+                    <input id="b2b-label" className={`Input ${errors.label ? ROUGE : ''}`} value={form.label} maxLength={60} autoFocus
+                      onChange={e => set('label', e.target.value)} placeholder="Ex. MFC, Shimano, Hermes" {...inv('label')} />
+                  </Champ>
+                  <Champ id="b2b-description" label="Description" erreur={errors.description}
+                    aide={`Une ligne sous le nom, ex. « Pièces et accessoires Nakamura » (${form.description.trim().length}/${DESCRIPTION_MAX}).`}>
+                    <input id="b2b-description" className={`Input ${errors.description ? ROUGE : ''}`} value={form.description} maxLength={DESCRIPTION_MAX + 20}
+                      onChange={e => set('description', e.target.value)} {...inv('description')} />
+                  </Champ>
+                  <Champ id="b2b-url" label="Lien du site" erreur={errors.url} aide="Ouvert par le bouton « Accéder ». Sans lien : « Bientôt disponible ».">
+                    <input id="b2b-url" className={`Input ${errors.url ? ROUGE : ''}`} type="url" inputMode="url" value={form.url}
+                      onChange={e => set('url', e.target.value)} onBlur={e => set('url', normalizeUrl(e.target.value))}
+                      placeholder="https://b2b.fournisseur.fr" {...inv('url')} />
+                  </Champ>
+                  <Champ id="b2b-imageUrl" label="Logo" erreur={errors.imageUrl}
+                    aide="Adresse d’une image : sur le site du fournisseur, clic droit sur son logo → « Copier l’adresse de l’image ». Sans logo : une icône.">
+                    <input id="b2b-imageUrl" className={`Input ${errors.imageUrl ? ROUGE : ''}`} type="url" inputMode="url" value={form.imageUrl}
+                      onChange={e => set('imageUrl', e.target.value)} onBlur={e => set('imageUrl', normalizeUrl(e.target.value))}
+                      placeholder="https://…/logo.png" {...inv('imageUrl')} />
+                  </Champ>
+                </Bloc>
 
-          <label className="block space-y-1">
-            <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Description</span>
-            <input className="Input" value={form.description} onChange={e => set('description', e.target.value)} />
-          </label>
+                <Bloc titre="Contacts">
+                  <div className="space-y-1.5">
+                    <p className={ETIQUETTE}>Téléphones</p>
+                    <ContactListEditor items={form.phones} type="phone" erreurs={errors.phones} onChange={v => set('phones', v)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className={ETIQUETTE}>E-mails</p>
+                    <ContactListEditor items={form.emails} type="email" erreurs={errors.emails} onChange={v => set('emails', v)} />
+                  </div>
+                </Bloc>
 
-          <label className="block space-y-1">
-            <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">URL</span>
-            <input className="Input" type="url" value={form.url} onChange={e => set('url', e.target.value)} placeholder="https://…" />
-          </label>
-
-          <div className="space-y-1">
-            <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Téléphones</span>
-            <ContactListEditor items={form.phones} type="phone" onChange={v => set('phones', v)} />
-          </div>
-
-          <div className="space-y-1">
-            <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Emails</span>
-            <ContactListEditor items={form.emails} type="email" onChange={v => set('emails', v)} />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <label className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Couleur</span>
-              <select className="Input" value={form.color} onChange={e => set('color', e.target.value)}>
-                {COLORS.map(c => <option key={c} value={c}>{COLOR_LABELS[c] || c}</option>)}
-              </select>
-            </label>
-            <label className="flex items-center gap-2 pt-5 cursor-pointer">
-              <input type="checkbox" className="h-4 w-4" checked={form.featured} onChange={e => set('featured', e.target.checked)} />
-              <span className="text-xs font-medium text-gray-700 dark:text-neutral-300">Outil principal</span>
-            </label>
-          </div>
-
-          {magasins.length > 0 && (
-            <div className="space-y-2">
-              <div>
-                <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Accès magasins</span>
-                <p className="text-[10px] text-gray-500 dark:text-neutral-400 mt-0.5">Laisser vide = visible pour tous</p>
-              </div>
-              <div className="grid grid-cols-2 gap-1">
-                {magasins.map(m => (
-                  <label key={m.id} className="flex items-center gap-2 cursor-pointer py-1">
-                    <input type="checkbox" className="h-3.5 w-3.5"
-                      checked={form.storeIds.includes(m.id)}
-                      onChange={() => toggleStore(m.id)} />
-                    <span className="text-xs text-gray-700 dark:text-neutral-300 truncate">{m.nom}</span>
+                <Bloc titre="Affichage">
+                  <div className="space-y-1.5">
+                    <p id="b2b-couleur" className={ETIQUETTE}>Couleur</p>
+                    <div role="radiogroup" aria-labelledby="b2b-couleur" className="flex flex-wrap gap-2">
+                      {COLORS.map(k => (
+                        <button key={k} type="button" role="radio" aria-checked={form.color === k} onClick={() => set('color', k)}
+                          className={['h-8 pl-1.5 pr-2.5 inline-flex items-center gap-1.5 rounded-lg border text-xs font-medium transition-colors',
+                            form.color === k ? 'border-gray-900 dark:border-white text-gray-900 dark:text-white ring-1 ring-gray-900 dark:ring-white'
+                              : 'border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-800'].join(' ')}>
+                          <span aria-hidden="true" className={`h-5 w-5 rounded-md ${COLOR[k].btn.split(' ')[0]}`} />
+                          {COLOR_LABELS[k]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <label className="flex items-start gap-3 rounded-xl border border-gray-200 dark:border-neutral-700 px-3 py-2.5 cursor-pointer hover:bg-gray-50 dark:hover:bg-neutral-800/60">
+                    <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0" checked={form.featured} onChange={e => set('featured', e.target.checked)} />
+                    <span>
+                      <span className="block text-xs font-semibold text-gray-900 dark:text-white">Mettre en avant</span>
+                      <span className={AIDE}>Grande carte dans « Principaux », en haut de la page.</span>
+                    </span>
                   </label>
-                ))}
+                </Bloc>
+
+                <Bloc titre="Magasins">
+                  <div role="radiogroup" aria-label="Magasins qui voient ce B2B" className="grid grid-cols-2 gap-2">
+                    {[[true, 'Tous les magasins'], [false, 'Certains magasins']].map(([tous, label]) => (
+                      <button key={label} type="button" role="radio" aria-checked={form.tousLesMagasins === tous} onClick={() => set('tousLesMagasins', tous)}
+                        className={['h-9 rounded-lg border text-xs font-semibold transition-colors', form.tousLesMagasins === tous
+                          ? 'bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-black dark:border-white'
+                          : 'text-gray-600 border-gray-200 hover:bg-gray-50 dark:text-neutral-300 dark:border-neutral-700 dark:hover:bg-neutral-800'].join(' ')}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {form.tousLesMagasins ? (
+                    <p className={AIDE}>Tous les magasins voient ce B2B et peuvent y enregistrer leurs identifiants.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className={AIDE}>{form.storeIds.length} magasin{form.storeIds.length > 1 ? 's' : ''} sur {magasins.length} : les autres voient la carte grisée.</p>
+                        <button type="button" onClick={() => set('storeIds', form.storeIds.length === magasins.length ? [] : magasins.map(m => m.id))}
+                          className="text-[11px] font-semibold text-gray-700 hover:underline dark:text-neutral-200 shrink-0">
+                          {form.storeIds.length === magasins.length ? 'Tout décocher' : 'Tout cocher'}
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                        {magasins.map(m => (
+                          <label key={m.id} className={['flex items-center gap-2 h-9 px-2.5 rounded-lg border cursor-pointer transition-colors',
+                            form.storeIds.includes(m.id) ? 'border-gray-900 dark:border-white bg-gray-50 dark:bg-neutral-800' : 'border-gray-200 dark:border-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-800'].join(' ')}>
+                            <input type="checkbox" className="h-3.5 w-3.5 shrink-0" checked={form.storeIds.includes(m.id)} onChange={() => toggleStore(m.id)} />
+                            <span className="text-xs text-gray-700 dark:text-neutral-200 truncate">{m.nom}</span>
+                          </label>
+                        ))}
+                      </div>
+                      {errors.storeIds && <p role="alert" data-erreur className="text-[11px] text-red-600 dark:text-red-400">{errors.storeIds}</p>}
+                    </div>
+                  )}
+                  {!tool?.id && <p className={AIDE}>Les identifiants de chaque magasin s’ajoutent ensuite avec le cadenas de la carte.</p>}
+                </Bloc>
               </div>
             </div>
-          )}
+
+            {/* Aperçu : à droite sur ordinateur, en bas sur téléphone */}
+            <aside aria-label="Aperçu de la carte" className="p-4 sm:p-5 md:pl-0 border-t md:border-t-0 border-gray-100 dark:border-neutral-800">
+              <div className="md:sticky md:top-0 space-y-2">
+                <p className={ETIQUETTE}>Aperçu</p>
+                <ApercuCarte form={form} />
+              </div>
+            </aside>
+          </div>
         </div>
 
+        {tried && Object.keys(errors).length > 0 && (
+          <p role="alert" className="px-4 sm:px-5 pt-3 text-xs text-red-600 dark:text-red-400">Corrige les champs en rouge.</p>
+        )}
+        {error && <p role="alert" className="px-4 sm:px-5 pt-3 text-xs text-red-600 dark:text-red-400">{error}</p>}
         <div className="flex items-center justify-between gap-2 px-4 sm:px-5 py-3.5 border-t border-gray-100 dark:border-neutral-800 shrink-0">
           {tool?.id ? (
-            <button onClick={() => onDelete(tool)} className="h-8 px-2.5 sm:px-3 rounded-lg text-xs font-medium text-red-600 border border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-500/30 dark:hover:bg-red-500/10 transition-colors">
+            <button type="button" onClick={() => onDelete(tool)}
+              className="h-8 px-2.5 sm:px-3 rounded-lg text-xs font-medium text-red-600 border border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-500/30 dark:hover:bg-red-500/10 transition-colors">
               Supprimer
             </button>
           ) : <span />}
           <div className="flex gap-2">
-            <button onClick={onClose} className="h-8 px-3 rounded-lg text-xs font-medium border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors">
+            <button type="button" onClick={onClose}
+              className="h-8 px-3 rounded-lg text-xs font-medium border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors">
               Annuler
             </button>
-            <button onClick={handleSave} disabled={saving || !form.label.trim()}
+            <button type="submit" disabled={saving}
               className="h-8 px-4 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100 disabled:opacity-50 transition-colors">
-              {saving ? 'Enregistrement…' : 'Enregistrer'}
+              {saving ? 'Enregistrement…' : tool?.id ? 'Enregistrer' : 'Ajouter le B2B'}
             </button>
           </div>
         </div>
-      </div>
+      </form>
     </Dialog>
   )
 }
@@ -975,7 +1201,7 @@ function OrderModal({ tools, onClose }) {
 
 // ── B2B ──────────────────────────────────────────────────────────────────────
 export default function B2B() {
-  const { profile } = useAuth(useShallow(s => ({ profile: s.profile })))
+  const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
   const [tools, setTools] = useState([])
   const [magasins, setMagasins] = useState([])
   const [editTool, setEditTool] = useState(null)
@@ -1013,7 +1239,10 @@ export default function B2B() {
     setEditTool(null)
   }
 
-  const cardProps = { canEdit, onEdit: setEditTool, onExport: id => setExportFor({ toolIds: [id] }), userMagasinId, isGlobal, magasins }
+  // Directeur et comptes rayon : saisissent les identifiants de leur magasin ; auteur noté sur chaque modification
+  const peutSaisir = !isGlobal && peutSaisirIdentifiants(profile)
+  const auteur = { uid: user?.uid || null, nom: profile?.displayName || user?.email || null }
+  const cardProps = { canEdit, onEdit: setEditTool, onExport: id => setExportFor({ toolIds: [id] }), userMagasinId, isGlobal, magasins, peutSaisir, auteur }
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
@@ -1039,7 +1268,7 @@ export default function B2B() {
               </button>
               <button onClick={() => setEditTool({})}
                 className="col-span-2 order-first sm:order-none h-9 sm:h-8 px-4 rounded-lg text-xs font-semibold whitespace-nowrap bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100 transition-colors">
-                + Ajouter un outil
+                + Ajouter un B2B
               </button>
             </div>
           )}
@@ -1065,7 +1294,7 @@ export default function B2B() {
 
         {tools.length === 0 && (
           <div className="text-center py-16 text-sm text-gray-500 dark:text-neutral-400">
-            Aucun outil B2B configuré.{canEdit && ' Cliquez sur "+ Ajouter un outil" pour commencer.'}
+            Aucun B2B configuré.{canEdit && ' Cliquez sur « + Ajouter un B2B » pour commencer.'}
           </div>
         )}
       </main>

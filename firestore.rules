@@ -224,13 +224,38 @@ service cloud.firestore {
 
     /* ── B2B Tools ───────────────────────────────────────────────────────── */
     match /b2b_tools/{toolId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isSignedIn() && isGlobal();
+      // Outil proposé au magasin de l'utilisateur (storeIds vide = tous les magasins)
+      function outilDuMagasin() {
+        let ids = get(/databases/$(database)/documents/b2b_tools/$(toolId)).data.get('storeIds', []);
+        return magasinId() != null && (ids.size() == 0 || magasinId() in ids);
+      }
+      // Un magasin ne change que sa propre présence dans credentialStoreIds (cadenas « vos identifiants »)
+      function seulMonMagasinChange() {
+        let avant = resource.data.get('credentialStoreIds', []).toSet();
+        let apres = request.resource.data.get('credentialStoreIds', []).toSet();
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['credentialStoreIds'])
+          && apres.difference(avant).hasOnly([magasinId()])
+          && avant.difference(apres).hasOnly([magasinId()]);
+      }
 
-      // Identifiants par magasin : un magasin ne lit que les siens
+      allow read: if isSignedIn();
+      allow create, delete: if isSignedIn() && isGlobal();
+      allow update: if isSignedIn() && (isGlobal() || (isLocalUser() && outilDuMagasin() && seulMonMagasinChange()));
+
+      // Identifiants par magasin : un magasin ne lit que les siens. Acheteurs et direction les gèrent
+      // tous ; le directeur et les comptes rayon d'un magasin saisissent et modifient ceux de leur magasin.
       match /credentials/{credMagasinId} {
+        function identifiantsValides() {
+          let d = request.resource.data;
+          return d.keys().hasOnly(['email', 'password', 'updatedAt', 'updatedBy', 'updatedByName'])
+            && d.get('email', '') is string && d.get('email', '').size() <= 200
+            && d.get('password', '') is string && d.get('password', '').size() <= 200;
+        }
+        function monMagasin() { return isLocalUser() && magasinId() == credMagasinId && outilDuMagasin(); }
+
         allow read: if isSignedIn() && (isGlobal() || magasinId() == credMagasinId);
-        allow write: if isSignedIn() && isGlobal();
+        allow create, update: if isSignedIn() && (isGlobal() || monMagasin()) && identifiantsValides();
+        allow delete: if isSignedIn() && (isGlobal() || monMagasin());
       }
     }
 

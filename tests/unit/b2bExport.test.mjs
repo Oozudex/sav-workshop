@@ -1,7 +1,8 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  buildCredentialRows, credentialStores, exportFileName, exportTable, groupRows, moveItem, orderChanges, sheetName, toCsv,
+  buildCredentialRows, credentialStores, exportFileName, exportTable, groupRows, magasinsModifies, mentionModification,
+  moveItem, orderChanges, peutSaisirIdentifiants, sheetName, toCsv,
 } from '../../src/lib/b2bExport.js'
 
 const MAGASINS = [{ id: 'nord', nom: 'Magasin Nord' }, { id: 'sud', nom: 'Magasin Sud' }, { id: 'est', nom: 'Magasin Est' }]
@@ -66,5 +67,27 @@ describe('ordre des B2B', () => {
     assert.deepEqual(moved.map(t => t.id), ['c', 'a', 'b'])
     assert.deepEqual(orderChanges(moved.slice(0, 1), moved.slice(1)), [{ id: 'c', order: 0 }, { id: 'a', order: 1 }, { id: 'b', order: 2 }])
     assert.deepEqual(orderChanges(list, []), [])
+  })
+})
+
+describe('identifiants saisis par les magasins', () => {
+  it('directeur et comptes rayon actifs, rattachés à un magasin', () => {
+    assert.equal(peutSaisirIdentifiants({ role: 'directeurmag', magasinId: 'A' }), true)
+    assert.equal(peutSaisirIdentifiants({ role: 'velo', magasinId: 'A' }), true)
+    assert.equal(peutSaisirIdentifiants({ role: 'caisse', magasinId: 'A' }), true)
+    assert.equal(peutSaisirIdentifiants({ role: 'velo', magasinId: null }), false)
+    assert.equal(peutSaisirIdentifiants({ role: 'velo', magasinId: 'A', isActive: false }), false)
+    assert.equal(peutSaisirIdentifiants({ role: 'directeurgen', magasinId: 'A' }), false)
+  })
+  it('seuls les magasins modifiés sont réenregistrés', () => {
+    const avant = { A: { email: 'a@x.fr', password: '1' }, B: { email: '', password: '' } }
+    assert.deepEqual(magasinsModifies(avant, { A: { email: ' a@x.fr ', password: '1' }, B: { email: '', password: '' } }), [])
+    assert.deepEqual(magasinsModifies(avant, { A: { email: 'a@x.fr', password: '2' }, B: { email: 'b@x.fr', password: '' } }), ['A', 'B'])
+  })
+  it('mention de la dernière modification', () => {
+    const fmt = () => '14 oct. 2026'
+    assert.equal(mentionModification({ updatedAt: { seconds: 1 }, updatedByName: 'Rayon Vélo Nord' }, fmt), 'Modifié le 14 oct. 2026 par Rayon Vélo Nord')
+    assert.equal(mentionModification({ updatedAt: { toMillis: () => 1 } }, fmt), 'Modifié le 14 oct. 2026')
+    assert.equal(mentionModification({ email: 'a' }), '')
   })
 })

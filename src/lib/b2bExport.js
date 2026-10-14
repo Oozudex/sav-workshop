@@ -1,4 +1,4 @@
-// Export des identifiants B2B (acheteur / direction générale) et ordre d'affichage des B2B.
+// Export des identifiants B2B (acheteur / direction générale), saisie par les magasins et ordre d'affichage des B2B.
 // Fonctions pures : testées dans tests/unit/b2bExport.test.mjs
 
 // Magasins qui ont des identifiants pour un B2B (liste non sensible stockée sur le B2B)
@@ -113,4 +113,27 @@ export function orderChanges(featured, others) {
     .map((t, i) => ({ id: t.id, order: i, changed: t.order !== i }))
     .filter(x => x.changed)
     .map(({ id, order }) => ({ id, order }))
+}
+
+// Directeur de magasin et comptes rayon : saisissent et modifient les identifiants de leur magasin
+const ROLES_MAGASIN = ['directeurmag', 'velo', 'chaussure', 'textile', 'randonnee', 'caisse']
+export function peutSaisirIdentifiants(profile) {
+  return !!profile?.magasinId && profile.isActive !== false && ROLES_MAGASIN.includes(profile.role)
+}
+
+const propre = v => ({ email: (v?.email || '').trim(), password: v?.password || '' })
+
+// Magasins dont les identifiants ont changé depuis l'ouverture (seuls ceux-là sont réenregistrés)
+export function magasinsModifies(avant, apres) {
+  return Object.keys(apres).filter(id => {
+    const a = propre(avant[id]), b = propre(apres[id])
+    return a.email !== b.email || a.password !== b.password
+  })
+}
+
+// « Modifié le 14 oct. par Rayon Vélo Nord »
+export function mentionModification(c, fmt = d => d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })) {
+  const ms = c?.updatedAt?.toMillis?.() ?? (c?.updatedAt?.seconds ? c.updatedAt.seconds * 1000 : null)
+  if (!ms) return ''
+  return `Modifié le ${fmt(new Date(ms))}${c.updatedByName ? ` par ${c.updatedByName}` : ''}`
 }

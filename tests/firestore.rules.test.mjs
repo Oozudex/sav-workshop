@@ -164,7 +164,33 @@ describe('b2b_tools', () => {
   })
   it("les globaux gèrent tous les identifiants", async () => {
     await assertSucceeds(getDocs(collection(as('acheteur'), 'b2b_tools', 'tool', 'credentials')))
-    await assertFails(setDoc(doc(as('dirmagA'), 'b2b_tools', 'tool', 'credentials', 'A'), { password: 'x' }))
+    await assertSucceeds(setDoc(doc(as('acheteur'), 'b2b_tools', 'tool', 'credentials', 'B'), { email: 'b@x.fr', password: 'neuf' }))
+  })
+  it("le directeur et les comptes rayon modifient les identifiants de leur magasin, pas ceux des autres", async () => {
+    const creds = { email: 'a@x.fr', password: 'nouveau', updatedAt: serverTimestamp(), updatedBy: 'dirmagA', updatedByName: 'Directeur A' }
+    await assertSucceeds(setDoc(doc(as('dirmagA'), 'b2b_tools', 'tool', 'credentials', 'A'), creds))
+    await assertSucceeds(setDoc(doc(as('veloA'), 'b2b_tools', 'tool', 'credentials', 'A'), creds))
+    await assertSucceeds(setDoc(doc(as('chaussureA'), 'b2b_tools', 'tool', 'credentials', 'A'), creds))
+    await assertFails(setDoc(doc(as('veloA'), 'b2b_tools', 'tool', 'credentials', 'B'), creds))
+    await assertFails(setDoc(doc(as('veloA'), 'b2b_tools', 'tool', 'credentials', 'A'), { ...creds, autre: 'x' }))
+    await assertFails(setDoc(doc(as('veloA'), 'b2b_tools', 'tool', 'credentials', 'A'), { email: 'a', password: 'x'.repeat(201) }))
+    await assertSucceeds(deleteDoc(doc(as('veloA'), 'b2b_tools', 'tool', 'credentials', 'A')))
+    await assertFails(deleteDoc(doc(as('veloA'), 'b2b_tools', 'tool', 'credentials', 'B')))
+    await assertFails(setDoc(doc(as('inactifA'), 'b2b_tools', 'tool', 'credentials', 'A'), creds))
+  })
+  it("un magasin ne change que sa présence dans credentialStoreIds", async () => {
+    await env.withSecurityRulesDisabled(c => updateDoc(doc(c.firestore(), 'b2b_tools', 'tool'), { credentialStoreIds: ['B'] }))
+    const db = as('veloA')
+    await assertSucceeds(updateDoc(doc(db, 'b2b_tools', 'tool'), { credentialStoreIds: ['B', 'A'] }))
+    await assertSucceeds(updateDoc(doc(db, 'b2b_tools', 'tool'), { credentialStoreIds: ['B'] }))
+    await assertFails(updateDoc(doc(db, 'b2b_tools', 'tool'), { credentialStoreIds: [] }))
+    await assertFails(updateDoc(doc(db, 'b2b_tools', 'tool'), { credentialStoreIds: ['B', 'A'], label: 'Pirate' }))
+    await assertFails(updateDoc(doc(db, 'b2b_tools', 'tool'), { label: 'Pirate' }))
+  })
+  it("outil réservé à d'autres magasins : pas de saisie", async () => {
+    await env.withSecurityRulesDisabled(c => updateDoc(doc(c.firestore(), 'b2b_tools', 'tool'), { storeIds: ['B'] }))
+    await assertFails(setDoc(doc(as('veloA'), 'b2b_tools', 'tool', 'credentials', 'A'), { email: 'a', password: 'b' }))
+    await assertFails(updateDoc(doc(as('veloA'), 'b2b_tools', 'tool'), { credentialStoreIds: ['A', 'B'] }))
   })
 })
 
