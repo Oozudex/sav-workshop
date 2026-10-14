@@ -15,7 +15,7 @@ import {
 import { getNextOrderNumber } from '../lib/counters'
 import { GLOBAL_ROLES, CAN_DELETE_ROLES, ORDER_CLOSED_STATUTS } from '../lib/constants'
 import {
-  ORDER_ALERTS, ORDER_OPEN_STATUSES, ORDER_STATUSES, ORDER_STATUS_META, ORDER_TYPES, ORDER_VISIBLE_DAYS,
+  ORDER_ALERTS, ORDER_OPEN_STATUSES, ORDER_STATUSES, ORDER_STATUS_META, ORDER_TYPES, ORDER_VISIBLE_DAYS, isOrderSav,
   formatEuro, formatOrderNumber, isOrderListed, isWaitingReception, isOrderOpen, orderMatches, orderStatus,
   orderFormErrors, orderQuantity, orderStatusSince, orderTotal, parseEuro, parseQuantity, remainingToPay,
   withNoteEdited, withNoteRemoved,
@@ -24,6 +24,7 @@ import { toDate } from '../lib/ticketStats'
 import { useMagasin } from '../store/useMagasin'
 import { usePreselectionMembre, useStaff } from '../lib/useStaff'
 import Dialog from '../components/Dialog'
+import RecapButton from '../components/RecapButton'
 import RequiredHint from '../components/RequiredHint'
 import { markInvalid } from '../components/markInvalid'
 
@@ -50,12 +51,12 @@ const NEXT_STEP = {
 
 // Champs modifiables, partagés par le formulaire de création et la modification
 const EMPTY_FIELDS = {
-  client: '', tel: '', type: 'piece', ref_produit: '', produit: '', quantite: '1',
+  sav: false, client: '', tel: '', type: 'piece', ref_produit: '', produit: '', quantite: '1',
   fournisseur: '', refFournisseur: '',
   prix: '', fraisPort: '', acompte: '', createur: '',
 }
 const FIELD_LABELS = {
-  client: 'client', tel: 'téléphone', type: 'type', ref_produit: 'référence', produit: 'désignation', quantite: 'quantité',
+  sav: 'commande SAV', client: 'client', tel: 'téléphone', type: 'type', ref_produit: 'référence', produit: 'désignation', quantite: 'quantité',
   fournisseur: 'fournisseur', refFournisseur: 'n° commande fournisseur',
   prix: 'prix de vente', fraisPort: 'frais de port', acompte: 'acompte', createur: 'créé par',
 }
@@ -74,11 +75,14 @@ function fieldsOf(order) {
 // Valeurs prêtes à enregistrer (texte nettoyé, prix numériques, vide → null)
 function cleanFields(f) {
   const text = v => (typeof v === 'string' ? v.trim() : v) || null
+  // Commande SAV : jamais de prix, de port ni d'acompte
+  const sav = !!f.sav
+  const euro = v => (sav ? null : parseEuro(v))
   return {
-    client: text(f.client), tel: text(f.tel), type: f.type || null,
+    sav, client: text(f.client), tel: text(f.tel), type: f.type || null,
     ref_produit: text(f.ref_produit), produit: text(f.produit), quantite: parseQuantity(f.quantite) ?? 1,
     fournisseur: text(f.fournisseur), refFournisseur: text(f.refFournisseur),
-    prix: parseEuro(f.prix), fraisPort: parseEuro(f.fraisPort), acompte: parseEuro(f.acompte), createur: text(f.createur),
+    prix: euro(f.prix), fraisPort: euro(f.fraisPort), acompte: euro(f.acompte), createur: text(f.createur),
   }
 }
 
@@ -449,7 +453,7 @@ export default function Orders() {
                           {o.refFournisseur && <p className="font-mono text-[11px] text-gray-500 dark:text-neutral-400">{o.refFournisseur}</p>}
                         </td>
                         <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
-                          <p className="text-gray-700 dark:text-neutral-300">{formatEuro(orderTotal(o))}</p>
+                          {isOrderSav(o) ? <SavBadge /> : <p className="text-gray-700 dark:text-neutral-300">{formatEuro(orderTotal(o))}</p>}
                           {parseEuro(o.fraisPort) > 0 && (
                             <p className="text-[11px] text-gray-500 dark:text-neutral-400">dont port {formatEuro(parseEuro(o.fraisPort))}</p>
                           )}
@@ -602,7 +606,7 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
       `Réf. produit : ${order.ref_produit || '—'}`,
       `Quantité : ${orderQuantity(order)}`,
       `Fournisseur : ${order.fournisseur || '—'}${order.refFournisseur ? ` (n° ${order.refFournisseur})` : ''}`,
-      `Prix de vente TTC : ${formatEuro(parseEuro(order.prix))}`,
+      isOrderSav(order) ? 'Commande SAV (sans prix)' : `Prix de vente TTC : ${formatEuro(parseEuro(order.prix))}`,
       port ? `Frais de port : ${formatEuro(port)}` : null,
       port ? `Total TTC : ${formatEuro(total)}` : null,
       parseEuro(order.acompte) ? `Acompte : ${formatEuro(parseEuro(order.acompte))} · reste ${formatEuro(reste)}` : null,
@@ -630,10 +634,12 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-medium ${meta.badge}`}>
                 <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />{meta.label}
               </span>
+              {isOrderSav(order) && <SavBadge />}
             </div>
             <p className="font-semibold text-sm text-gray-900 dark:text-white break-words">{order.client || (anonymized ? 'Client anonymisé' : '—')}</p>
           </div>
           <div className="flex items-center gap-1 shrink-0">
+            {!editing && !anonymized && <RecapButton kind="client" commande={order} className="hidden sm:inline-flex" />}
             {!editing && !anonymized && <SmallBtn onClick={() => setEditing(true)}>Modifier</SmallBtn>}
             <IconBtn title="Copier les infos" onClick={copyInfo}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -691,6 +697,11 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
                   </MField>
                 </MGrid>
               </MCard>
+              {isOrderSav(order) ? (
+                <MCard title="Paiement">
+                  <p className="text-sm text-gray-700 dark:text-neutral-300">Commande SAV : pas de prix, rien à payer pour le client.</p>
+                </MCard>
+              ) : (
               <MCard title="Paiement">
                 <MGrid>
                   <MField label="Prix de vente TTC"><MVal>{formatEuro(parseEuro(order.prix))}</MVal></MField>
@@ -700,6 +711,7 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
                   <MField label="Reste à payer" span2><p className="text-sm font-semibold text-gray-900 dark:text-white">{formatEuro(reste)}</p></MField>
                 </MGrid>
               </MCard>
+              )}
               <MCard title="Produit">
                 <MGrid>
                   <MField label="Type"><MVal>{ORDER_TYPES[order.type]}</MVal></MField>
@@ -899,7 +911,7 @@ function OrderForm({ staff, onSubmit, onClose }) {
             {error && <p role="alert" className="text-xs text-red-600 dark:text-red-400 w-full sm:w-auto sm:mr-auto">{error}</p>}
             {!error && (
               <p className={`text-xs w-full sm:w-auto sm:mr-auto ${tried && invalid ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-neutral-400'}`}>
-                {tried && invalid ? 'Corrige les champs en rouge.' : 'Client, désignation, prix de vente et vendeur sont obligatoires.'}
+                {tried && invalid ? 'Corrige les champs en rouge.' : `Client, désignation${fields.sav ? '' : ', prix de vente'} et vendeur sont obligatoires.`}
               </p>
             )}
             <SmallBtn onClick={onClose}>Annuler</SmallBtn>
@@ -921,6 +933,21 @@ function OrderFields({ fields, setFields, staff, errors = {}, autoFocus = false 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
       <RequiredHint className="md:col-span-2" />
+      <fieldset className="md:col-span-2">
+        <legend className="sr-only">Type de commande</legend>
+        <div className="grid grid-cols-2 gap-2">
+          {[[false, 'Commande client', 'Le client paie : prix, acompte, reste à payer'],
+            [true, 'Commande SAV', 'Pour une réparation ou une pièce que le client pose lui-même : sans prix']].map(([v, label, hint]) => (
+            <label key={label} className={['flex items-start gap-2 rounded-xl border px-3 py-2.5 cursor-pointer transition-colors',
+              !!fields.sav === v ? 'border-gray-900 bg-gray-50 dark:border-white dark:bg-neutral-800' : 'border-gray-200 hover:border-gray-300 dark:border-neutral-700 dark:hover:border-neutral-600'].join(' ')}>
+              <input type="radio" name="typeCommande" className="mt-1" checked={!!fields.sav === v} onChange={() => set('sav', v)} />
+              <span className="text-sm font-semibold text-gray-900 dark:text-white">{label}
+                <span className="block text-xs font-normal text-gray-500 dark:text-neutral-400">{hint}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
       <MCard title="Client">
         <MGrid>
           <FField label="Nom du client" required wide error={errors.client}>
@@ -932,6 +959,14 @@ function OrderFields({ fields, setFields, staff, errors = {}, autoFocus = false 
         </MGrid>
       </MCard>
 
+      {fields.sav ? (
+        <MCard title="Paiement">
+          <p className="text-sm text-gray-700 dark:text-neutral-300">
+            <span className="mr-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-900 text-white dark:bg-white dark:text-black">SAV</span>
+            Commande SAV : pas de prix, rien à payer pour le client.
+          </p>
+        </MCard>
+      ) : (
       <MCard title="Paiement">
         <MGrid>
           <FField label="Prix de vente TTC (€)" required error={errors.prix}>
@@ -960,6 +995,7 @@ function OrderFields({ fields, setFields, staff, errors = {}, autoFocus = false 
           </p>
         </MGrid>
       </MCard>
+      )}
 
       <MCard title="Produit">
         <MGrid>
@@ -1011,6 +1047,11 @@ function OrderFields({ fields, setFields, staff, errors = {}, autoFocus = false 
 /* ── Composants UI ────────────────────────────────────────────────────────── */
 const INVALID = '!border-red-400 dark:!border-red-500/70'
 
+// Commande SAV : sans prix
+function SavBadge() {
+  return <span title="Commande SAV : sans prix" className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-900 text-white dark:bg-white dark:text-black">SAV</span>
+}
+
 // Téléphone : carte d'une commande (le statut se change directement)
 function OrderCard({ order: o, magasin, onOpen, onChangeStatut }) {
   const late = isWaitingReception(o)
@@ -1028,7 +1069,7 @@ function OrderCard({ order: o, magasin, onOpen, onChangeStatut }) {
           </p>
         </div>
         <div className="shrink-0 text-right tabular-nums">
-          <p className="text-sm font-bold text-gray-900 dark:text-white">{formatEuro(total)}</p>
+          {isOrderSav(o) ? <SavBadge /> : <p className="text-sm font-bold text-gray-900 dark:text-white">{formatEuro(total)}</p>}
           {acompte > 0 && <p className="text-[11px] text-gray-500 dark:text-neutral-400">reste {formatEuro(reste)}</p>}
         </div>
       </div>

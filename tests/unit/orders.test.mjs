@@ -136,3 +136,14 @@ describe('notes de commande', () => {
     assert.deepEqual(withNoteRemoved(undefined, a), [])
   })
 })
+
+describe('commande SAV', () => {
+  it('sans prix : le prix de vente n’est plus obligatoire', async () => {
+    const { orderFormErrors, isOrderSav } = await import('../../src/lib/orders.js')
+    const base = { client: 'Durand', produit: 'Patte de dérailleur', quantite: '1', prix: '', fraisPort: '', acompte: '' }
+    assert.ok(orderFormErrors(base).prix)
+    assert.deepEqual(orderFormErrors({ ...base, sav: true }), {})
+    assert.equal(isOrderSav({ sav: true }), true)
+    assert.equal(isOrderSav({}), false)
+  })
+})

@@ -69,6 +69,9 @@ export function isOrderListed(order, now = new Date()) {
 
 export const ORDER_TYPES = { velo: 'Vélo', piece: 'Pièce', accessoire: 'Accessoire' }
 
+// Commande SAV (pièce commandée pour un vélo en réparation, ou que le client posera lui-même) : sans prix
+export const isOrderSav = order => order?.sav === true
+
 // ── Formats ──────────────────────────────────────────────────────────────────
 // "1 200,50 €" → 1200.5 ; vide ou illisible → null
 export function parseEuro(value) {
@@ -116,6 +119,7 @@ export function orderFormErrors(fields, { requireCreateur = false } = {}) {
   if (!filled(fields.produit)) errors.produit = 'La désignation est obligatoire.'
   if (filled(fields.quantite) && parseQuantity(fields.quantite) == null) errors.quantite = 'Quantité invalide.'
   if (requireCreateur && !filled(fields.createur)) errors.createur = 'Choisis le vendeur.'
+  if (isOrderSav(fields)) return errors
 
   const prix = parseEuro(fields.prix)
   if (!filled(fields.prix)) errors.prix = 'Le prix de vente TTC est obligatoire.'

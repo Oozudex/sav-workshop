@@ -9,6 +9,7 @@ import Navbar from '../components/Navbar'
 import CatalogueModal from '../components/obut/CatalogueModal'
 import ObutFields from '../components/obut/ObutFields'
 import ObutStats from '../components/obut/ObutStats'
+import RecapButton from '../components/RecapButton'
 import { BTN_PRIMARY, BTN_SECONDARY } from '../components/admin/ui'
 import { useAuth } from '../store/useAuth'
 import { useShallow } from 'zustand/react/shallow'
@@ -236,6 +237,7 @@ function OrderSheet({ cmd, catalogue, staff, magasinNom, canDelete, onClose, onC
           <p className="font-semibold text-sm text-gray-900 dark:text-white break-words">{name || 'Client anonymisé'}</p>
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          {!editing && name && <RecapButton kind="obut" commande={cmd} className="hidden sm:inline-flex" />}
           {!editing && name && (
             <button type="button" onClick={() => setEditing(true)} className={BTN_SECONDARY}>Modifier</button>
           )}
