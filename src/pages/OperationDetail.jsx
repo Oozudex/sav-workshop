@@ -12,6 +12,7 @@ import { GLOBAL_ROLES, RAYON_TYPE_LABELS } from '../lib/constants'
 import { OpModal } from './Operations'
 import IlvDialog from '../components/IlvDialog'
 import IlvBatchDialog from '../components/IlvBatchDialog'
+import AjoutBaseModal from '../components/AjoutBaseModal'
 import ActionsMenu from '../components/ActionsMenu'
 import { deleteOperation, opFormData } from '../lib/opActions'
 import { opRayons, opSummary, opTiming } from '../lib/opSearch'
@@ -728,6 +729,13 @@ export default function OperationDetail() {
     }
   }
 
+  // Vélos choisis dans la base : un produit chacun, ajoutés d'un coup
+  async function handleAjoutBase(datas) {
+    const batch = writeBatch(db)
+    datas.forEach(d => batch.set(doc(collection(db, 'op_commerciales', id, 'produits')), { ...d, createdAt: serverTimestamp() }))
+    await batch.commit()
+  }
+
   async function handleDeleteProduit(p) {
     await deleteDoc(doc(db, 'op_commerciales', id, 'produits', p.id))
   }
@@ -927,7 +935,7 @@ export default function OperationDetail() {
                       Importer le fichier de l’OP
                     </button>
                     <button onClick={() => setModal({})} className="h-9 px-3 rounded-lg text-xs text-gray-600 dark:text-neutral-300 hover:underline">
-                      ou ajouter un produit à la main
+                      ou ajouter des vélos depuis la base
                     </button>
                   </div>
                 </>
@@ -1000,7 +1008,11 @@ export default function OperationDetail() {
         </div>
       </main>
 
-      {modal !== null && !modal.editOp && (
+      {modal !== null && !modal.editOp && !modal.id && !modal.manuel && (
+        <AjoutBaseModal produitsOp={produits} onClose={() => setModal(null)} onAdd={handleAjoutBase}
+          onManuel={() => setModal({ manuel: true })} />
+      )}
+      {modal !== null && !modal.editOp && (modal.id || modal.manuel) && (
         <ProduitModal
           produit={modal?.id ? modal : null}
           onClose={() => setModal(null)}
