@@ -10,9 +10,10 @@ import { useAuth } from '../../store/useAuth'
 import { currentStatusSince } from '../../lib/ticketStats'
 import {
   HISTORIQUE_JOURS, MOT_COLLECTION, RECURRENCE_COLLECTION, TODO_COLLECTION, addDays, atelierTodoSpecs, autoObsolete,
-  opTodoSpecs, recurrenceSpecs, toMs, transfertTodoSpecs, ymd,
+  baliseTodoSpecs, opTodoSpecs, recurrenceSpecs, toMs, transfertTodoSpecs, ymd,
 } from '../../lib/todos'
 import { TRANSFER_ACTIVE_STATUSES } from '../../lib/transferts'
+import { BALISE_TRANSFERT_COLLECTION, DEMANDE_ACTIVES } from '../../lib/balises'
 
 export const motDocId = (magasinId, rayon) => `${magasinId}_${rayon}`
 
@@ -25,6 +26,7 @@ export function useTodos(magasinId, rayon) {
   const [ops, setOps] = useState(null)
   const [tickets, setTickets] = useState(null)
   const [transferts, setTransferts] = useState(null)
+  const [balises, setBalises] = useState(null)
   const [error, setError] = useState(false)
   const ready = !!magasinId && !!rayon
 
@@ -66,13 +68,21 @@ export function useTodos(magasinId, rayon) {
       s => setTransferts(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setTransferts([]))
   }, [ready, rayon])
 
+  // Demandes de balises de diagnostic (rayon vélo) : ce que le magasin doit faire
+  useEffect(() => {
+    if (!ready || rayon !== 'velo') { setBalises([]); return }
+    return onSnapshot(query(collection(db, BALISE_TRANSFERT_COLLECTION), where('status', 'in', DEMANDE_ACTIVES)),
+      s => setBalises(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setBalises([]))
+  }, [ready, rayon])
+
   // Tâches automatiques attendues aujourd'hui
-  const specs = useMemo(() => (ops && tickets && transferts && recurrences ? [
+  const specs = useMemo(() => (ops && tickets && transferts && balises && recurrences ? [
     ...opTodoSpecs(ops, { magasinId, rayon, today }),
     ...atelierTodoSpecs(tickets, { magasinId, today }),
     ...transfertTodoSpecs(transferts, { magasinId }),
+    ...baliseTodoSpecs(balises, { magasinId }),
     ...recurrenceSpecs(recurrences, { today }),
-  ] : null), [ops, tickets, transferts, recurrences, magasinId, rayon, today])
+  ] : null), [ops, tickets, transferts, balises, recurrences, magasinId, rayon, today])
 
   // Synchronisation : création unique des tâches automatiques, retrait de celles devenues inutiles,
   // nettoyage des tâches terminées depuis plus de 30 jours

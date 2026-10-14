@@ -5,6 +5,7 @@ import { db } from '../../lib/firebase'
 import { ORDER_CLOSED_STATUTS } from '../../lib/constants'
 import { isOpVisibleFor, opStatus, todayStr } from '../../lib/opSearch'
 import { TRANSFER_ACTIVE_STATUSES, readField, transferNeedsAction } from '../../lib/transferts'
+import { BALISE_TRANSFERT_COLLECTION, DEMANDE_ACTIVES, etapeDemande } from '../../lib/balises'
 
 // Compte les documents côté serveur (1 lecture facturée par tranche de 1000 docs)
 // au lieu de télécharger toute la collection juste pour afficher un nombre.
@@ -22,6 +23,7 @@ export function useHomeCounts(profile, effectiveMagasinId, isGlobal) {
   const [orderCount, setOrderCount] = useState(null)
   const [opCount, setOpCount] = useState(null)
   const [transfertCount, setTransfertCount] = useState(null)
+  const [baliseCount, setBaliseCount] = useState(null)
 
   // Compteur tickets actifs (hors Prêt à rendre et Clôturé)
   useEffect(() => {
@@ -71,5 +73,13 @@ export function useHomeCounts(profile, effectiveMagasinId, isGlobal) {
     })
   }, [profile, effectiveMagasinId])
 
-  return { '/tickets': ticketCount, '/orders': orderCount, '/operations': opCount, '/transfert': transfertCount }
+  // Badge balises : demandes où le magasin doit répondre, envoyer ou confirmer la réception
+  useEffect(() => {
+    if (!profile || !effectiveMagasinId || !['velo', 'directeurmag'].includes(profile.role)) return
+    const q = query(collection(db, BALISE_TRANSFERT_COLLECTION), where('status', 'in', DEMANDE_ACTIVES))
+    return onSnapshot(q, snap => setBaliseCount(snap.docs.filter(d => etapeDemande(d.data(), effectiveMagasinId).mine).length),
+      () => setBaliseCount(null))
+  }, [profile, effectiveMagasinId])
+
+  return { '/tickets': ticketCount, '/orders': orderCount, '/operations': opCount, '/transfert': transfertCount, '/balises': baliseCount }
 }

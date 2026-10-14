@@ -23,6 +23,7 @@ function lienAuto(t) {
   if (t.auto.type === 'atelier') return { to: `/tickets?open=${encodeURIComponent(t.auto.refId)}`, label: 'Ouvrir le ticket' }
   if (t.auto.type === 'op_debut' || t.auto.type === 'op_fin') return { to: `/operations/${encodeURIComponent(t.auto.refId)}`, label: 'Ouvrir l’OP' }
   if (t.auto.type === 'transfert') return { to: '/transfert', label: 'Ouvrir les transferts' }
+  if (t.auto.type === 'balise') return { to: '/balises', label: 'Ouvrir les balises' }
   return null
 }
 

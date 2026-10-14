@@ -20,6 +20,7 @@ const Operations      = lazy(() => import('./pages/Operations'))
 const OperationDetail = lazy(() => import('./pages/OperationDetail'))
 const Flocage         = lazy(() => import('./pages/Flocage'))
 const Transfert       = lazy(() => import('./pages/Transfert'))
+const Balises         = lazy(() => import('./pages/Balises'))
 const Obut            = lazy(() => import('./pages/Obut'))
 const Todo            = lazy(() => import('./pages/Todo'))
 const Budgets         = lazy(() => import('./pages/Budgets'))
@@ -128,6 +129,14 @@ export default function App() {
           <Route
             path="/budgets/:id"
             element={<RoleRoute roles={['acheteur', 'directeurgen']}><BudgetDetail /></RoleRoute>}
+          />
+          <Route
+            path="/balises"
+            element={
+              <RoleRoute roles={['velo', 'directeurmag', 'acheteur', 'directeurgen', 'admin']} acheteurRayons={['velo']}>
+                <Balises />
+              </RoleRoute>
+            }
           />
           <Route
             path="/obut"

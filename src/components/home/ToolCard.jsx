@@ -12,6 +12,7 @@ const META = {
   '/tickets': n => `${n} ticket${n > 1 ? 's' : ''}`,
   '/orders': n => `${n} commande${n > 1 ? 's' : ''}`,
   '/transfert': n => `${n} transfert${n > 1 ? 's' : ''}`,
+  '/balises': n => `${n} balise${n > 1 ? 's' : ''} à traiter`,
 }
 export function groupMeta(tools, counts) {
   return tools.filter(t => META[t.path] && counts[t.path] > 0).map(t => META[t.path](counts[t.path])).join(' · ')

@@ -9,7 +9,7 @@ import {
 } from '@firebase/rules-unit-testing'
 import {
   collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, query,
-  Timestamp, serverTimestamp, setDoc, updateDoc, where,
+  Timestamp, serverTimestamp, setDoc, updateDoc, where, writeBatch,
 } from 'firebase/firestore'
 
 const [host, port] = (process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080').split(':')
@@ -507,5 +507,64 @@ describe('budgets acheteurs', () => {
       await assertFails(setDoc(doc(db, 'budgets', 'x'), { nom: 'BUDGET PE27' }))
       await assertFails(updateDoc(doc(db, 'budgets', 'b', 'marques', 'cycle'), { 'saisie.a': 1 }))
     }
+  })
+})
+
+describe('balises de diagnostic', () => {
+  const seed = async (demande = null) => env.withSecurityRulesDisabled(async ctx => {
+    const db = ctx.firestore()
+    await setDoc(doc(db, 'balises', 'b1'), { type: 'Bosch', nom: 'Bosch n° 1', magasinId: 'A', magasinNom: 'Magasin A' })
+    if (demande) await setDoc(doc(db, 'balise_transferts', 'd1'), { baliseId: 'b1', fromMagasinId: 'A', toMagasinId: 'B', createdBy: 'veloB', status: demande })
+  })
+  const nouvelle = (uid, over = {}) => ({ baliseId: 'b1', fromMagasinId: 'A', toMagasinId: 'B', createdBy: uid, status: 'pending', ...over })
+
+  it("l'acheteur et l'admin créent les fiches, pas les magasins", async () => {
+    const fiche = { type: 'Shimano', nom: 'E-Tube', magasinId: 'B' }
+    await assertSucceeds(setDoc(doc(as('acheteur'), 'balises', 'x'), fiche))
+    await assertSucceeds(setDoc(doc(as('admin'), 'balises', 'y'), fiche))
+    await assertFails(setDoc(doc(as('dirmagA'), 'balises', 'z'), fiche))
+    await assertFails(setDoc(doc(as('veloA'), 'balises', 'z'), fiche))
+  })
+  it("un magasin ne modifie pas une fiche ni ne déplace une balise sans demande", async () => {
+    await seed()
+    await assertFails(updateDoc(doc(as('veloA'), 'balises', 'b1'), { note: 'écran cassé' }))
+    await assertFails(updateDoc(doc(as('veloA'), 'balises', 'b1'), { magasinId: 'B' }))
+    await assertFails(updateDoc(doc(as('veloB'), 'balises', 'b1'), { magasinId: 'B' }))
+    await assertSucceeds(updateDoc(doc(as('acheteur'), 'balises', 'b1'), { note: 'câbles fournis' }))
+  })
+  it("un magasin demande la balise d'un autre, pour lui-même seulement", async () => {
+    await seed()
+    await assertSucceeds(setDoc(doc(as('veloB'), 'balise_transferts', 'n1'), nouvelle('veloB')))
+    await assertFails(setDoc(doc(as('veloA'), 'balise_transferts', 'n2'), nouvelle('veloA')))
+    await assertFails(setDoc(doc(as('veloB'), 'balise_transferts', 'n3'), nouvelle('veloB', { fromMagasinId: 'C' })))
+    await assertFails(setDoc(doc(as('veloB'), 'balise_transferts', 'n4'), nouvelle('veloB', { status: 'shipped' })))
+  })
+  it("chacun son étape : A accepte et envoie, B annule ou reçoit", async () => {
+    await seed('pending')
+    await assertFails(updateDoc(doc(as('veloB'), 'balise_transferts', 'd1'), { status: 'accepted' }))
+    await assertFails(updateDoc(doc(as('veloA'), 'balise_transferts', 'd1'), { status: 'shipped' }))
+    await assertSucceeds(updateDoc(doc(as('veloA'), 'balise_transferts', 'd1'), { status: 'accepted' }))
+    await assertFails(updateDoc(doc(as('veloA'), 'balise_transferts', 'd1'), { status: 'shipped', toMagasinId: 'A' }))
+    await assertSucceeds(updateDoc(doc(as('veloA'), 'balise_transferts', 'd1'), { status: 'shipped' }))
+    await assertFails(updateDoc(doc(as('veloA'), 'balise_transferts', 'd1'), { status: 'completed' }))
+  })
+  it("à la réception, B passe la balise chez lui ; sans demande en route, impossible", async () => {
+    await seed('shipped')
+    const reception = { magasinId: 'B', magasinNom: 'Magasin B', dernierTransfertId: 'd1' }
+    await assertFails(updateDoc(doc(as('chaussureA'), 'balises', 'b1'), { ...reception, magasinId: 'A' }))
+    await assertSucceeds(updateDoc(doc(as('veloB'), 'balises', 'b1'), reception))
+    await assertSucceeds(updateDoc(doc(as('veloB'), 'balise_transferts', 'd1'), { status: 'completed' }))
+  })
+  it("réception en une seule écriture groupée (balise + demande)", async () => {
+    await seed('shipped')
+    const db = as('veloB')
+    const batch = writeBatch(db)
+    batch.update(doc(db, 'balises', 'b1'), { magasinId: 'B', magasinNom: 'Magasin B', dernierTransfertId: 'd1' })
+    batch.update(doc(db, 'balise_transferts', 'd1'), { status: 'completed' })
+    await assertSucceeds(batch.commit())
+  })
+  it("demande pas encore envoyée : B ne peut pas prendre la balise", async () => {
+    await seed('accepted')
+    await assertFails(updateDoc(doc(as('veloB'), 'balises', 'b1'), { magasinId: 'B', dernierTransfertId: 'd1' }))
   })
 })

@@ -15,6 +15,7 @@ const PAGE_TITLES = {
   '/tickets': 'Réparation / SAV',
   '/orders': 'Commandes',
   '/transfert': 'Transferts',
+  '/balises': 'Balises',
   '/settings': 'Admin',
   '/b2b': 'B2B',
   '/rh': 'Ressources Humaines',

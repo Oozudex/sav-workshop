@@ -78,6 +78,21 @@ export const SECTIONS = [
     color: 'teal',
   },
   {
+    label: 'Balises',
+    group: 'velo',
+    description: 'Voir quel magasin a quelle balise de diagnostic et la demander',
+    path: '/balises',
+    roles: ['velo', 'acheteur', 'directeurmag', 'directeurgen', 'admin'],
+    acheteurRayons: ['velo'],
+    icon: (
+      <svg aria-hidden="true" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <rect x="6" y="3" width="12" height="18" rx="2" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 7h6M9 11h6M12 15.5v.01M10 21v-2h4v2" />
+      </svg>
+    ),
+    color: 'cyan',
+  },
+  {
     label: 'Google Drive',
     group: 'velo',
     description: 'Accéder aux documents et fichiers partagés du groupe',

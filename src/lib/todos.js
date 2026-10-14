@@ -2,6 +2,7 @@
 // tâches récurrentes et mot du soir. Fonctions pures (tests/unit/todos.test.mjs).
 import { opRayons } from './opSearch.js'
 import { transferNextStep, transferSides } from './transferts.js'
+import { etapeDemande } from './balises.js'
 
 export const TODO_COLLECTION = 'todos'
 export const RECURRENCE_COLLECTION = 'todo_recurrences'
@@ -117,6 +118,45 @@ export function transfertTodoSpecs(transferts, { magasinId }) {
   return out
 }
 
+/**
+ * Demandes de balises où c'est au magasin d'agir (répondre, envoyer, confirmer la réception), une tâche
+ * par étape comme les transferts de vélos ; et relance du demandeur si rien ne bouge depuis 2 jours
+ * (pas de réponse, ou balise acceptée mais pas encore partie).
+ */
+export const BALISE_RELANCE_JOURS = 2
+const BALISE_TITRES = {
+  respond: d => `Répondre à la demande de balise « ${d.baliseNom} » de ${d.toMagasinNom || 'un autre magasin'}`,
+  ship:    d => `Envoyer la balise « ${d.baliseNom} » à ${d.toMagasinNom || 'l’autre magasin'} et la marquer envoyée`,
+  receive: d => `Confirmer la réception de la balise « ${d.baliseNom} » envoyée par ${d.fromMagasinNom || 'l’autre magasin'}`,
+}
+const BALISE_RELANCES = {
+  pending:  { depuis: 'createdAt', titre: d => `Relancer ${d.fromMagasinNom || 'l’autre magasin'} : pas encore de réponse pour la balise « ${d.baliseNom} »` },
+  accepted: { depuis: 'respondedAt', titre: d => `Relancer ${d.fromMagasinNom || 'l’autre magasin'} : la balise « ${d.baliseNom} » n’est pas encore partie` },
+}
+export function baliseTodoSpecs(demandes, { magasinId, now = Date.now() }) {
+  const out = []
+  for (const d of demandes) {
+    const step = etapeDemande(d, magasinId)
+    if (step.mine && BALISE_TITRES[step.action]) {
+      out.push({
+        id: todoAutoId(`balise_${step.action}`, d.id, magasinId, 'velo'),
+        titre: BALISE_TITRES[step.action](d),
+        auto: { type: 'balise', refId: d.id },
+      })
+    }
+    const relance = BALISE_RELANCES[d.status]
+    const depuis = relance && toMs(d[relance.depuis])
+    if (d.toMagasinId === magasinId && depuis && now - depuis >= BALISE_RELANCE_JOURS * 86400000) {
+      out.push({
+        id: todoAutoId(`balise_relance_${d.status}`, d.id, magasinId, 'velo'),
+        titre: relance.titre(d),
+        auto: { type: 'balise', refId: d.id },
+      })
+    }
+  }
+  return out
+}
+
 // Tâches récurrentes du jour : une par récurrence active prévue ce jour-là
 export function recurrenceSpecs(recurrences, { today }) {
   const jour = weekdayIndex(today)
@@ -165,7 +205,7 @@ export function motRecent(mot, now = Date.now()) {
 
 // Tâche automatique dont la raison a disparu (ticket rendu, OP supprimée) et pas encore cochée
 export function autoObsolete(todo, specIds) {
-  return !!todo.auto && ['op_debut', 'op_fin', 'atelier', 'transfert'].includes(todo.auto.type) && !todo.fait && !specIds.has(todo.id)
+  return !!todo.auto && ['op_debut', 'op_fin', 'atelier', 'transfert', 'balise'].includes(todo.auto.type) && !todo.fait && !specIds.has(todo.id)
 }
 
 // ── Tigre de la semaine ─────────────────────────────────────────────────────
