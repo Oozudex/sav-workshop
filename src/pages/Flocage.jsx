@@ -12,6 +12,7 @@ import { GLOBAL_ROLES } from '../lib/constants'
 import { escapeHtml } from '../lib/security'
 import Dialog from '../components/Dialog'
 import RequiredHint from '../components/RequiredHint'
+import { usePreselectionMembre } from '../lib/useStaff'
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
 const LETTRES = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
@@ -425,13 +426,15 @@ function CommandeModal({ commande, onClose, onSave, stock, profile, magasinId })
       Promise.all(rayonIds.map(rid =>
         getDocs(collection(db, 'magasins', magasinId, 'rayons', rid, 'staff'))
       )).then(snaps => {
-        const all = snaps.flatMap(s => s.docs.map(d => d.data().nom)).filter(Boolean).sort()
+        const all = snaps.flatMap(s => s.docs.filter(d => d.data().actif !== false).map(d => d.data().nom)).filter(Boolean).sort()
         setVendeurs(all)
       })
     })
   }, [magasinId])
 
   function setF(k, v) { setForm(f => ({ ...f, [k]: v })) }
+  // Nouvelle commande, un seul vendeur dans le rayon : choisi d'office
+  usePreselectionMembre(commande ? [] : vendeurs, form.vendeur, nom => setF('vendeur', nom))
   function setLigne(pos, k, v) {
     setForm(f => ({ ...f, lignes: f.lignes.map(l => l.position === pos ? { ...l, [k]: v } : l) }))
   }

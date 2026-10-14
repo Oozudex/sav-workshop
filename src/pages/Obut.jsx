@@ -16,7 +16,7 @@ import { useMagasin } from '../store/useMagasin'
 import { db } from '../lib/firebase'
 import { CAN_DELETE_ROLES, GLOBAL_ROLES } from '../lib/constants'
 import { toDate } from '../lib/ticketStats'
-import { useStaff } from '../lib/useStaff'
+import { usePreselectionMembre, useStaff } from '../lib/useStaff'
 import { formatEuro, parseEuro } from '../lib/orders'
 import {
   DEFAULT_CATALOGUE, OBUT_CLOSED_STATUSES, OBUT_NEXT_STEP, OBUT_OPEN_STATUSES, OBUT_STATUSES, OBUT_STATUS_META,
@@ -142,6 +142,8 @@ function Sheet({ onClose, children, footer, closeOnOverlay = true }) {
 function NewOrder({ catalogue, staff, onSubmit, onClose }) {
   const [form, setForm] = useState(() => emptyObutForm(catalogue, todayStr()))
   const [statut, setStatut] = useState('en_attente')
+  // Un seul employé dans le rayon : vendeur choisi d'office
+  usePreselectionMembre(staff, form.vendeur, nom => setForm(f => ({ ...f, vendeur: nom })))
   const [tried, setTried] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')

@@ -10,7 +10,7 @@ import {
 } from 'firebase/firestore'
 import { BIKE_TYPES, PRIORITIES, CAN_DELETE_ROLES, STATUSES, STATUS_LABELS } from '../lib/constants'
 import { STATUS_DOT } from './TicketCard'
-import { useStaff } from '../lib/useStaff'
+import { usePreselectionMembre, useStaff } from '../lib/useStaff'
 import { commentExcerpt, withCommentEdited, withCommentRemoved } from '../lib/ticketHistory'
 import BikeBrandSelect from './BikeBrandSelect'
 import Dialog from './Dialog'
@@ -39,6 +39,8 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onChangeS
     const [commentText, setCommentText] = useState('')
     const [commentAuthor, setCommentAuthor] = useState('')
     const [authorError, setAuthorError] = useState(false)
+    // Un seul employé dans le rayon : auteur du commentaire choisi d'office
+    usePreselectionMembre(users, commentAuthor, setCommentAuthor)
     const [sendingComment, setSendingComment] = useState(false)
     const [editingCommentId, setEditingCommentId] = useState(null)
     const [editingText, setEditingText] = useState('')
@@ -221,7 +223,7 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onChangeS
                 customerName: 'client', customerPhone: 'téléphone', bikeType: 'type vélo', bikeBrand: 'marque',
                 bikeModel: 'modèle', serialNumber: 'n° série', purchaseDate: "date d'achat",
                 underWarranty: 'garantie', issueDescription: 'problème', accessoriesLeft: 'accessoires',
-                priority: 'priorité', dueDate: 'date prévue', createdByName: 'créé par',
+                priority: 'priorité', dueDate: 'date prévue', createdByName: 'créé par', ficheAtelier: 'réf. fiche atelier',
             }
             const note = Object.keys(after).map(k => FIELD_LABELS[k] || k).join(', ')
             await updateDoc(doc(db, 'tickets', ticket.id), {
@@ -550,6 +552,14 @@ export default function TicketModal({ ticket, role, onClose, onDelete, onChangeS
                                             : <input className="Input" placeholder="Votre nom" value={draft.createdByName || ''} onChange={e => onChange('createdByName', e.target.value)} />
                                         : <Val>{ticket.createdByName}</Val>}
                                 </Field>
+                                {/* Facultatif : référence de la fiche atelier du logiciel interne (pas affichée sur la carte) */}
+                                <Field label="Réf. fiche atelier">
+                                    {editing
+                                        ? <input className="Input font-mono placeholder:font-sans" maxLength={40} placeholder="Facultatif"
+                                            aria-label="Référence de la fiche atelier (facultatif)"
+                                            value={draft.ficheAtelier || ''} onChange={e => onChange('ficheAtelier', e.target.value)} />
+                                        : <Val>{ticket.ficheAtelier}</Val>}
+                                </Field>
                             </Grid>
                             <div className="mt-3 pt-3 border-t border-gray-100 dark:border-neutral-800 grid grid-cols-2 gap-2 text-xs">
                                 <div>
@@ -685,6 +695,7 @@ function makeDraft(t) {
         purchaseDate: t.purchaseDate || '', underWarranty: !!t.underWarranty,
         issueDescription: t.issueDescription || '', accessoriesLeft: t.accessoriesLeft || '',
         priority: t.priority || 'Normal', dueDate: t.dueDate || '', createdByName: t.createdByName || '',
+        ficheAtelier: t.ficheAtelier || '',
     }
 }
 
@@ -693,6 +704,7 @@ function sanitizeDraft(d) {
         ;['customerPhone', 'bikeBrand', 'bikeModel', 'serialNumber',
             'purchaseDate', 'issueDescription', 'accessoriesLeft', 'dueDate', 'createdByName']
             .forEach(k => { if (n[k] === '') n[k] = null })
+    n.ficheAtelier = n.ficheAtelier?.trim() || null
     return n
 }
 

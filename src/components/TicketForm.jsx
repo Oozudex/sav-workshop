@@ -3,6 +3,7 @@ import { BIKE_TYPES, PRIORITIES } from '../lib/constants'
 import BikeBrandSelect from './BikeBrandSelect'
 import Dialog from './Dialog'
 import RequiredHint from './RequiredHint'
+import { usePreselectionMembre } from '../lib/useStaff'
 
 const INITIAL = {
   customerName: '', customerPhone: '',
@@ -26,6 +27,8 @@ export default function TicketForm({ onSubmit, onClose, users = [], initialValue
 
   function onOverlayClick(e) { if (e.target === overlayRef.current) onClose?.() }
   function set(k, v) { setForm(f => ({ ...f, [k]: v })) }
+  // Un seul employé dans le rayon : « Créé par » rempli d'office
+  usePreselectionMembre(users, form.createdByName, nom => set('createdByName', nom))
   const clean = (v) => (typeof v === 'string' ? v.trim() : v) || null
 
   async function handleSubmit(e) {

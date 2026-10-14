@@ -7,6 +7,7 @@ import { useMagasin } from '../store/useMagasin'
 import { db } from '../lib/firebase'
 import { collection, doc, onSnapshot, orderBy, query } from 'firebase/firestore'
 import { GLOBAL_ROLES } from '../lib/constants'
+import { lienContact } from '../lib/contact'
 import AlertsBell from './AlertsBell'
 import AlertsStrip from './AlertsStrip'
 
@@ -158,6 +159,22 @@ export default function Navbar() {
 
           {/* Alertes atelier (seuils du directeur de magasin) */}
           {profile?.role === 'directeurmag' && <AlertsBell />}
+
+          {/* Contact : e-mail à l'administrateur de l'outil (page et compte préremplis) */}
+          <a
+            href={lienContact({
+              page: pageTitle || (location.pathname === '/' ? 'Accueil' : location.pathname.startsWith('/operations/') ? 'Opérations Commerciales' : null),
+              compte: profile?.displayName || user?.email,
+              magasin: !isGlobal ? magasinNom : null,
+            })}
+            title="Contacter l’administrateur de l’outil"
+            aria-label="Contact : écrire un e-mail à l’administrateur de l’outil"
+            className="h-8 inline-flex items-center gap-1.5 px-2 rounded-lg text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100
+                       dark:text-neutral-400 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors"
+          >
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg>
+            <span className="hidden sm:inline">Contact</span>
+          </a>
 
           {/* Theme toggle */}
           <button

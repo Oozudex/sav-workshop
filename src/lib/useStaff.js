@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { db } from './firebase'
 import { collection, collectionGroup, onSnapshot, orderBy, query, where } from 'firebase/firestore'
+import { membreUnique } from './equipe'
 
 /**
  * Retourne les membres actifs des rayons d'un magasin.
@@ -36,4 +37,16 @@ export function useStaff(magasinId, rayonType) {
   return useMemo(() => staff.filter(s =>
     s.actif !== false && (!rayonType || rayonIds?.has(s.rayonId))
   ), [staff, rayonType, rayonIds])
+}
+
+/**
+ * Nouvelle saisie (« Créé par », auteur d'un commentaire, vendeur…) : s'il n'y a qu'un membre dans
+ * l'équipe, il est choisi d'office ; à partir de deux membres, rien ne change (choix dans la liste).
+ * À n'utiliser que pour les nouvelles saisies, pas pour modifier une fiche existante.
+ */
+export function usePreselectionMembre(membres, valeur, choisir) {
+  const nom = membreUnique(membres)
+  useEffect(() => {
+    if (nom && valeur !== nom) choisir(nom)
+  }, [nom, valeur, choisir])
 }

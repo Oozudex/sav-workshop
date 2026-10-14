@@ -45,8 +45,10 @@ function TodoItem({ t, today, staff, onToggle, onAssign, onRemove }) {
     <li className="group flex items-start gap-2.5 py-2">
       <button type="button" role="checkbox" aria-checked={!!t.fait}
         onClick={e => {
-          // Tâche non assignée : on demande qui l'a faite (pour le tigre de la semaine)
-          if (!t.fait && !t.assigneA && staff.length) setAsking(asking ? null : { clientX: e.clientX, clientY: e.clientY })
+          // Tâche non assignée : on demande qui l'a faite (pour le tigre de la semaine),
+          // sauf s'il n'y a qu'une personne dans l'équipe : c'est elle
+          if (!t.fait && !t.assigneA && staff.length === 1) onToggle(t, e, staff[0].nom)
+          else if (!t.fait && !t.assigneA && staff.length) setAsking(asking ? null : { clientX: e.clientX, clientY: e.clientY })
           else onToggle(t, e)
         }}
         aria-label={t.fait ? `Remettre « ${t.titre} » à faire` : `Terminer « ${t.titre} »`}

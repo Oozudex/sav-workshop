@@ -22,7 +22,7 @@ import {
 } from '../lib/orders'
 import { toDate } from '../lib/ticketStats'
 import { useMagasin } from '../store/useMagasin'
-import { useStaff } from '../lib/useStaff'
+import { usePreselectionMembre, useStaff } from '../lib/useStaff'
 import Dialog from '../components/Dialog'
 import RequiredHint from '../components/RequiredHint'
 import { markInvalid } from '../components/markInvalid'
@@ -538,6 +538,8 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
   const [noteAuthor, setNoteAuthor] = useState('')
   const [noteText, setNoteText]     = useState('')
   const [noteError, setNoteError]   = useState(false)
+  // Un seul employé dans le rayon : auteur de la note choisi d'office
+  usePreselectionMembre(staff, noteAuthor, setNoteAuthor)
   const [sendingNote, setSendingNote] = useState(false)
   const [editingNote, setEditingNote] = useState(null) // note en cours de modification
   const noteKey = n => `${n.at}|${n.author}`
@@ -838,6 +840,8 @@ function OrderModal({ order, staff, canDelete, onClose, onChangeStatut, onSaveFi
 /* ── Formulaire de création ───────────────────────────────────────────────── */
 function OrderForm({ staff, onSubmit, onClose }) {
   const [fields, setFields]   = useState(EMPTY_FIELDS)
+  // Un seul employé dans le rayon : vendeur choisi d'office
+  usePreselectionMembre(staff, fields.createur, nom => setFields(f => ({ ...f, createur: nom })))
   const [statut, setStatut]   = useState('a-commander')
   const [note, setNote]       = useState('')
   const [submitting, setSubmitting] = useState(false)
