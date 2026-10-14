@@ -27,3 +27,14 @@ Sans logo, l'ILV affiche le nom de la marque en toutes lettres à la place.
 - `fonts/` : polices libres (licence SIL Open Font License) choisies et réglées pour ressembler aux
   polices Piivo : Saira (instances réglées en graisse et en largeur), Arimo (équivalent d'Arial),
   Roboto Condensed, Source Sans 3, Montserrat. Limitées aux caractères latins.
+
+## ILV 10×20 : `1020/`
+
+Chevalets 20 × 10 cm de l'onglet « ILV 10×20 » des OP, dessinés par `src/lib/ilv1020Pdf.js`.
+
+- `carte-cadeau.png` : la carte cadeau Intersport (fond transparent), posée sur le bandeau « … € offerts ».
+- `prix-promo-blanc.png` : le logo « PRIX PROMO » de `badges/`, passé en blanc et agrandi ; les lettres
+  de « PROMO » sont transparentes et prennent le rouge du fond.
+- `apercus/` : vignettes des modèles affichées dans l'onglet (face du bas de chaque chevalet, JPEG 480 × 240).
+  À refaire si un modèle change.
+

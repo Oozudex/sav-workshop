@@ -15,6 +15,8 @@ import {
 import { GLOBAL_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
 import IlvDialog from '../components/IlvDialog'
 import ImpressionsPanel, { useImpressions } from '../components/ImpressionsPanel'
+import Ilv1020Panel from '../components/Ilv1020Panel'
+import { peutFaireIlv1020 } from '../lib/ilv1020'
 import { familleSansPack, sansPack } from '../lib/ilv'
 import CatalogueProductModal from '../components/CatalogueProductModal'
 import ActionsMenu from '../components/ActionsMenu'
@@ -1545,8 +1547,10 @@ export default function Operations() {
   ]
   const vuePrix = section === 'catalogue' // Liste des vélos (ILV)
   const vueImpression = section === 'imprimer' // À imprimer (historique d'impression)
+  const avec1020 = peutFaireIlv1020(profile)
+  const vue1020 = avec1020 && section === 'ilv1020' // ILV 10×20 (chevalets)
   const vueListeOp = ['en_cours', 'a_venir', 'terminee'].includes(section)
-  const tabs = vuePrix || vueImpression ? [] : OP_TABS
+  const tabs = vuePrix || vueImpression || vue1020 ? [] : OP_TABS
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
@@ -1558,9 +1562,9 @@ export default function Operations() {
 
           {/* Choix du bloc : opérations ou listes de prix */}
           <div className="flex items-center justify-between gap-3">
-            <div className="inline-flex p-1 rounded-xl bg-gray-200/70 dark:bg-neutral-800" role="tablist" aria-label="Affichage">
-              {[['en_cours', 'Opérations', !vuePrix && !vueImpression], ['catalogue', 'Liste des vélos (ILV)', vuePrix],
-                ['imprimer', 'À imprimer', vueImpression, aImprimer]].map(([key, label, active, count]) => (
+            <div className="inline-flex max-w-full overflow-x-auto p-1 rounded-xl bg-gray-200/70 dark:bg-neutral-800" role="tablist" aria-label="Affichage">
+              {[['en_cours', 'Opérations', !vuePrix && !vueImpression && !vue1020], ['catalogue', 'Liste des vélos (ILV)', vuePrix],
+                ['imprimer', 'À imprimer', vueImpression, aImprimer], ...(avec1020 ? [['ilv1020', 'ILV 10×20', vue1020]] : [])].map(([key, label, active, count]) => (
                 <button key={key} role="tab" aria-selected={active} onClick={() => { setSection(key); setSearch('') }}
                   className={['h-8 px-3 sm:px-4 inline-flex items-center gap-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap',
                     active ? 'bg-white text-gray-900 shadow-sm dark:bg-neutral-950 dark:text-white' : 'text-gray-600 hover:text-gray-800 dark:text-neutral-400 dark:hover:text-neutral-200'].join(' ')}>
@@ -1708,6 +1712,7 @@ export default function Operations() {
             {section === 'catalogue' && <ProduitsSection key="catalogue" canCreate={canCreate} mode="catalogue" />}
             {section === 'engages' && <ProduitsSection key="engages" canCreate={canCreate} mode="engages" />}
             {vueImpression && <ImpressionsPanel impressions={impressions} />}
+            {vue1020 && <Ilv1020Panel />}
 
             {/* Liste des OPs (sections standard) */}
             {['en_cours', 'a_venir', 'terminee'].includes(section) && (
