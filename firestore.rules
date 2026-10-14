@@ -429,5 +429,33 @@ service cloud.firestore {
       allow update: if isSignedIn() && (isGlobal() || (obutLocal() && inMyStore(resource.data) && inMyStoreNew()));
       allow delete: if isSignedIn() && (isGlobal() || (isDirMag() && inMyStore(resource.data)));
     }
+
+    /* ── Budgets acheteurs (AH / PE) ─────────────────────────────────────── */
+    // Réservés aux acheteurs et à la direction : listes des univers et des magasins du budget,
+    // budgets du groupe (base, segments) et leurs lignes par marque. Les lignes par marque
+    // (marques, N-1, saisie) d'un univers ne sont modifiables que par la direction et les acheteurs
+    // à qui cet univers est attribué (users/{uid}.univers). Seule la direction supprime un budget.
+    function canEditBudgetUnivers(u) {
+      return isDirGen() || (isAcheteur() && u in userDoc().get('univers', []));
+    }
+
+    match /budget_univers/{id} {
+      allow read, write: if isSignedIn() && isGlobal();
+    }
+    match /budget_magasins/{id} {
+      allow read, write: if isSignedIn() && isGlobal();
+    }
+    match /budgets/{budgetId} {
+      allow read, create, update: if isSignedIn() && isGlobal();
+      allow delete: if isSignedIn() && isDirGen();
+
+      match /marques/{marqueId} {
+        allow read: if isSignedIn() && isGlobal();
+        allow create: if isSignedIn() && canEditBudgetUnivers(request.resource.data.univers);
+        allow update: if isSignedIn() && canEditBudgetUnivers(resource.data.univers) &&
+          request.resource.data.univers == resource.data.univers;
+        allow delete: if isSignedIn() && canEditBudgetUnivers(resource.data.univers);
+      }
+    }
   }
 }

@@ -19,6 +19,9 @@ import { DESCRIPTION_MAX, b2bFormErrors, b2bFormInitial, b2bPayload, filtrerB2B,
 import { normalizeUrl } from '../lib/services'
 import Dialog from '../components/Dialog'
 import RequiredHint from '../components/RequiredHint'
+import { UniversChoice, UniversFilter, UniversTags } from '../components/UniversUI'
+import { useBudgetUnivers } from '../lib/budgetsStore'
+import { defaultUniversFilter, filterByUnivers, universOptions } from '../lib/universFilter'
 
 const COLOR = {
   indigo: { bg: 'bg-indigo-50 dark:bg-indigo-500/10', icon: 'text-indigo-600 dark:text-indigo-400', ring: 'hover:ring-indigo-200 dark:hover:ring-indigo-500/30', btn: 'bg-indigo-600 hover:bg-indigo-700' },
@@ -520,6 +523,7 @@ function CarteB2B({ t, actions, contacts, pied, grisee = false }) {
         <div className="min-w-0 flex-1 pt-0.5">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white leading-snug break-words">{t.label}</h3>
           {t.description && <p className="mt-0.5 text-xs text-gray-500 dark:text-neutral-400 leading-relaxed line-clamp-2" title={t.description}>{t.description}</p>}
+          {t.univers?.length > 0 && <div className="mt-1.5"><UniversTags univers={t.univers} /></div>}
         </div>
         {actions && <div className="flex items-center gap-0.5 shrink-0 -mr-1.5 -mt-1">{actions}</div>}
       </div>
@@ -664,14 +668,14 @@ function ApercuCarte({ form }) {
   const contacts = list => list.filter(x => x.value.trim())
   const t = {
     label: form.label.trim() || 'Nom du B2B', description: form.description.trim(), color: form.color,
-    imageUrl: normalizeUrl(form.imageUrl), phones: contacts(form.phones), emails: contacts(form.emails),
+    imageUrl: normalizeUrl(form.imageUrl), phones: contacts(form.phones), emails: contacts(form.emails), univers: form.univers,
   }
   return <CarteB2B t={t} contacts={<ContactsCarte t={t} apercu />} pied={<PiedCarte apercu couleur={form.color} url={form.url.trim() ? normalizeUrl(form.url) : null} />} />
 }
 
 // ── EditModal ────────────────────────────────────────────────────────────────
 // Ajout / modification d'un B2B (acheteurs et direction), avec l'aperçu de la carte
-function EditModal({ tool, magasins, onClose, onSave, onDelete }) {
+function EditModal({ tool, magasins, universNames, onClose, onSave, onDelete }) {
   const [form, setForm] = useState(() => b2bFormInitial(tool))
   const [tried, setTried] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -743,6 +747,15 @@ function EditModal({ tool, magasins, onClose, onSave, onDelete }) {
                       onChange={e => set('imageUrl', e.target.value)} onBlur={e => set('imageUrl', normalizeUrl(e.target.value))}
                       placeholder="https://…/logo.png" {...inv('imageUrl')} />
                   </Champ>
+                </Bloc>
+
+                <Bloc titre="Univers">
+                  <UniversChoice names={universNames} value={form.univers} onChange={v => set('univers', v)} label="Univers du B2B" />
+                  <p className={AIDE}>
+                    {form.univers.length
+                      ? 'Les acheteurs de ces univers le voient dans « Mes univers » ; les autres en choisissant « Tous les univers ».'
+                      : 'Aucun univers coché : B2B commun, affiché pour tout le monde.'}
+                  </p>
                 </Bloc>
 
                 <Bloc titre="Contacts">
@@ -1261,8 +1274,11 @@ export default function B2B() {
     return onSnapshot(q, snap => setMagasins(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [])
 
+  const { list: universList } = useBudgetUnivers(canEdit)
   const [recherche, setRecherche] = useState('')
-  const trouves = filtrerB2B(tools, recherche)
+  const [filtreUnivers, setFiltreUnivers] = useState(() => defaultUniversFilter(profile))
+  const mesUnivers = profile?.role === 'acheteur' ? profile.univers || [] : []
+  const trouves = filterByUnivers(filtrerB2B(tools, recherche), filtreUnivers, mesUnivers)
   const featured = trouves.filter(t => t.featured)
   const secondary = trouves.filter(t => !t.featured)
 
@@ -1316,12 +1332,15 @@ export default function B2B() {
         </div>
 
         {tools.length > 0 && (
-          <div className="relative max-w-sm">
-            <svg aria-hidden="true" className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" />
-            </svg>
-            <input type="search" value={recherche} onChange={e => setRecherche(e.target.value)} aria-label="Rechercher un B2B"
-              placeholder="Rechercher un B2B, une marque, un contact…" className="Input h-10 !pl-9 text-sm" />
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1 sm:max-w-sm">
+              <svg aria-hidden="true" className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" />
+              </svg>
+              <input type="search" value={recherche} onChange={e => setRecherche(e.target.value)} aria-label="Rechercher un B2B"
+                placeholder="Rechercher un B2B, une marque, un contact…" className="Input h-10 !pl-9 text-sm" />
+            </div>
+            <UniversFilter value={filtreUnivers} onChange={setFiltreUnivers} options={universOptions(tools)} mesUnivers={mesUnivers} />
           </div>
         )}
 
@@ -1337,7 +1356,9 @@ export default function B2B() {
         ))}
 
         {tools.length > 0 && trouves.length === 0 && (
-          <p className="text-center py-12 text-sm text-gray-500 dark:text-neutral-400">Aucun B2B ne correspond à « {recherche.trim()} ».</p>
+          <p className="text-center py-12 text-sm text-gray-500 dark:text-neutral-400">
+            {recherche.trim() ? <>Aucun B2B ne correspond à « {recherche.trim()} ».</> : 'Aucun B2B pour cet univers.'}
+          </p>
         )}
 
         {tools.length === 0 && (
@@ -1357,6 +1378,7 @@ export default function B2B() {
         <EditModal
           tool={editTool?.id ? editTool : null}
           magasins={magasins}
+          universNames={universList.map(u => u.nom)}
           onClose={() => setEditTool(null)}
           onSave={handleSave}
           onDelete={handleDelete}

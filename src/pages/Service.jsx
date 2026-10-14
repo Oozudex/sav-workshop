@@ -15,6 +15,9 @@ import {
   EMPTY_SERVICE, credentialWrites, hasCredential, serviceAccess, serviceFormErrors, servicePayload, sortServices,
 } from '../lib/services'
 import RequiredHint from '../components/RequiredHint'
+import { UniversChoice, UniversFilter, UniversTags } from '../components/UniversUI'
+import { useBudgetUnivers } from '../lib/budgetsStore'
+import { defaultUniversFilter, filterByUnivers, universOptions } from '../lib/universFilter'
 
 const COLOR = {
   emerald: { bg: 'bg-emerald-50 dark:bg-emerald-500/10', icon: 'text-emerald-700 dark:text-emerald-400', ring: 'hover:ring-emerald-200 dark:hover:ring-emerald-500/30', btn: 'bg-emerald-700 hover:bg-emerald-800' },
@@ -86,6 +89,7 @@ function ServiceCard({ s, access, isAdmin, onEdit, onCreds }) {
       <div className="flex-1 min-w-0">
         <h2 className="text-sm font-semibold text-gray-900 dark:text-white leading-snug break-words">{s.label}</h2>
         {s.description && <p className="text-xs text-gray-500 dark:text-neutral-400 mt-1 leading-relaxed">{s.description}</p>}
+        {s.univers?.length > 0 && <div className="mt-2"><UniversTags univers={s.univers} /></div>}
       </div>
 
       <div className="grid grid-cols-1 gap-2">
@@ -107,13 +111,14 @@ function ServiceCard({ s, access, isAdmin, onEdit, onCreds }) {
 }
 
 /* ── Création / modification (administrateurs) ─────────────────────────── */
-function ServiceModal({ service, onClose, onSave, onDelete }) {
+function ServiceModal({ service, universNames, onClose, onSave, onDelete }) {
   const editing = !!service?.id
   const [form, setForm] = useState(() => ({
     ...EMPTY_SERVICE,
     ...(service?.id ? {
       label: service.label || '', description: service.description || '', url: service.url || '',
       procedureUrl: service.procedureUrl || '', color: service.color || 'emerald', usesCredentials: !!service.usesCredentials,
+      univers: service.univers || [],
     } : {}),
   }))
   const [tried, setTried] = useState(false)
@@ -141,7 +146,7 @@ function ServiceModal({ service, onClose, onSave, onDelete }) {
 
   return (
     <Modal title={editing ? 'Modifier le service' : 'Nouveau service'}
-      subtitle={editing ? service.label : 'Il apparaîtra pour tous les magasins.'} onClose={onClose}
+      subtitle={editing ? service.label : 'Il apparaîtra pour tous les magasins.'} onClose={onClose} size="max-w-xl"
       footer={<>
         {editing && (confirmDelete ? (
           <span className="mr-auto flex items-center gap-2">
@@ -179,6 +184,16 @@ function ServiceModal({ service, onClose, onSave, onDelete }) {
         <Field label="Lien de la procédure (Google Drive)" error={errors.procedureUrl} hint="Pensez à partager le fichier avec les magasins dans Google Drive.">
           <input className={`Input ${errors.procedureUrl ? INVALID : ''}`} type="url" inputMode="url" value={form.procedureUrl} onChange={e => set('procedureUrl', e.target.value)} placeholder="https://drive.google.com/…" />
         </Field>
+
+        <div className="space-y-1.5">
+          <span className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Univers</span>
+          <UniversChoice names={universNames} value={form.univers} onChange={v => set('univers', v)} label="Univers du service" />
+          <p className="text-[11px] text-gray-500 dark:text-neutral-400">
+            {form.univers.length
+              ? 'Les acheteurs de ces univers le voient dans « Mes univers » ; les autres en choisissant « Tous les univers ».'
+              : 'Aucun univers coché : service commun, affiché pour tout le monde.'}
+          </p>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
           <Field label="Couleur">
@@ -392,6 +407,10 @@ export default function Service() {
   const [loadError, setLoadError] = useState('')
   const [editing, setEditing] = useState(null) // null | {} (nouveau) | service
   const [credsFor, setCredsFor] = useState(null)
+  const { list: universList } = useBudgetUnivers(isAdmin)
+  const [filtreUnivers, setFiltreUnivers] = useState(() => defaultUniversFilter(profile))
+  const mesUnivers = profile?.role === 'acheteur' ? profile.univers || [] : []
+  const shown = services ? filterByUnivers(services, filtreUnivers, mesUnivers) : null
 
   useEffect(() => onSnapshot(collection(db, 'services'),
     snap => setServices(sortServices(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
@@ -433,9 +452,14 @@ export default function Service() {
                 Plateformes de services partenaires du Groupe Nivault, avec leur procédure
               </p>
             </div>
-            {isAdmin && (
-              <button onClick={() => setEditing({})} className={`${BTN_PRIMARY} h-9 sm:h-8 px-4`}>+ Nouveau service</button>
-            )}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              {services?.length > 0 && (
+                <UniversFilter value={filtreUnivers} onChange={setFiltreUnivers} options={universOptions(services)} mesUnivers={mesUnivers} />
+              )}
+              {isAdmin && (
+                <button onClick={() => setEditing({})} className={`${BTN_PRIMARY} h-9 sm:h-8 px-4`}>+ Nouveau service</button>
+              )}
+            </div>
           </div>
 
           {loadError && <Notice notice={{ tone: 'error', text: loadError }} />}
@@ -448,9 +472,11 @@ export default function Service() {
                 text={isAdmin ? 'Ajoutez le premier service : son lien, sa procédure et, si besoin, les identifiants des magasins.' : 'Les services ajoutés par l’administration apparaîtront ici.'}
                 action={isAdmin && <button onClick={() => setEditing({})} className={BTN_PRIMARY}>+ Nouveau service</button>} />
             </div>
+          ) : shown.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-neutral-400 py-10 text-center">Aucun service pour cet univers.</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-              {services.map(s => (
+              {shown.map(s => (
                 <ServiceCard key={s.id} s={s} access={access(s)} isAdmin={isAdmin} onEdit={setEditing} onCreds={setCredsFor} />
               ))}
             </div>
@@ -459,7 +485,7 @@ export default function Service() {
       </main>
 
       {editing && (
-        <ServiceModal service={editing} onClose={() => setEditing(null)} onSave={saveService} onDelete={deleteService} />
+        <ServiceModal service={editing} universNames={universList.map(u => u.nom)} onClose={() => setEditing(null)} onSave={saveService} onDelete={deleteService} />
       )}
 
       {credsFor && credsAccess === 'all' && (

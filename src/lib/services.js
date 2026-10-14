@@ -1,7 +1,7 @@
 // Services partenaires : formulaire, liens et identifiants par magasin
 
 export const EMPTY_SERVICE = {
-  label: '', description: '', url: '', procedureUrl: '', color: 'emerald', usesCredentials: false,
+  label: '', description: '', url: '', procedureUrl: '', color: 'emerald', usesCredentials: false, univers: [],
 }
 
 // Lien absolu http(s) uniquement (pas de javascript:, pas de lien relatif)
@@ -38,6 +38,8 @@ export function servicePayload(form) {
     procedureUrl: normalizeUrl(form.procedureUrl) || null,
     color: form.color || 'emerald',
     usesCredentials: !!form.usesCredentials,
+    // Univers concernés (vide = commun à tous)
+    univers: form.univers || [],
   }
 }
 

@@ -13,6 +13,7 @@ describe('formulaire B2B', () => {
     assert.equal(existant.tousLesMagasins, false)
     assert.deepEqual(existant.phones, [{ label: '', value: '01' }])
     assert.equal(existant.featured, true)
+    assert.deepEqual(vide.univers, [])
   })
   it('nom obligatoire, liens vérifiés (https ajouté au besoin)', () => {
     assert.deepEqual(b2bFormErrors(form()), {})
@@ -38,11 +39,11 @@ describe('formulaire B2B', () => {
     const data = b2bPayload(form({
       label: ' MFC ', description: ' ', url: 'b2b.mfc.fr', imageUrl: '',
       phones: [{ label: ' SAV ', value: ' 02 41 00 00 00 ' }, { label: '', value: '' }],
-      tousLesMagasins: false, storeIds: ['B', 'A'],
+      tousLesMagasins: false, storeIds: ['B', 'A'], univers: ['CYCLE'],
     }), ['A', 'B', 'C'])
     assert.deepEqual(data, {
       label: 'MFC', description: null, url: 'https://b2b.mfc.fr', imageUrl: null,
-      phones: [{ label: 'SAV', value: '02 41 00 00 00' }], emails: [], color: 'indigo', featured: false, storeIds: ['A', 'B'],
+      phones: [{ label: 'SAV', value: '02 41 00 00 00' }], emails: [], color: 'indigo', featured: false, storeIds: ['A', 'B'], univers: ['CYCLE'],
     })
     assert.deepEqual(b2bPayload(form({ storeIds: ['A'] }), ['A']).storeIds, [])
   })

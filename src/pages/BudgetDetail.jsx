@@ -1,0 +1,312 @@
+// Un budget (ex. BUDGET AH27) : imports de la base et du N-1, puis deux lectures
+// Univers › Segment › Magasin ou Magasin › Univers › Segment. Ouvrir un magasin affiche la saisie par marque.
+import { useMemo, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import Navbar from '../components/Navbar'
+import SegmentSaisie from '../components/budgets/SegmentSaisie'
+import { ImportBaseDialog, ImportN1Dialog } from '../components/budgets/ImportDialogs'
+import { BTN_PRIMARY, BTN_SECONDARY, EmptyState, Notice } from '../components/admin/ui'
+import { SAISONS, addTotals, canEditUnivers, computeTotals, formatBudget, previousSeason, sortSegments } from '../lib/budgets'
+import {
+  carryOverN1, deleteBudget, useBudget, useBudgetMagasins, useBudgetMarques, useBudgetUnivers, useBudgetUser,
+  useBudgets,
+} from '../lib/budgetsStore'
+
+const VIEWS = [['univers', 'Univers › Segment › Magasin'], ['magasin', 'Magasin › Univers › Segment']]
+const GRID = 'grid grid-cols-[minmax(12rem,1fr)_repeat(3,6.5rem)_8.5rem] items-center gap-2'
+const LEVEL_PAD = ['pl-2', 'pl-7', 'pl-12']
+
+function dateLabel(ts) {
+  const d = ts?.toDate?.()
+  return d ? d.toLocaleDateString('fr-FR') : ''
+}
+
+function Reste({ cell }) {
+  const reste = cell.base - cell.saisie
+  if (!cell.base && !cell.saisie) return <span className="text-gray-400 dark:text-neutral-500">—</span>
+  const cls = Math.round(reste) === 0 ? 'text-emerald-700 dark:text-emerald-400'
+    : reste < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-neutral-300'
+  return <span className={`tabular-nums ${cls}`}>{reste < 0 ? `+${formatBudget(-reste)}` : formatBudget(reste)}</span>
+}
+
+function HeaderRow() {
+  return (
+    <div className={`${GRID} px-2 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-neutral-400 border-b border-gray-200 dark:border-neutral-800`}>
+      <span>Libellé</span>
+      <span className="text-right">Base</span>
+      <span className="text-right">N-1</span>
+      <span className="text-right">Saisi</span>
+      <span className="text-right" title="Base moins saisi ; + = dépassement">Reste</span>
+    </div>
+  )
+}
+
+function TreeRow({ level, label, hint, cell, open, onToggle }) {
+  const strong = level === 0
+  return (
+    <div className={`${GRID} py-1.5 pr-2 border-b border-gray-100 dark:border-neutral-800 ${strong ? 'bg-gray-50/60 dark:bg-neutral-800/30' : ''}`}>
+      <button type="button" onClick={onToggle} aria-expanded={open}
+        className={`${LEVEL_PAD[level]} flex items-center gap-2 min-w-0 text-left text-sm ${strong ? 'font-semibold' : ''} text-gray-900 dark:text-white hover:underline`}>
+        <svg aria-hidden="true" className={`h-3 w-3 shrink-0 text-gray-400 transition-transform ${open ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+        </svg>
+        <span className="truncate">{label}</span>
+        {hint && <span className="shrink-0 text-[11px] font-normal text-gray-500 dark:text-neutral-400">{hint}</span>}
+      </button>
+      <span className="text-right text-sm tabular-nums text-gray-900 dark:text-white">{formatBudget(cell.base)}</span>
+      <span className="text-right text-sm tabular-nums text-gray-600 dark:text-neutral-300">{formatBudget(cell.n1)}</span>
+      <span className="text-right text-sm tabular-nums text-gray-900 dark:text-white">{formatBudget(cell.saisie)}</span>
+      <span className="text-right text-sm"><Reste cell={cell} /></span>
+    </div>
+  )
+}
+
+function Kpi({ label, value, tone = '' }) {
+  return (
+    <div className="rounded-2xl border px-4 py-3 bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800">
+      <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">{label}</p>
+      <p className={`text-xl font-bold tabular-nums ${tone || 'text-gray-900 dark:text-white'}`}>{value}</p>
+    </div>
+  )
+}
+
+export default function BudgetDetail() {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const user = useBudgetUser()
+  const { budget, loading } = useBudget(id)
+  const { list: marques } = useBudgetMarques(id)
+  const { list: universList } = useBudgetUnivers()
+  const { list: magasins } = useBudgetMagasins()
+  const { list: budgets } = useBudgets()
+
+  const [view, setView] = useState('univers')
+  const isAcheteur = user.role === 'acheteur'
+  const isDirection = user.role === 'directeurgen'
+  // Filtre : '' tous les univers, '*' mes univers (acheteur), sinon un univers
+  const [filtre, setFiltre] = useState(() => (isAcheteur && user.univers.length ? '*' : ''))
+  const [open, setOpen] = useState(() => new Set())
+  const [dialog, setDialog] = useState(null)
+  const [notice, setNotice] = useState(null)
+  const [busy, setBusy] = useState(false)
+
+  const isOpen = key => open.has(key)
+  const toggle = key => setOpen(s => { const n = new Set(s); if (n.has(key)) n.delete(key); else n.add(key); return n })
+
+  const segments = useMemo(() => sortSegments(budget?.segments || [], universList.map(u => u.nom)), [budget?.segments, universList])
+  const totals = useMemo(() => computeTotals(segments, budget?.base, marques), [segments, budget?.base, marques])
+  const marquesBySeg = useMemo(() => {
+    const m = new Map()
+    for (const x of [...marques].sort((a, b) => a.nom.localeCompare(b.nom))) {
+      if (!m.has(x.segId)) m.set(x.segId, [])
+      m.get(x.segId).push(x)
+    }
+    return m
+  }, [marques])
+  const groups = useMemo(() => {
+    const g = []
+    for (const s of segments) {
+      if (g.at(-1)?.univers !== s.univers) g.push({ univers: s.univers, segments: [] })
+      g.at(-1).segments.push(s)
+    }
+    return g
+  }, [segments])
+  const shown = filtre === '*' ? groups.filter(g => user.univers.includes(g.univers))
+    : filtre ? groups.filter(g => g.univers === filtre) : groups
+
+  const prevSeason = budget ? previousSeason(budget) : null
+  const prev = prevSeason && budgets.find(b => b.saison === prevSeason.saison && b.annee === prevSeason.annee)
+
+  if (loading) return <Page><p className="text-sm text-gray-500 dark:text-neutral-400">Chargement…</p></Page>
+  if (!budget) return <Page><EmptyState title="Budget introuvable" action={<Link to="/budgets" className={BTN_SECONDARY + ' inline-flex items-center'}>Retour aux budgets</Link>} /></Page>
+
+  const cellOf = (segs, mags) => addTotals(segs.flatMap(s => mags.map(m => totals[s.id]?.[m.id])))
+  const total = cellOf(shown.flatMap(g => g.segments), magasins)
+  const onlyUnivers = g => g.segments.length === 1 && !g.segments[0].nom
+  const segLabel = s => s.nom || 'Sans segment'
+  const nbMarques = s => marquesBySeg.get(s.id)?.length || 0
+
+  const saisie = (seg, mag) => (
+    <div className="px-2 py-2 bg-gray-50 dark:bg-neutral-950/50 border-b border-gray-100 dark:border-neutral-800">
+      <SegmentSaisie budgetId={budget.id} seg={seg} magasin={mag} base={totals[seg.id]?.[mag.id]?.base || 0}
+        marques={marquesBySeg.get(seg.id) || []} user={user} readOnly={!canEditUnivers(user, seg.univers)} />
+    </div>
+  )
+
+  async function carryOver() {
+    if (!confirm(`Reprendre les marques de ${prev.nom} et leur saisie comme N-1${isAcheteur ? ' (tes univers uniquement)' : ''} ?\nLe N-1 des marques déjà présentes est remplacé ; la saisie de ${budget.nom} n’est pas touchée.`)) return
+    setBusy(true)
+    try {
+      const plan = await carryOverN1(budget, marques, prev, user)
+      setNotice({ tone: 'ok', text: `N-1 repris de ${prev.nom} : ${plan.updates.length} marque(s) mises à jour, ${plan.creates.length} ajoutée(s).` })
+    } catch (err) { setNotice({ text: err.message }) }
+    setBusy(false)
+  }
+
+  async function remove() {
+    if (!confirm(`Supprimer ${budget.nom} ? Toutes les marques et la saisie seront perdues.`)) return
+    if (prompt(`Pour confirmer, tape le nom du budget : ${budget.nom}`)?.trim().toUpperCase() !== budget.nom) return
+    setBusy(true)
+    try { await deleteBudget(budget.id); navigate('/budgets') } catch (err) { setNotice({ text: err.message }); setBusy(false) }
+  }
+
+  return (
+    <Page>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <Link to="/budgets" className="text-xs text-gray-500 dark:text-neutral-400 hover:underline">← Budgets</Link>
+          <h1 className="text-lg font-bold text-gray-900 dark:text-white">{budget.nom}</h1>
+          <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
+            {SAISONS[budget.saison]} {budget.annee}
+            {budget.baseImport && ` · Base importée le ${dateLabel(budget.baseImport.at)}${budget.baseImport.fileName ? ` (${budget.baseImport.fileName})` : ''}`}
+            {budget.n1Import && ` · N-1 : ${budget.n1Import.source}${dateLabel(budget.n1Import.at) ? ` le ${dateLabel(budget.n1Import.at)}` : ''}`}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => setDialog('base')} className={budget.baseImport ? BTN_SECONDARY : BTN_PRIMARY}>
+            {budget.baseImport ? 'Réimporter la base' : 'Importer la base'}
+          </button>
+          <button type="button" onClick={() => setDialog('n1')} className={BTN_SECONDARY}>Importer le N-1 (Excel)</button>
+          {prev && <button type="button" onClick={carryOver} disabled={busy} className={BTN_SECONDARY}>Reprendre le N-1 de {prev.nom}</button>}
+          {isDirection && (
+            <button type="button" onClick={remove} disabled={busy}
+              className="h-8 px-3 rounded-lg text-xs font-semibold text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10 disabled:opacity-50">
+              Supprimer
+            </button>
+          )}
+        </div>
+      </div>
+
+      {notice && <Notice notice={notice} onClose={() => setNotice(null)} />}
+      {isAcheteur && !user.univers.length && (
+        <Notice notice={{ text: 'Aucun univers ne t’est attribué : le budget est en lecture seule. La direction attribue les univers dans Admin › Comptes.' }} />
+      )}
+
+      {segments.length === 0 ? (
+        <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
+          <EmptyState title="Budget vide" text="Commence par importer la base (univers, magasins et budget de base)."
+            action={<button type="button" onClick={() => setDialog('base')} className={BTN_PRIMARY}>Importer la base</button>} />
+        </div>
+      ) : <>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <Kpi label="Budget de base" value={formatBudget(total.base)} />
+          <Kpi label="N-1" value={formatBudget(total.n1)} />
+          <Kpi label="Saisi" value={formatBudget(total.saisie)} />
+          <Kpi label={total.saisie > total.base ? 'Dépassement' : 'Reste à répartir'}
+            value={formatBudget(Math.abs(total.base - total.saisie))}
+            tone={total.saisie > total.base ? 'text-red-600 dark:text-red-400' : ''} />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div role="radiogroup" aria-label="Affichage" className="inline-flex p-1 rounded-xl bg-gray-100 dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800">
+            {VIEWS.map(([k, label]) => (
+              <button key={k} type="button" role="radio" aria-checked={view === k} onClick={() => { setView(k); setOpen(new Set()) }}
+                className={`h-8 px-3 rounded-lg text-xs font-semibold transition-colors ${view === k
+                  ? 'bg-white text-gray-900 shadow-sm dark:bg-neutral-700 dark:text-white'
+                  : 'text-gray-600 hover:text-gray-900 dark:text-neutral-400 dark:hover:text-white'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <select value={filtre} onChange={e => setFiltre(e.target.value)} aria-label="Filtrer par univers"
+            className="h-9 px-2 rounded-lg border text-sm bg-white dark:bg-neutral-950 border-gray-200 dark:border-neutral-700 text-gray-900 dark:text-white">
+            {isAcheteur && user.univers.length > 0 && <option value="*">Mes univers ({user.univers.length})</option>}
+            <option value="">Tous les univers</option>
+            {groups.map(g => <option key={g.univers} value={g.univers}>{g.univers}</option>)}
+          </select>
+          {open.size > 0 && <button type="button" onClick={() => setOpen(new Set())} className={BTN_SECONDARY}>Tout replier</button>}
+        </div>
+
+        <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-x-auto">
+          <div className="min-w-[44rem]">
+            <HeaderRow />
+            {view === 'univers' ? shown.map(g => {
+              const uKey = `u:${g.univers}`
+              return (
+                <div key={uKey}>
+                  <TreeRow level={0} label={g.univers} cell={cellOf(g.segments, magasins)} open={isOpen(uKey)} onToggle={() => toggle(uKey)}
+                    hint={onlyUnivers(g) ? '' : `${g.segments.length} segment${g.segments.length > 1 ? 's' : ''}`} />
+                  {isOpen(uKey) && (onlyUnivers(g)
+                    ? magasins.map(mag => {
+                      const k = `${uKey}|m:${mag.id}`
+                      return (
+                        <div key={k}>
+                          <TreeRow level={1} label={mag.nom} cell={cellOf(g.segments, [mag])} open={isOpen(k)} onToggle={() => toggle(k)} />
+                          {isOpen(k) && saisie(g.segments[0], mag)}
+                        </div>
+                      )
+                    })
+                    : g.segments.map(seg => {
+                      const sKey = `s:${seg.id}`
+                      return (
+                        <div key={sKey}>
+                          <TreeRow level={1} label={segLabel(seg)} hint={`${nbMarques(seg)} marque${nbMarques(seg) > 1 ? 's' : ''}`}
+                            cell={cellOf([seg], magasins)} open={isOpen(sKey)} onToggle={() => toggle(sKey)} />
+                          {isOpen(sKey) && magasins.map(mag => {
+                            const k = `${sKey}|m:${mag.id}`
+                            return (
+                              <div key={k}>
+                                <TreeRow level={2} label={mag.nom} cell={cellOf([seg], [mag])} open={isOpen(k)} onToggle={() => toggle(k)} />
+                                {isOpen(k) && saisie(seg, mag)}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )
+                    }))}
+                </div>
+              )
+            }) : magasins.map(mag => {
+              const mKey = `m:${mag.id}`
+              return (
+                <div key={mKey}>
+                  <TreeRow level={0} label={mag.nom} cell={cellOf(shown.flatMap(g => g.segments), [mag])} open={isOpen(mKey)} onToggle={() => toggle(mKey)} />
+                  {isOpen(mKey) && shown.map(g => {
+                    const uKey = `${mKey}|u:${g.univers}`
+                    return (
+                      <div key={uKey}>
+                        <TreeRow level={1} label={g.univers} cell={cellOf(g.segments, [mag])} open={isOpen(uKey)} onToggle={() => toggle(uKey)} />
+                        {isOpen(uKey) && (onlyUnivers(g) ? saisie(g.segments[0], mag) : g.segments.map(seg => {
+                          const k = `${mKey}|s:${seg.id}`
+                          return (
+                            <div key={k}>
+                              <TreeRow level={2} label={segLabel(seg)} hint={`${nbMarques(seg)} marque${nbMarques(seg) > 1 ? 's' : ''}`}
+                                cell={cellOf([seg], [mag])} open={isOpen(k)} onToggle={() => toggle(k)} />
+                              {isOpen(k) && saisie(seg, mag)}
+                            </div>
+                          )
+                        }))}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })}
+            <div className={`${GRID} px-2 py-2 text-sm font-bold text-gray-900 dark:text-white`}>
+              <span>Total{filtre === '*' ? ' de mes univers' : filtre ? ` ${filtre}` : ''}</span>
+              <span className="text-right tabular-nums">{formatBudget(total.base)}</span>
+              <span className="text-right tabular-nums">{formatBudget(total.n1)}</span>
+              <span className="text-right tabular-nums">{formatBudget(total.saisie)}</span>
+              <span className="text-right"><Reste cell={total} /></span>
+            </div>
+          </div>
+        </div>
+        {magasins.length === 0 && <Notice notice={{ text: 'La liste des magasins est vide : remplis-la dans l’onglet Magasins des budgets.' }} />}
+      </>}
+
+      {dialog === 'base' && <ImportBaseDialog budget={budget} univers={universList} magasins={magasins} user={user} onClose={() => setDialog(null)} />}
+      {dialog === 'n1' && <ImportN1Dialog budget={budget} marques={marques} univers={universList} magasins={magasins} user={user} onClose={() => setDialog(null)} />}
+    </Page>
+  )
+}
+
+function Page({ children }) {
+  return (
+    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
+      <Navbar />
+      <main id="contenu" tabIndex={-1} className="focus:outline-none flex-1 p-4 sm:p-6">
+        <div className="max-w-6xl mx-auto space-y-5">{children}</div>
+      </main>
+    </div>
+  )
+}

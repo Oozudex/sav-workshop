@@ -22,8 +22,8 @@ describe('formulaire', () => {
     assert.deepEqual(serviceFormErrors({ label: 'Upway', url: 'upway.fr', procedureUrl: 'drive.google.com/d/1' }), {})
   })
   it("prépare les données", () => {
-    const p = servicePayload({ label: ' Upway ', description: '', url: 'upway.fr', procedureUrl: '', usesCredentials: true })
-    assert.deepEqual(p, { label: 'Upway', description: null, url: 'https://upway.fr', procedureUrl: null, color: 'emerald', usesCredentials: true })
+    const p = servicePayload({ label: ' Upway ', description: '', url: 'upway.fr', procedureUrl: '', usesCredentials: true, univers: ['CYCLE'] })
+    assert.deepEqual(p, { label: 'Upway', description: null, url: 'https://upway.fr', procedureUrl: null, color: 'emerald', usesCredentials: true, univers: ['CYCLE'] })
   })
 })
 

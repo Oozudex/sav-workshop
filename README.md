@@ -2,7 +2,7 @@
 
 Application interne des magasins : tickets de réparation (SAV), commandes clients,
 transferts de vélos entre magasins, flocage, commandes OBUT, opérations commerciales,
-planning RH et espace B2B.
+planning RH, espace B2B et budgets d’achat des acheteurs.
 
 **Stack** : React 18 · Vite 8 · Tailwind CSS 3 · Zustand · React Router 7 · Firebase (Auth + Firestore)
 

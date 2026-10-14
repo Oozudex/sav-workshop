@@ -429,3 +429,67 @@ describe('accès anonyme', () => {
     await assertFails(getDoc(doc(db, 'users', 'veloA')))
   })
 })
+
+describe('budgets acheteurs', () => {
+  const marque = (univers, extra = {}) => ({ univers, segId: 's', nom: 'NIKE', saisie: {}, ...extra })
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async ctx => {
+      const db = ctx.firestore()
+      await setDoc(doc(db, 'users', 'acheteurCycle'), { role: 'acheteur', univers: ['CYCLE'] })
+      await setDoc(doc(db, 'budgets', 'b'), { nom: 'BUDGET AH27' })
+      await setDoc(doc(db, 'budgets', 'b', 'marques', 'cycle'), marque('CYCLE'))
+      await setDoc(doc(db, 'budgets', 'b', 'marques', 'golf'), marque('GOLF'))
+    })
+  })
+
+  it("acheteurs et direction gèrent les budgets, les univers et les magasins", async () => {
+    for (const uid of ['acheteur', 'dirgen', 'admin']) {
+      const db = as(uid)
+      await assertSucceeds(setDoc(doc(db, 'budget_univers', uid), { nom: 'CYCLE', ordre: 1 }))
+      await assertSucceeds(setDoc(doc(db, 'budget_magasins', uid), { nom: 'LAVAL', code: 'LVL2 551/0' }))
+      await assertSucceeds(setDoc(doc(db, 'budgets', uid), { nom: 'BUDGET AH27', saison: 'AH', annee: 2027 }))
+      await assertSucceeds(updateDoc(doc(db, 'budgets', 'b'), { base: { s: { a: 1 } } }))
+      await assertSucceeds(getDocs(collection(db, 'budgets', 'b', 'marques')))
+    }
+  })
+  it("la direction modifie les marques de tous les univers", async () => {
+    for (const uid of ['dirgen', 'admin']) {
+      const db = as(uid)
+      await assertSucceeds(setDoc(doc(db, 'budgets', 'b', 'marques', uid), marque('GOLF')))
+      await assertSucceeds(updateDoc(doc(db, 'budgets', 'b', 'marques', 'golf'), { 'saisie.a': 10 }))
+      await assertSucceeds(deleteDoc(doc(db, 'budgets', 'b', 'marques', uid)))
+    }
+  })
+  it("un acheteur ne modifie que les marques de ses univers attitrés", async () => {
+    const db = as('acheteurCycle')
+    await assertSucceeds(setDoc(doc(db, 'budgets', 'b', 'marques', 'n'), marque('CYCLE')))
+    await assertSucceeds(updateDoc(doc(db, 'budgets', 'b', 'marques', 'cycle'), { 'saisie.a': 10, nom: 'NIKE Q3' }))
+    await assertSucceeds(deleteDoc(doc(db, 'budgets', 'b', 'marques', 'n')))
+    await assertFails(setDoc(doc(db, 'budgets', 'b', 'marques', 'x'), marque('GOLF')))
+    await assertFails(updateDoc(doc(db, 'budgets', 'b', 'marques', 'golf'), { 'saisie.a': 10 }))
+    await assertFails(deleteDoc(doc(db, 'budgets', 'b', 'marques', 'golf')))
+    // Déplacer une marque vers un univers non attribué est refusé
+    await assertFails(updateDoc(doc(db, 'budgets', 'b', 'marques', 'cycle'), { univers: 'GOLF' }))
+    // Sans univers attribué : lecture seule
+    await assertFails(updateDoc(doc(as('acheteur'), 'budgets', 'b', 'marques', 'cycle'), { 'saisie.a': 1 }))
+  })
+  it("un acheteur ne peut pas s'attribuer d'univers", async () => {
+    await assertFails(updateDoc(doc(as('acheteurCycle'), 'users', 'acheteurCycle'), { univers: ['CYCLE', 'GOLF'] }))
+  })
+  it("seule la direction supprime un budget", async () => {
+    await assertFails(deleteDoc(doc(as('acheteurCycle'), 'budgets', 'b')))
+    await assertSucceeds(deleteDoc(doc(as('dirgen'), 'budgets', 'b')))
+  })
+  it("les magasins et les rayons n'y ont pas accès", async () => {
+    for (const uid of ['dirmagA', 'veloA']) {
+      const db = as(uid)
+      await assertFails(getDoc(doc(db, 'budgets', 'b')))
+      await assertFails(getDocs(collection(db, 'budgets', 'b', 'marques')))
+      await assertFails(getDocs(collection(db, 'budget_univers')))
+      await assertFails(getDocs(collection(db, 'budget_magasins')))
+      await assertFails(setDoc(doc(db, 'budgets', 'x'), { nom: 'BUDGET PE27' }))
+      await assertFails(updateDoc(doc(db, 'budgets', 'b', 'marques', 'cycle'), { 'saisie.a': 1 }))
+    }
+  })
+})

@@ -6,6 +6,14 @@ export async function readSheetRows(file) {
   return utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '' })
 }
 
+// Classeur complet : noms des feuilles et lecture des lignes d'une feuille (tableau de tableaux)
+export async function readWorkbook(file) {
+  const [{ read, utils }, buffer] = await Promise.all([import('xlsx'), file.arrayBuffer()])
+  const wb = read(new Uint8Array(buffer), { type: 'array' })
+  const sheetNames = wb.SheetNames.filter(n => wb.Sheets[n]?.['!ref'])
+  return { sheetNames, rows: name => utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '' }) }
+}
+
 // Comme readSheetRows, avec en plus la couleur de fond de chaque cellule (« RRGGBB » ou null) :
 // fills[i][j] correspond à rows[i][j]. Les couleurs du thème Excel sont déjà converties en RGB.
 export async function readSheetWithFills(file) {

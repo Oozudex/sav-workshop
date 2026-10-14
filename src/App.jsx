@@ -22,6 +22,9 @@ const Flocage         = lazy(() => import('./pages/Flocage'))
 const Transfert       = lazy(() => import('./pages/Transfert'))
 const Obut            = lazy(() => import('./pages/Obut'))
 const Todo            = lazy(() => import('./pages/Todo'))
+const Budgets         = lazy(() => import('./pages/Budgets'))
+const BudgetDetail    = lazy(() => import('./pages/BudgetDetail'))
+const Espace          = lazy(() => import('./pages/Espace'))
 
 // Écran d'attente (session en cours de vérification, page en téléchargement)
 function PageLoader() {
@@ -79,6 +82,7 @@ export default function App() {
           <Route path="/tickets" element={<PrivateRoute><Tickets /></PrivateRoute>} />
           <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
           <Route path="/todo" element={<PrivateRoute><Todo /></PrivateRoute>} />
+          <Route path="/espace/:rayon" element={<PrivateRoute><Espace /></PrivateRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
           <Route
             path="/settings"
@@ -116,6 +120,14 @@ export default function App() {
                 <Transfert />
               </RoleRoute>
             }
+          />
+          <Route
+            path="/budgets"
+            element={<RoleRoute roles={['acheteur', 'directeurgen']}><Budgets /></RoleRoute>}
+          />
+          <Route
+            path="/budgets/:id"
+            element={<RoleRoute roles={['acheteur', 'directeurgen']}><BudgetDetail /></RoleRoute>}
           />
           <Route
             path="/obut"

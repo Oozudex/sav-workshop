@@ -21,6 +21,8 @@ export function b2bFormInitial(tool) {
     // Tous les magasins (storeIds vide) ou seulement certains
     tousLesMagasins: !tool?.storeIds?.length,
     storeIds: tool?.storeIds ?? [],
+    // Univers concernés (vide = commun à tous)
+    univers: tool?.univers ?? [],
   }
 }
 
@@ -65,6 +67,7 @@ export function b2bPayload(form, magasinIds = []) {
     color: form.color,
     featured: form.featured,
     storeIds: form.tousLesMagasins ? [] : magasinIds.filter(id => form.storeIds.includes(id)),
+    univers: form.univers || [],
   }
 }
 

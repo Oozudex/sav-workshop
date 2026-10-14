@@ -2,8 +2,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
 import { db } from '../../lib/firebase'
-import { DIRECTION_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS } from '../../lib/constants'
+import { ACHETEUR_SERVICES, DIRECTION_ROLES } from '../../lib/constants'
 import { EMAIL_RE, accountError, afterCreateMessage, createAuthAccount } from '../../lib/accounts'
+import { useBudgetUnivers } from '../../lib/budgetsStore'
+import { UniversChoice } from '../UniversUI'
 import {
   Avatar, BTN_PRIMARY, BTN_SECONDARY, EmptyState, Field, IconButton, INVALID, LABEL, Modal, Notice, ResendButton, Section, Tag,
 } from './ui'
@@ -31,14 +33,15 @@ function useUsers(roles, enabled, order = true) {
 }
 
 /* ── Fenêtre de création / modification d'un compte ─────────────────────── */
-function AccountModal({ kind, account, me, magasins, admins, onClose, onDone }) {
+function AccountModal({ kind, account, me, magasins, admins, universList, onClose, onDone }) {
   const editing = !!account
   const isSelf = account?.id === me
   const [form, setForm] = useState({
     nom: account?.displayName || '',
     email: account?.email || '',
     role: account?.role || 'directeurgen',
-    rayons: account?.rayons || [],
+    rayons: (account?.rayons || []).filter(r => ACHETEUR_SERVICES.some(s => s.rayon === r)),
+    univers: account?.univers || [],
     magasinId: account?.magasinId || '',
   })
   const [tried, setTried] = useState(false)
@@ -63,7 +66,7 @@ function AccountModal({ kind, account, me, magasins, admins, onClose, onDone }) 
     setBusy(true)
     try {
       const nom = form.nom.trim()
-      const extra = kind === 'acheteur' ? { rayons: form.rayons }
+      const extra = kind === 'acheteur' ? { rayons: form.rayons, univers: form.univers }
         : kind === 'directeurmag' ? { magasinId: form.magasinId }
           : { role: isSelf ? account.role : form.role }
       if (editing) {
@@ -76,7 +79,7 @@ function AccountModal({ kind, account, me, magasins, admins, onClose, onDone }) 
           displayName: nom, email,
           role: kind === 'direction' ? form.role : kind,
           magasinId: kind === 'directeurmag' ? form.magasinId : null,
-          ...(kind === 'acheteur' ? { rayons: form.rayons } : {}),
+          ...(kind === 'acheteur' ? { rayons: form.rayons, univers: form.univers } : {}),
           isActive: true, createdAt: serverTimestamp(), createdBy: me,
         })
         onDone(await afterCreateMessage(kind === 'direction' ? DIRECTION_LABELS[form.role] : KIND_LABELS[kind], email))
@@ -92,7 +95,7 @@ function AccountModal({ kind, account, me, magasins, admins, onClose, onDone }) 
   return (
     <Modal title={editing ? `Modifier ${account.displayName || 'le compte'}` : `Nouveau · ${KIND_LABELS[kind]}`}
       subtitle={editing ? account.email : 'La personne reçoit un e-mail pour choisir son mot de passe.'}
-      onClose={onClose}
+      onClose={onClose} size={kind === 'acheteur' ? 'max-w-2xl' : undefined}
       footer={<>
         <button type="button" onClick={onClose} className={BTN_SECONDARY}>Annuler</button>
         <button type="submit" form="account-form" disabled={busy} className={BTN_PRIMARY}>
@@ -128,26 +131,10 @@ function AccountModal({ kind, account, me, magasins, admins, onClose, onDone }) 
           </div>
         )}
 
-        {kind === 'acheteur' && (
-          <div className="space-y-1.5">
-            <span className={LABEL}>Rayons attitrés</span>
-            <div className="flex flex-wrap gap-1.5">
-              {RAYON_TYPES.map(r => {
-                const on = form.rayons.includes(r)
-                return (
-                  <button key={r} type="button" onClick={() => set('rayons', on ? form.rayons.filter(x => x !== r) : [...form.rayons, r])}
-                    aria-pressed={on}
-                    className={['h-8 px-3 rounded-lg border text-xs font-semibold transition-colors',
-                      on ? 'bg-gray-900 text-white border-transparent dark:bg-white dark:text-black'
-                        : 'text-gray-600 border-gray-200 hover:bg-gray-50 dark:text-neutral-300 dark:border-neutral-700 dark:hover:bg-neutral-800'].join(' ')}>
-                    {RAYON_TYPE_LABELS[r]}
-                  </button>
-                )
-              })}
-            </div>
-            <p className="text-[11px] text-gray-500 dark:text-neutral-400">Sans rayon coché, l’acheteur n’a accès à aucun outil de rayon.</p>
-          </div>
-        )}
+        {kind === 'acheteur' && <>
+          <UniversPicker list={universList} value={form.univers} onChange={v => set('univers', v)} />
+          <ServicesPicker value={form.rayons} onChange={v => set('rayons', v)} />
+        </>}
 
         {kind === 'directeurmag' && (
           <Field label="Magasin" error={shown.magasinId}>
@@ -161,6 +148,78 @@ function AccountModal({ kind, account, me, magasins, admins, onClose, onDone }) 
         {error && <Notice notice={{ tone: 'error', text: error }} />}
       </form>
     </Modal>
+  )
+}
+
+/* ── Acheteur : univers (budgets) et autres services ───────────────────── */
+const ICONS_SERVICE = {
+  velo: 'M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437',
+  chaussure: 'M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42',
+  caisse: 'M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z',
+}
+
+function PickerHeader({ title, hint, count, actions }) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-2">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h3>
+          {count != null && (
+            <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-400 tabular-nums">{count}</span>
+          )}
+        </div>
+        <p className="text-[11px] text-gray-500 dark:text-neutral-400 mt-0.5">{hint}</p>
+      </div>
+      {actions && <div className="flex items-center gap-1.5 shrink-0">{actions}</div>}
+    </div>
+  )
+}
+
+// Univers attitrés : marques et saisie des budgets, « Mes univers » des pages B2B et Services
+function UniversPicker({ list, value, onChange }) {
+  const all = list.length > 0 && list.every(u => value.includes(u.nom))
+  return (
+    <section className="space-y-3 rounded-2xl border border-gray-200 dark:border-neutral-800 p-3 sm:p-4">
+      <PickerHeader title="Univers" count={`${value.length}/${list.length}`}
+        hint="Budgets : l’acheteur gère les marques de ses univers. B2B et Services : il voit d’abord ceux de ses univers."
+        actions={list.length > 0 && (
+          <button type="button" onClick={() => onChange(all ? [] : list.map(u => u.nom))} className={BTN_SECONDARY}>
+            {all ? 'Tout décocher' : 'Tout cocher'}
+          </button>
+        )} />
+      <UniversChoice names={list.map(u => u.nom)} value={value} onChange={onChange} label="Univers de l’acheteur" />
+    </section>
+  )
+}
+
+// Autres services : accès aux outils des rayons (Cycle, Flocage, Caisse)
+function ServicesPicker({ value, onChange }) {
+  const toggle = r => onChange(value.includes(r) ? value.filter(x => x !== r) : [...value, r])
+  return (
+    <section className="space-y-3 rounded-2xl border border-gray-200 dark:border-neutral-800 p-3 sm:p-4">
+      <PickerHeader title="Autres services" hint="Outils de l’accueil accessibles en plus des budgets." />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        {ACHETEUR_SERVICES.map(s => {
+          const on = value.includes(s.rayon)
+          return (
+            <label key={s.rayon} className={['flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-colors',
+              on ? 'border-gray-900 ring-1 ring-gray-900 dark:border-white dark:ring-white'
+                : 'border-gray-200 dark:border-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-800'].join(' ')}>
+              <input type="checkbox" className="sr-only" checked={on} onChange={() => toggle(s.rayon)} />
+              <span className={`p-1.5 rounded-lg shrink-0 ${on ? 'bg-gray-900 text-white dark:bg-white dark:text-black' : 'bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-300'}`}>
+                <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d={ICONS_SERVICE[s.rayon]} />
+                </svg>
+              </span>
+              <span className="min-w-0">
+                <span className="block text-xs font-semibold text-gray-900 dark:text-white">{s.label}</span>
+                <span className="block text-[11px] text-gray-500 dark:text-neutral-400 leading-snug">{s.hint}</span>
+              </span>
+            </label>
+          )
+        })}
+      </div>
+    </section>
   )
 }
 
@@ -186,11 +245,22 @@ function AccountRow({ account, dark, tags, isMe, onEdit, onDelete }) {
   )
 }
 
+const serviceLabel = r => ACHETEUR_SERVICES.find(s => s.rayon === r)?.label
+
+// « 3 univers » (liste complète au survol), « Tous les univers » ou « Aucun univers »
+function UniversTag({ univers = [], total }) {
+  if (!univers.length) return <Tag dot="bg-amber-400">Aucun univers</Tag>
+  const label = total && univers.length >= total ? 'Tous les univers'
+    : univers.length <= 2 ? univers.join(' · ') : `${univers.length} univers`
+  return <span title={univers.join(', ')}><Tag dot="bg-violet-500">{label}</Tag></span>
+}
+
 /* ── Panneau ───────────────────────────────────────────────────────────── */
 export default function AccountsPanel({ me, isAdmin, magasins }) {
   const direction = useUsers(DIRECTION_ROLES, isAdmin, false)
   const acheteurs = useUsers(['acheteur'], true)
   const directeurs = useUsers(['directeurmag'], true)
+  const { list: universList } = useBudgetUnivers()
   const [q, setQ] = useState('')
   const [modal, setModal] = useState(null) // { kind, account? }
   const [notice, setNotice] = useState(null)
@@ -199,7 +269,7 @@ export default function AccountsPanel({ me, isAdmin, magasins }) {
   const match = a => {
     const needle = q.trim().toLowerCase()
     if (!needle) return true
-    return [a.displayName, a.email, magasinNom(a.magasinId), ...(a.rayons || []).map(r => RAYON_TYPE_LABELS[r])]
+    return [a.displayName, a.email, magasinNom(a.magasinId), ...(a.rayons || []).map(serviceLabel), ...(a.univers || [])]
       .filter(Boolean).join(' ').toLowerCase().includes(needle)
   }
   const sortedDirection = useMemo(() => [...direction].sort((a, b) =>
@@ -230,11 +300,14 @@ export default function AccountsPanel({ me, isAdmin, magasins }) {
       empty: 'Aucun compte de direction.',
     },
     {
-      kind: 'acheteur', title: 'Acheteurs', hint: 'Voient tous les magasins, sur leurs rayons attitrés',
+      kind: 'acheteur', title: 'Acheteurs', hint: 'Voient tous les magasins ; budgets sur leurs univers, outils de leurs autres services',
       items: acheteurs.filter(match),
       row: a => (
         <AccountRow key={a.id} account={a} isMe={a.id === me}
-          tags={a.rayons?.length ? a.rayons.map(r => <Tag key={r}>{RAYON_TYPE_LABELS[r] || r}</Tag>) : <Tag dot="bg-amber-400">Aucun rayon</Tag>}
+          tags={<>
+            <UniversTag univers={a.univers} total={universList.length} />
+            {(a.rayons || []).filter(serviceLabel).map(r => <Tag key={r}>{serviceLabel(r)}</Tag>)}
+          </>}
           onEdit={() => setModal({ kind: 'acheteur', account: a })}
           onDelete={() => remove(a, 'acheteur')} />
       ),
@@ -279,7 +352,7 @@ export default function AccountsPanel({ me, isAdmin, magasins }) {
       </div>
 
       {modal && (
-        <AccountModal kind={modal.kind} account={modal.account} me={me} magasins={magasins} admins={admins}
+        <AccountModal kind={modal.kind} account={modal.account} me={me} magasins={magasins} admins={admins} universList={universList}
           onClose={() => setModal(null)} onDone={setNotice} />
       )}
     </div>
