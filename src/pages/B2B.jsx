@@ -15,7 +15,7 @@ import {
   moveItem, orderChanges, peutSaisirIdentifiants, toCsv,
 } from '../lib/b2bExport'
 import { downloadText, downloadWorkbook } from '../lib/excel'
-import { DESCRIPTION_MAX, b2bFormErrors, b2bFormInitial, b2bPayload } from '../lib/b2bForm'
+import { DESCRIPTION_MAX, b2bFormErrors, b2bFormInitial, b2bPayload, filtrerB2B, initialesB2B } from '../lib/b2bForm'
 import { normalizeUrl } from '../lib/services'
 import Dialog from '../components/Dialog'
 import RequiredHint from '../components/RequiredHint'
@@ -30,15 +30,6 @@ const COLOR = {
 }
 const COLORS = Object.keys(COLOR)
 const COLOR_LABELS = { indigo: 'Indigo', emerald: 'Vert', amber: 'Ambre', blue: 'Bleu', violet: 'Violet', gray: 'Gris' }
-
-function PlaceholderIcon({ className = 'h-6 w-6' }) {
-  return (
-    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round"
-        d="M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349m-16.5 11.65V9.35m0 0a3.001 3.001 0 003.75-.615A2.993 2.993 0 009.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 002.25 1.016c.896 0 1.7-.393 2.25-1.016a3.001 3.001 0 003.75.614m-16.5 0a3.004 3.004 0 01-.621-4.72L4.318 3.44A1.5 1.5 0 015.378 3h13.243a1.5 1.5 0 011.06.44l1.19 1.189a3 3 0 01-.621 4.72m-13.5 8.65h3.75a.75.75 0 00.75-.75V13.5a.75.75 0 00-.75-.75H6.75a.75.75 0 00-.75.75v3.75c0 .415.336.75.75.75z" />
-    </svg>
-  )
-}
 
 // Normalize legacy data (old format had phone/email as strings)
 function normTool(data) {
@@ -112,32 +103,67 @@ function CloseBtn({ onClick }) {
   )
 }
 
-// ── ContactInfo ───────────────────────────────────────────────────────────────
-function ContactInfo({ phones, emails }) {
-  if (!phones?.length && !emails?.length) return null
+// ── Logo et contacts ─────────────────────────────────────────────────────────
+// Logo du B2B, ou ses initiales sur la couleur choisie
+function LogoB2B({ t }) {
+  const c = COLOR[t.color] || COLOR.gray
+  const src = safeUrl(t.imageUrl)
+  const [ok, setOk] = useState(true)
+  useEffect(() => { setOk(true) }, [src])
+  if (src && ok) {
+    return (
+      <span className="h-11 w-11 shrink-0 grid place-items-center overflow-hidden rounded-xl border border-gray-200 dark:border-neutral-700 bg-white p-1.5">
+        <img src={src} alt="" onError={() => setOk(false)} className="max-h-full max-w-full object-contain" />
+      </span>
+    )
+  }
   return (
-    <div className="w-full border-t border-gray-100 dark:border-neutral-800 pt-2.5 space-y-1.5">
-      {phones.map((p, i) => (
-        <a key={i} href={`tel:${p.value.replace(/\s/g, '')}`} onClick={e => e.stopPropagation()}
-          className="flex items-start gap-1.5 py-0.5 text-[11px] text-gray-500 dark:text-neutral-400 hover:text-gray-800 dark:hover:text-neutral-200 transition-colors">
-          <span className="mt-0.5"><PhoneIcon /></span>
-          <span className="min-w-0 break-words">
-            {p.label && <span className="font-medium text-gray-500 dark:text-neutral-400">{p.label} : </span>}
-            <span className="whitespace-nowrap">{p.value}</span>
-          </span>
-        </a>
-      ))}
-      {emails.map((e, i) => (
-        <a key={i} href={`mailto:${e.value}`} onClick={ev => ev.stopPropagation()}
-          className="flex items-start gap-1.5 py-0.5 text-[11px] text-gray-500 dark:text-neutral-400 hover:text-gray-800 dark:hover:text-neutral-200 transition-colors">
-          <span className="mt-0.5"><MailIcon /></span>
-          <span className="min-w-0 break-all">
-            {e.label && <span className="font-medium text-gray-500 dark:text-neutral-400 break-normal">{e.label} : </span>}
-            {e.value}
-          </span>
-        </a>
-      ))}
-    </div>
+    <span aria-hidden="true" className={`h-11 w-11 shrink-0 grid place-items-center rounded-xl text-sm font-bold tracking-tight ${c.bg} ${c.icon}`}>
+      {initialesB2B(t.label)}
+    </span>
+  )
+}
+
+function CopierBtn({ valeur, label }) {
+  const [fait, setFait] = useState(false)
+  async function copier() {
+    try { await navigator.clipboard.writeText(valeur); setFait(true); setTimeout(() => setFait(false), 1500) } catch { /* presse-papiers indisponible */ }
+  }
+  return (
+    <button type="button" onClick={copier} aria-label={`Copier ${label}`} title="Copier"
+      className="h-8 px-2 shrink-0 rounded-lg text-[11px] font-medium text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-neutral-400 dark:hover:text-white dark:hover:bg-neutral-800 transition-colors">
+      {fait ? 'Copié ✓' : 'Copier'}
+    </button>
+  )
+}
+
+// Tous les contacts d'un B2B : appel, e-mail ou copie en un clic
+function ContactsModal({ tool, onClose }) {
+  const lignes = lignesContact(tool)
+  return (
+    <Dialog onClose={onClose} className="fixed inset-0 z-[400] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 shadow-2xl flex flex-col max-h-[85vh]">
+        <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-gray-100 dark:border-neutral-800">
+          <div className="flex items-center gap-3 min-w-0">
+            <LogoB2B t={tool} />
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-white truncate">Contacts — {tool.label}</h2>
+          </div>
+          <CloseBtn onClick={onClose} />
+        </div>
+        <ul className="flex-1 overflow-y-auto p-2">
+          {lignes.map((l, i) => (
+            <li key={i} className="flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-gray-50 dark:hover:bg-neutral-800/60">
+              <span className="text-gray-500 dark:text-neutral-400 shrink-0">{l.type === 'tel' ? <PhoneIcon /> : <MailIcon />}</span>
+              <a href={l.href} className="flex-1 min-w-0">
+                {l.label && <span className="block text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-neutral-400 truncate">{l.label}</span>}
+                <span className={`block text-sm text-gray-900 dark:text-white hover:underline ${l.type === 'tel' ? 'tabular-nums' : 'break-all'}`}>{l.value}</span>
+              </a>
+              <CopierBtn valeur={l.value} label={l.type === 'tel' ? `le numéro ${l.value}` : `l’e-mail ${l.value}`} />
+            </li>
+          ))}
+        </ul>
+      </div>
+    </Dialog>
   )
 }
 
@@ -430,10 +456,96 @@ function IdentifiantsMagasinModal({ tool, magasins, magasinId, peutSaisir, auteu
   )
 }
 
-// ── ToolCard ─────────────────────────────────────────────────────────────────
-function ToolCard({ t, featured, canEdit, onEdit, onExport, userMagasinId, isGlobal, magasins, peutSaisir, auteur }) {
-  const c = COLOR[t.color] || COLOR.gray
+// ── Carte d'un B2B ───────────────────────────────────────────────────────────
+const ICONE_BTN = 'h-8 w-8 grid place-items-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-neutral-400 dark:hover:text-white dark:hover:bg-neutral-800 transition-colors'
+
+function ExternalIcon() {
+  return (
+    <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+    </svg>
+  )
+}
+
+// Lignes de contact d'un B2B : numéros puis e-mails
+function lignesContact(t) {
+  return [
+    ...(t.phones || []).filter(p => p.value).map(p => ({ ...p, type: 'tel', href: `tel:${p.value.replace(/[^\d+]/g, '')}` })),
+    ...(t.emails || []).filter(e => e.value).map(e => ({ ...e, type: 'mail', href: `mailto:${e.value}` })),
+  ]
+}
+
+const CONTACTS_VISIBLES = 4
+
+/**
+ * Contacts visibles sur la carte (4 au plus, sinon les 3 premiers et « + N autres contacts »).
+ * Hauteur fixe de 4 lignes : les cartes d’une même rangée restent alignées.
+ */
+function ContactsCarte({ t, onTous, apercu = false }) {
+  const lignes = lignesContact(t)
+  const visibles = lignes.length > CONTACTS_VISIBLES ? lignes.slice(0, CONTACTS_VISIBLES - 1) : lignes
+  const reste = lignes.length - visibles.length
+  const lien = 'min-w-0 truncate hover:text-gray-900 hover:underline dark:hover:text-white'
+  return (
+    <ul className="border-t border-gray-100 dark:border-neutral-800 pt-3 space-y-1 min-h-[6.5rem] text-[11px] text-gray-600 dark:text-neutral-300">
+      {visibles.map((l, i) => (
+        <li key={i} className="flex items-center gap-1.5 min-w-0 h-5">
+          <span className="shrink-0 text-gray-500 dark:text-neutral-400">{l.type === 'tel' ? <PhoneIcon /> : <MailIcon />}</span>
+          {l.label && <span className="shrink-0 max-w-[45%] truncate font-semibold text-gray-500 dark:text-neutral-400">{l.label} :</span>}
+          {apercu
+            ? <span className={`min-w-0 truncate ${l.type === 'tel' ? 'tabular-nums' : ''}`}>{l.value}</span>
+            : <a href={l.href} title={l.value} className={`${lien} ${l.type === 'tel' ? 'tabular-nums' : ''}`}>{l.value}</a>}
+        </li>
+      ))}
+      {reste > 0 && (
+        <li className="h-5 flex items-center">
+          <button type="button" onClick={onTous} disabled={apercu}
+            className="font-semibold text-gray-700 hover:underline dark:text-neutral-200 disabled:no-underline">
+            + {reste} autre{reste > 1 ? 's' : ''} contact{reste > 1 ? 's' : ''}
+          </button>
+        </li>
+      )}
+      {lignes.length === 0 && <li className="h-5 flex items-center text-gray-500 dark:text-neutral-400">Aucun contact</li>}
+    </ul>
+  )
+}
+
+/** Carte seule (page et aperçu du formulaire) : logo, nom, description, actions en haut, contacts, pied en bas */
+function CarteB2B({ t, actions, contacts, pied, grisee = false }) {
+  return (
+    <article className={['h-full flex flex-col gap-4 rounded-2xl border p-4 bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 transition-shadow',
+      grisee ? 'opacity-60' : 'hover:shadow-md'].join(' ')}>
+      <div className="flex items-start gap-3">
+        <LogoB2B t={t} />
+        <div className="min-w-0 flex-1 pt-0.5">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white leading-snug break-words">{t.label}</h3>
+          {t.description && <p className="mt-0.5 text-xs text-gray-500 dark:text-neutral-400 leading-relaxed line-clamp-2" title={t.description}>{t.description}</p>}
+        </div>
+        {actions && <div className="flex items-center gap-0.5 shrink-0 -mr-1.5 -mt-1">{actions}</div>}
+      </div>
+      <div className="mt-auto space-y-4">
+        {contacts}
+        {pied}
+      </div>
+    </article>
+  )
+}
+
+// Pied de carte : « Accéder » (ou « Bientôt disponible »)
+function PiedCarte({ url, apercu = false }) {
+  const lien = 'w-full h-9 inline-flex items-center justify-center gap-1.5 rounded-lg text-xs font-semibold transition-colors'
+  if (!url) return <span className={`${lien} bg-gray-100 text-gray-500 dark:bg-neutral-800 dark:text-neutral-400`}>Bientôt disponible</span>
+  if (apercu) return <span className={`${lien} bg-gray-900 text-white dark:bg-white dark:text-black`}>Accéder <ExternalIcon /></span>
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className={`${lien} bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100`}>
+      Accéder <ExternalIcon /><span className="sr-only">(nouvel onglet)</span>
+    </a>
+  )
+}
+
+function ToolCard({ t, canEdit, onEdit, onExport, userMagasinId, isGlobal, magasins, peutSaisir, auteur }) {
   const [showCreds, setShowCreds] = useState(false)
+  const [showContacts, setShowContacts] = useState(false)
 
   const hasAccess    = isGlobal || !t.storeIds?.length || (userMagasinId && t.storeIds.includes(userMagasinId))
   // Le cadenas est toujours affiché : ouvert = identifiants du magasin, fermé = qui a les accès
@@ -443,90 +555,36 @@ function ToolCard({ t, featured, canEdit, onEdit, onExport, userMagasinId, isGlo
   const toolUrl      = safeUrl(t.url)
   const accessStores = !hasAccess ? magasins.filter(m => t.storeIds?.includes(m.id)) : []
 
-  // Tailles adaptées selon le type de carte pour correspondre à la DA du site
-  const pad = featured ? 'p-6' : 'p-4'
-  const iconPad = featured ? 'p-3' : 'p-2'
-  const iconSz = featured ? 'h-8 w-8' : 'h-5 w-5'
-  const imgH = featured ? 'h-14' : 'h-8'
-  const titleSz = featured ? 'text-sm' : 'text-xs'
-  const btnH = featured ? 'h-10 sm:h-8' : 'h-9 sm:h-7'
-
-  return (
-    <div className="relative group">
-      <button
-        onClick={() => hasAccess && toolUrl && window.open(toolUrl, '_blank', 'noopener,noreferrer')}
-        disabled={!hasAccess || !toolUrl}
-        className={[
-          `w-full flex flex-col items-start gap-4 ${pad} rounded-2xl border text-left transition-all`,
-          'bg-white dark:bg-neutral-900',
-          'border-gray-200 dark:border-neutral-800',
-          hasAccess && toolUrl ? `hover:shadow-lg hover:ring-4 ${c.ring}` : 'cursor-default',
-          !hasAccess ? 'opacity-50' : '',
-        ].join(' ')}
-      >
-        {t.imageUrl ? (
-          <img src={safeUrl(t.imageUrl)} alt={t.label} className={`object-contain max-w-[calc(100%-5.5rem)] ${imgH}`} />
-        ) : (
-          <div className={`${iconPad} rounded-xl ${c.bg}`}>
-            <span className={c.icon}><PlaceholderIcon className={iconSz} /></span>
-          </div>
-        )}
-
-        <div className="flex-1 min-w-0 w-full">
-          <p className={`font-semibold text-gray-900 dark:text-white leading-snug break-words ${titleSz}`}>
-            {t.label}
-          </p>
-          {t.description && (
-            <p className="text-[11px] text-gray-500 dark:text-neutral-400 mt-1 leading-relaxed">{t.description}</p>
-          )}
-        </div>
-
-        <ContactInfo phones={t.phones} emails={t.emails} />
-
-        {!hasAccess ? (
-          <div className="w-full rounded-lg bg-gray-50 dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 px-3 py-2">
-            <p className="text-[10px] text-gray-500 dark:text-neutral-400 mb-1">Disponible chez :</p>
-            <p className="text-[10px] font-semibold text-gray-600 dark:text-neutral-300 leading-snug">
-              {accessStores.length > 0 ? accessStores.map(m => m.nom).join(', ') : '—'}
-            </p>
-          </div>
-        ) : (
-          <span className={`w-full ${btnH} flex items-center justify-center rounded-lg text-xs font-semibold transition-colors ${t.url ? `text-white ${c.btn}` : 'text-gray-600 dark:text-neutral-400 bg-gray-100 dark:bg-neutral-800'}`}>
-            {t.url ? 'Accéder →' : 'Bientôt disponible'}
-          </span>
-        )}
-      </button>
-
-      {/* Cadenas : identifiants du magasin, ou magasins qui ont les accès */}
-      <button
-        onClick={e => { e.stopPropagation(); setShowCreds(true) }}
-        title={hasCreds ? (isGlobal ? 'Identifiants des magasins' : 'Voir vos identifiants')
+  const actions = (
+    <>
+      <button type="button" onClick={() => setShowCreds(true)} className={ICONE_BTN}
+        title={hasCreds ? (isGlobal ? 'Identifiants des magasins' : 'Vos identifiants')
           : vueMagasin ? 'Ajouter les identifiants de votre magasin' : 'Pas d’identifiants pour votre magasin : voir qui a les accès'}
-        aria-label={hasCreds ? `Identifiants ${t.label}` : vueMagasin ? `Ajouter les identifiants ${t.label}` : `Accès ${t.label} non disponible`}
-        className={[
-          'absolute top-3 h-7 w-7 grid place-items-center rounded-lg border shadow-sm transition-colors',
-          hasCreds
-            ? 'bg-white text-gray-600 border-gray-200 hover:text-gray-900 dark:bg-neutral-800 dark:text-neutral-300 dark:border-neutral-700 dark:hover:text-white'
-            : 'bg-gray-50 text-gray-300 border-dashed border-gray-300 hover:text-gray-500 dark:bg-neutral-900 dark:text-neutral-600 dark:border-neutral-700 dark:hover:text-neutral-400',
-          canEdit ? 'right-12' : 'right-3',
-        ].join(' ')}
-      >
+        aria-label={hasCreds ? `Identifiants ${t.label}` : vueMagasin ? `Ajouter les identifiants ${t.label}` : `Accès ${t.label} non disponible`}>
         {hasCreds ? <LockOpenIcon /> : <LockIcon />}
       </button>
-
-      {/* Edit button */}
       {canEdit && (
-        <button
-          onClick={e => { e.stopPropagation(); onEdit(t) }}
-          aria-label={`Modifier ${t.label}`}
-          className="absolute top-3 right-3 h-7 w-7 grid place-items-center rounded-lg bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 text-gray-500 dark:text-neutral-400 hover:text-gray-700 dark:hover:text-neutral-200 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-all shadow-sm"
-        >
+        <button type="button" onClick={() => onEdit(t)} aria-label={`Modifier ${t.label}`} title="Modifier" className={ICONE_BTN}>
           <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
           </svg>
         </button>
       )}
+    </>
+  )
 
+  const pied = hasAccess
+    ? <PiedCarte url={toolUrl} />
+    : (
+      <p className="text-[11px] text-gray-500 dark:text-neutral-400 leading-snug">
+        Réservé à : <span className="font-semibold text-gray-700 dark:text-neutral-300">{accessStores.map(m => m.nom).join(', ') || '—'}</span>
+      </p>
+    )
+
+  return (
+    <>
+      <CarteB2B t={t} actions={actions} contacts={<ContactsCarte t={t} onTous={() => setShowContacts(true)} />} pied={pied} grisee={!hasAccess} />
+      {showContacts && <ContactsModal tool={t} onClose={() => setShowContacts(false)} />}
       {showCreds && (isGlobal ? (
         <CredentialsModal tool={t} magasins={magasins} auteur={auteur} onExport={onExport} onClose={() => setShowCreds(false)} />
       ) : vueMagasin ? (
@@ -535,7 +593,7 @@ function ToolCard({ t, featured, canEdit, onEdit, onExport, userMagasinId, isGlo
       ) : (
         <AccessInfoModal tool={t} magasins={magasins} onClose={() => setShowCreds(false)} />
       ))}
-    </div>
+    </>
   )
 }
 
@@ -602,32 +660,12 @@ function ContactListEditor({ items, onChange, type, erreurs = {} }) {
 
 // Aperçu de la carte telle qu'elle apparaîtra sur la page
 function ApercuCarte({ form }) {
-  const c = COLOR[form.color] || COLOR.gray
-  const image = safeUrl(normalizeUrl(form.imageUrl))
-  const [imageOk, setImageOk] = useState(true)
-  useEffect(() => { setImageOk(true) }, [image])
-  const contacts = list => list.filter(x => x.value.trim()).map(x => ({ label: x.label.trim(), value: x.value.trim() }))
-  return (
-    <div className={`w-full flex flex-col items-start gap-3 ${form.featured ? 'p-5' : 'p-4'} rounded-2xl border bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800`}>
-      {image && imageOk ? (
-        <img src={image} alt="" onError={() => setImageOk(false)} className={`object-contain max-w-full ${form.featured ? 'h-12' : 'h-8'}`} />
-      ) : (
-        <div className={`${form.featured ? 'p-3' : 'p-2'} rounded-xl ${c.bg}`}>
-          <span className={c.icon}><PlaceholderIcon className={form.featured ? 'h-7 w-7' : 'h-5 w-5'} /></span>
-        </div>
-      )}
-      <div className="min-w-0 w-full">
-        <p className={`font-semibold text-gray-900 dark:text-white leading-snug break-words ${form.featured ? 'text-sm' : 'text-xs'}`}>
-          {form.label.trim() || 'Nom du B2B'}
-        </p>
-        {form.description.trim() && <p className="text-[11px] text-gray-500 dark:text-neutral-400 mt-1 leading-relaxed break-words">{form.description.trim()}</p>}
-      </div>
-      <ContactInfo phones={contacts(form.phones)} emails={contacts(form.emails)} />
-      <span className={`w-full h-8 flex items-center justify-center rounded-lg text-xs font-semibold ${form.url.trim() ? `text-white ${c.btn}` : 'text-gray-600 dark:text-neutral-400 bg-gray-100 dark:bg-neutral-800'}`}>
-        {form.url.trim() ? 'Accéder →' : 'Bientôt disponible'}
-      </span>
-    </div>
-  )
+  const contacts = list => list.filter(x => x.value.trim())
+  const t = {
+    label: form.label.trim() || 'Nom du B2B', description: form.description.trim(), color: form.color,
+    imageUrl: normalizeUrl(form.imageUrl), phones: contacts(form.phones), emails: contacts(form.emails),
+  }
+  return <CarteB2B t={t} contacts={<ContactsCarte t={t} apercu />} pied={<PiedCarte apercu url={form.url.trim() ? normalizeUrl(form.url) : null} />} />
 }
 
 // ── EditModal ────────────────────────────────────────────────────────────────
@@ -736,7 +774,7 @@ function EditModal({ tool, magasins, onClose, onSave, onDelete }) {
                     <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0" checked={form.featured} onChange={e => set('featured', e.target.checked)} />
                     <span>
                       <span className="block text-xs font-semibold text-gray-900 dark:text-white">Mettre en avant</span>
-                      <span className={AIDE}>Grande carte dans « Principaux », en haut de la page.</span>
+                      <span className={AIDE}>Affiché dans « Principaux », en haut de la page.</span>
                     </span>
                   </label>
                 </Bloc>
@@ -1222,8 +1260,10 @@ export default function B2B() {
     return onSnapshot(q, snap => setMagasins(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [])
 
-  const featured = tools.filter(t => t.featured)
-  const secondary = tools.filter(t => !t.featured)
+  const [recherche, setRecherche] = useState('')
+  const trouves = filtrerB2B(tools, recherche)
+  const featured = trouves.filter(t => t.featured)
+  const secondary = trouves.filter(t => !t.featured)
 
   async function handleSave(data) {
     if (editTool?.id) {
@@ -1274,22 +1314,29 @@ export default function B2B() {
           )}
         </div>
 
-        {featured.length > 0 && (
-          <div>
-            <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide mb-3">Principaux</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-              {featured.map(t => <ToolCard key={t.id} t={t} featured {...cardProps} />)}
-            </div>
+        {tools.length > 0 && (
+          <div className="relative max-w-sm">
+            <svg aria-hidden="true" className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" />
+            </svg>
+            <input type="search" value={recherche} onChange={e => setRecherche(e.target.value)} aria-label="Rechercher un B2B"
+              placeholder="Rechercher un B2B, une marque, un contact…" className="Input h-10 !pl-9 text-sm" />
           </div>
         )}
 
-        {secondary.length > 0 && (
-          <div>
-            <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide mb-3">Autres</p>
+        {[['Principaux', featured], ['Autres', secondary]].filter(([, liste]) => liste.length > 0).map(([titre, liste]) => (
+          <section key={titre} aria-labelledby={`b2b-${titre}`}>
+            <h2 id={`b2b-${titre}`} className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide mb-3">
+              {titre} <span className="font-medium">· {liste.length}</span>
+            </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-              {secondary.map(t => <ToolCard key={t.id} t={t} featured={false} {...cardProps} />)}
+              {liste.map(t => <ToolCard key={t.id} t={t} {...cardProps} />)}
             </div>
-          </div>
+          </section>
+        ))}
+
+        {tools.length > 0 && trouves.length === 0 && (
+          <p className="text-center py-12 text-sm text-gray-500 dark:text-neutral-400">Aucun B2B ne correspond à « {recherche.trim()} ».</p>
         )}
 
         {tools.length === 0 && (

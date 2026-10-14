@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { b2bFormErrors, b2bFormInitial, b2bPayload } from '../../src/lib/b2bForm.js'
+import { b2bFormErrors, b2bFormInitial, b2bPayload, filtrerB2B, initialesB2B } from '../../src/lib/b2bForm.js'
 
 const form = over => ({ ...b2bFormInitial(), label: 'MFC', ...over })
 
@@ -45,5 +45,24 @@ describe('formulaire B2B', () => {
       phones: [{ label: 'SAV', value: '02 41 00 00 00' }], emails: [], color: 'indigo', featured: false, storeIds: ['A', 'B'],
     })
     assert.deepEqual(b2bPayload(form({ storeIds: ['A'] }), ['A']).storeIds, [])
+  })
+})
+
+describe('affichage des B2B', () => {
+  it('initiales sans logo', () => {
+    assert.equal(initialesB2B('MFC'), 'MF')
+    assert.equal(initialesB2B('Magura / MBPS'), 'MM')
+    assert.equal(initialesB2B('1 2 3 Roulements'), '12')
+    assert.equal(initialesB2B(''), '?')
+  })
+  it('recherche sur le nom, la description et les contacts, sans accents', () => {
+    const tools = [
+      { label: 'MFC', description: 'Marques Nakamura, Sunn', emails: [{ label: '', value: 'sav@mfdc.fr' }] },
+      { label: 'Spécialité T.A.', description: 'Plateaux' },
+    ]
+    assert.deepEqual(filtrerB2B(tools, 'sunn').map(t => t.label), ['MFC'])
+    assert.deepEqual(filtrerB2B(tools, 'specialite').map(t => t.label), ['Spécialité T.A.'])
+    assert.deepEqual(filtrerB2B(tools, 'mfdc').map(t => t.label), ['MFC'])
+    assert.equal(filtrerB2B(tools, '  ').length, 2)
   })
 })

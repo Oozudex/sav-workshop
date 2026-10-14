@@ -67,3 +67,19 @@ export function b2bPayload(form, magasinIds = []) {
     storeIds: form.tousLesMagasins ? [] : magasinIds.filter(id => form.storeIds.includes(id)),
   }
 }
+
+// Initiales affichées quand le B2B n'a pas de logo : « MFC » → « MF », « Magura / MBPS » → « MM »
+export function initialesB2B(label) {
+  const mots = String(label || '').toUpperCase().split(/[\s/._&+-]+/).filter(Boolean)
+  if (!mots.length) return '?'
+  return (mots.length === 1 ? mots[0].slice(0, 2) : mots[0][0] + mots[1][0])
+}
+
+// Recherche sur la page B2B : nom, description, libellés et valeurs des contacts (sans accents ni casse)
+const sansAccents = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+export function filtrerB2B(tools, recherche) {
+  const q = sansAccents(recherche).trim()
+  if (!q) return tools
+  return tools.filter(t => sansAccents([t.label, t.description, ...(t.phones || []).flatMap(p => [p.label, p.value]),
+    ...(t.emails || []).flatMap(e => [e.label, e.value])].join(' ')).includes(q))
+}
