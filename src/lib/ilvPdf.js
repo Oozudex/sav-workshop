@@ -57,6 +57,7 @@ const IMAGES = {
   oney3t:  'oney/3x-texte.png',
   oney4t:  'oney/4x-texte.png',
   france:  'badges/concu-en-france.png',
+  presque: 'badges/velos-presque-parfaits.png',
 }
 
 // Badge « Conçu et assemblé en France » (option de la fenêtre ILV) : à gauche du gros prix sur l'ILV
@@ -287,7 +288,14 @@ function drawSideColumn(ctx, ilv, lx) {
 function drawBonPlan(ctx, ilv) {
   const { fonts: f, images: im } = ctx
   ctx.rect(4.7, 4.5, 104.3, 200.6, C.rouge)
-  ctx.imageBox(im.bonplan, [15.1, 85.9, 98.8, 122.8])
+  if (ilv.presqueParfait && im.presque) {
+    // Vélo presque parfait : « Les vélos (presque) parfaits » sous « BONS PLANS », même largeur,
+    // les deux centrés dans le panneau
+    ctx.imageBox(im.bonplan, [15.1, 64.4, 98.8, 101.3])
+    ctx.imageContain(im.presque, [15.1, 107.3, 98.8, 145.2])
+  } else {
+    ctx.imageBox(im.bonplan, [15.1, 85.9, 98.8, 122.8])
+  }
   ctx.text(ilv.conseille, { font: f.sSemiBold, size: 13.37, x: 125.5, y: 39.0, maxWidth: 165 })
   drawSideColumn(ctx, ilv, 205.2)
 }
@@ -351,7 +359,8 @@ export async function renderIlvPages(ilvs, load, title) {
   for (const ilv of ilvs) {
     const page = doc.addPage([W * PT, H * PT])
     const fontEntries = await Promise.all(FONTS_BY_TYPE[ilv.type].map(async k => [k, await font(k)]))
-    const imageEntries = await Promise.all([...wanted[ilv.type], ...(ilv.france ? ['france'] : [])].map(async k => [k, await image(k)]))
+    const extra = [...(ilv.france ? ['france'] : []), ...(ilv.type === 'bonplan' && ilv.presqueParfait ? ['presque'] : [])]
+    const imageEntries = await Promise.all([...wanted[ilv.type], ...extra].map(async k => [k, await image(k)]))
     const logoPath = brandLogoPath(ilv.marque)
     const logoImage = logoPath ? await logo(logoPath) : null
     if (logoImage) imageEntries.push(['marque', logoImage])

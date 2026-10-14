@@ -52,6 +52,8 @@ describe('modèles', () => {
 
   it('vélo presque parfait : mention dans le nom', () => {
     const ilv = buildIlv({ ...ALLROAD, segment: 'velo_pp', type: 'bonplan', prixBonPlan: 1199.99 })
+    assert.equal(ilv.presqueParfait, true) // « PRESQUE PARFAIT » sous « BONS PLANS »
+    assert.equal(buildIlv({ ...ALLROAD, type: 'bonplan', prixBonPlan: 1199.99 }).presqueParfait, false)
     assert.equal(ilv.lines[0], 'PRIX ALLROAD 450 "PRESQUE PARFAIT" : 1499.99€')
     assert.equal(ilv.refLine, 'Réf. :  YJ60H8PF B06ZZS / Allroad 450 "Presque parfait"')
     const dejaDansLeNom = buildIlv({ ...ALLROAD, nom: 'ALLROAD 450 "PRESQUE PARFAIT"', presqueParfait: true, type: 'normal' })

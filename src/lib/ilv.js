@@ -139,6 +139,7 @@ export function buildIlv(p, { duree = 1, oney = null, france = false } = {}) {
     type: p.type,
     marque: p.marque || '',
     france: !!france,
+    presqueParfait: pp,
     refLine: `Réf. :  ${p.reference || p.refFournisseur || p.chrono || ''} / ${titleName(nomBase)}${pp ? ` ${PP_MENTION}` : ''}`,
     packLine: noPack ? null : `PRIX PACK OPTIONNEL : ${fmtPoint(pack)}`,
     prixLine: `PRIX ${nom} : ${fmtPoint(p.prixFort)}`,

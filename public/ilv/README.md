@@ -20,6 +20,9 @@ Sans logo, l'ILV affiche le nom de la marque en toutes lettres à la place.
 
 - `badges/` : logos « PRIX PROMO », « BONS PLANS », « PRIX ENGAGÉ » et le slogan
   « Plus qu'un prix, c'est notre combat. » (fonds retirés, recolorés pour les panneaux rouge et bleu).
+  Aussi : « Les vélos (presque) parfaits » (sous « BONS PLANS » pour les vélos presque parfaits,
+  recréé en Saira blanc et vert anis d'après le visuel Intersport) et le badge « Conçu et assemblé en France »
+  (option de la fenêtre ILV).
 - `oney/` : logo Oney et pastilles 3x / 4x.
 - `fonts/` : polices libres (licence SIL Open Font License) choisies et réglées pour ressembler aux
   polices Piivo : Saira (instances réglées en graisse et en largeur), Arimo (équivalent d'Arial),
