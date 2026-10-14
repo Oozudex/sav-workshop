@@ -144,6 +144,7 @@ function BaliseForm({ balise, magasins, types, onClose, onSave, onDelete }) {
   const [f, setF] = useState(() => baliseFormInitial(balise))
   const [tried, setTried] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [echec, setEchec] = useState(false)
   const errors = baliseFormErrors(f)
   const err = k => (tried ? errors[k] : null)
   const set = (k, v) => setF(x => ({ ...x, [k]: v }))
@@ -152,8 +153,8 @@ function BaliseForm({ balise, magasins, types, onClose, onSave, onDelete }) {
   async function submit(e) {
     e.preventDefault(); setTried(true)
     if (Object.keys(errors).length) return
-    setBusy(true)
-    try { await onSave(balisePayload(f, magasins)); onClose() } finally { setBusy(false) }
+    setBusy(true); setEchec(false)
+    try { await onSave(balisePayload(f, magasins)); onClose() } catch { setEchec(true) } finally { setBusy(false) }
   }
   const champ = (k, label, input, required) => (
     <label className="block space-y-1">
@@ -185,6 +186,7 @@ function BaliseForm({ balise, magasins, types, onClose, onSave, onDelete }) {
               </select>
             ), true)}
           </div>
+          {echec && <p role="alert" className="text-xs text-red-600 dark:text-red-400">L’enregistrement a échoué. Vérifie ta connexion et réessaie.</p>}
           {champ('note', 'Note', <textarea rows={2} className={`Input ${bad('note')}`} value={f.note} onChange={e => set('note', e.target.value)} placeholder="Câbles fournis, logiciel…" />)}
         </div>
         <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-gray-100 dark:border-neutral-800">

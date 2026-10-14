@@ -37,6 +37,8 @@ describe('balises : droits et demandes', () => {
   it('acheteur et admin gèrent les fiches ; les comptes magasin demandent', () => {
     assert.equal(peutGererBalises({ role: 'acheteur' }), true)
     assert.equal(peutGererBalises({ role: 'admin' }), true)
+    assert.equal(peutGererBalises({ role: 'directeurgen', isAdmin: true }), true)
+    assert.equal(peutGererBalises({ role: 'directeurgen' }), false)
     assert.equal(peutGererBalises({ role: 'directeurmag' }), false)
     assert.equal(estCompteMagasin(velosSud), true)
     assert.equal(estCompteMagasin({ role: 'directeurmag', magasinId: 'nord' }), true)

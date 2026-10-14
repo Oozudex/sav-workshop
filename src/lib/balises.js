@@ -25,8 +25,9 @@ export const etapesFranchies = d => ({ pending: 1, accepted: 2, refused: 2, canc
 export const TYPES_SUGGERES = ['Bosch', 'Shimano', 'Yamaha', 'Brose', 'Bafang', 'Giant', 'Specialized', 'Fazua', 'TQ']
 
 // ── Droits ──────────────────────────────────────────────────────────────────
-// Fiches des balises : l'acheteur et l'administrateur
-export const peutGererBalises = profile => ['acheteur', 'admin'].includes(profile?.role)
+// Fiches des balises : l'acheteur et l'administrateur (côté application, l'administrateur est un
+// « directeurgen » avec isAdmin, cf. store/useAuth.js)
+export const peutGererBalises = profile => profile?.role === 'acheteur' || profile?.role === 'admin' || profile?.isAdmin === true
 // Comptes d'un magasin (rayons, directeur) : demandent, répondent, envoient, reçoivent
 const LOCAUX = ['velo', 'chaussure', 'textile', 'randonnee', 'caisse', 'directeurmag']
 export const estCompteMagasin = profile => LOCAUX.includes(profile?.role) && !!profile?.magasinId
