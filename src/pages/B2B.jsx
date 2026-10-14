@@ -531,13 +531,14 @@ function CarteB2B({ t, actions, contacts, pied, grisee = false }) {
   )
 }
 
-// Pied de carte : « Accéder » (ou « Bientôt disponible »)
-function PiedCarte({ url, apercu = false }) {
-  const lien = 'w-full h-9 inline-flex items-center justify-center gap-1.5 rounded-lg text-xs font-semibold transition-colors'
-  if (!url) return <span className={`${lien} bg-gray-100 text-gray-500 dark:bg-neutral-800 dark:text-neutral-400`}>Bientôt disponible</span>
-  if (apercu) return <span className={`${lien} bg-gray-900 text-white dark:bg-white dark:text-black`}>Accéder <ExternalIcon /></span>
+// Pied de carte : « Accéder » de la couleur de la carte (ou « Bientôt disponible »)
+function PiedCarte({ url, couleur, apercu = false }) {
+  const lien = 'w-full h-9 inline-flex items-center justify-center gap-1.5 rounded-lg text-xs font-semibold text-white transition-colors'
+  const fond = (COLOR[couleur] || COLOR.gray).btn
+  if (!url) return <span className={`${lien} !text-gray-500 bg-gray-100 dark:bg-neutral-800 dark:!text-neutral-400`}>Bientôt disponible</span>
+  if (apercu) return <span className={`${lien} ${fond}`}>Accéder <ExternalIcon /></span>
   return (
-    <a href={url} target="_blank" rel="noopener noreferrer" className={`${lien} bg-gray-900 text-white hover:bg-gray-700 dark:bg-white dark:text-black dark:hover:bg-gray-100`}>
+    <a href={url} target="_blank" rel="noopener noreferrer" className={`${lien} ${fond}`}>
       Accéder <ExternalIcon /><span className="sr-only">(nouvel onglet)</span>
     </a>
   )
@@ -574,7 +575,7 @@ function ToolCard({ t, canEdit, onEdit, onExport, userMagasinId, isGlobal, magas
   )
 
   const pied = hasAccess
-    ? <PiedCarte url={toolUrl} />
+    ? <PiedCarte url={toolUrl} couleur={t.color} />
     : (
       <p className="text-[11px] text-gray-500 dark:text-neutral-400 leading-snug">
         Réservé à : <span className="font-semibold text-gray-700 dark:text-neutral-300">{accessStores.map(m => m.nom).join(', ') || '—'}</span>
@@ -665,7 +666,7 @@ function ApercuCarte({ form }) {
     label: form.label.trim() || 'Nom du B2B', description: form.description.trim(), color: form.color,
     imageUrl: normalizeUrl(form.imageUrl), phones: contacts(form.phones), emails: contacts(form.emails),
   }
-  return <CarteB2B t={t} contacts={<ContactsCarte t={t} apercu />} pied={<PiedCarte apercu url={form.url.trim() ? normalizeUrl(form.url) : null} />} />
+  return <CarteB2B t={t} contacts={<ContactsCarte t={t} apercu />} pied={<PiedCarte apercu couleur={form.color} url={form.url.trim() ? normalizeUrl(form.url) : null} />} />
 }
 
 // ── EditModal ────────────────────────────────────────────────────────────────
