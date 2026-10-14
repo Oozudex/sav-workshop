@@ -33,6 +33,7 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
   const [type, setType] = useState(preferredType)
   const [duree, setDuree] = useState(1)
   const [oney, setOney] = useState(null)
+  const [france, setFrance] = useState(false) // badge « Conçu et assemblé en France »
   const [packChoisi, setPackChoisi] = useState('')
   const [pdf, setPdf] = useState(null) // { url, name, bytes }
   const [rendering, setRendering] = useState(false)
@@ -59,9 +60,9 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
   const packAjoute = noPack ? 0 : product?.pack ? packPrice(product.pack, duree) : null
   const total = product?.prixFort != null && packAjoute != null
     ? Math.round((product.prixFort + packAjoute) * 100) / 100 : null
-  const ilv = useMemo(() => item && current ? ilvChoisie(item, { type: current, duree, oney, packChoisi }) : null,
+  const ilv = useMemo(() => item && current ? ilvChoisie(item, { type: current, duree, oney, packChoisi, france }) : null,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [JSON.stringify(item), current, duree, oney, packChoisi])
+  [JSON.stringify(item), current, duree, oney, packChoisi, france])
 
   // Aperçu : le PDF est régénéré à chaque changement d'option
   useEffect(() => {
@@ -99,7 +100,7 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
     try {
       const source = sources.find(s => s.key === item.key) || item
       await addDoc(collection(db, IMPRESSION_COLLECTION), {
-        ...impressionData({ uid: user.uid, magasinId: profile?.magasinId, source, choix: { type: current, duree, oney, packChoisi } }),
+        ...impressionData({ uid: user.uid, magasinId: profile?.magasinId, source, choix: { type: current, duree, oney, packChoisi, france } }),
         envoyeAt: serverTimestamp(),
       })
       setEnvoi(e => ({ ok: (e?.ok || 0) + 1 }))
@@ -191,6 +192,12 @@ export default function IlvDialog({ sources, initialKey, preferredType, onClose 
                     {total != null && !oneyAllowed(3, total) && <p className="text-[11px] text-gray-500 dark:text-neutral-400">Oney : achats de 80 € à 6 000 € uniquement.</p>}
                   </div>
                 )}
+
+                <label className="flex items-center gap-3 rounded-xl border border-gray-200 dark:border-neutral-700 px-3 py-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-neutral-800/60">
+                  <input type="checkbox" className="h-4 w-4 shrink-0" checked={france} onChange={e => setFrance(e.target.checked)} />
+                  <img src="/ilv/badges/concu-en-france.png" alt="" className="h-9 w-9 shrink-0" />
+                  <span className="text-xs font-medium text-gray-700 dark:text-neutral-200 leading-snug">Logo « Conçu et assemblé en France »</span>
+                </label>
 
                 {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
                 <p role="status" className="text-xs empty:hidden">

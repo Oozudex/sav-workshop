@@ -12,7 +12,7 @@ const SOURCE_FIELDS = ['chrono', 'refFournisseur', 'nom', 'marque', 'reference',
 
 /**
  * Document d'un envoi à l'impression. source : la déclinaison choisie dans la fenêtre ILV ;
- * choix : { type, duree, oney, packChoisi }.
+ * choix : { type, duree, oney, packChoisi, france }.
  */
 export function impressionData({ uid, magasinId = null, source, choix }) {
   const produit = {}
@@ -22,6 +22,7 @@ export function impressionData({ uid, magasinId = null, source, choix }) {
     type: choix.type, duree: choix.duree === 2 ? 2 : 1,
     oney: choix.type === 'normal' && [3, 4].includes(choix.oney) ? choix.oney : null,
     packChoisi: choix.packChoisi || null,
+    france: !!choix.france,
     imprimeAt: null,
   }
 }

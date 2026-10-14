@@ -372,7 +372,7 @@ describe('opérations commerciales', () => {
 })
 
 describe("historique d'impression des ILV", () => {
-  const envoi = uid => ({ uid, magasinId: 'A', source: { chrono: '0-1', nom: 'X' }, type: 'normal', duree: 1, oney: null, packChoisi: null, envoyeAt: serverTimestamp(), imprimeAt: null })
+  const envoi = uid => ({ uid, magasinId: 'A', source: { chrono: '0-1', nom: 'X' }, type: 'normal', duree: 1, oney: null, packChoisi: null, france: true, envoyeAt: serverTimestamp(), imprimeAt: null })
   it("chaque compte crée, lit, marque et supprime seulement ses propres envois", async () => {
     await assertSucceeds(setDoc(doc(as('veloA'), 'ilv_impressions', 'i1'), envoi('veloA')))
     await assertFails(setDoc(doc(as('veloA'), 'ilv_impressions', 'i2'), envoi('chaussureA')))

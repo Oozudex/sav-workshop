@@ -311,7 +311,7 @@ service cloud.firestore {
       allow read:   if isSignedIn() && resource.data.uid == request.auth.uid;
       allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid &&
         request.resource.data.imprimeAt == null &&
-        request.resource.data.keys().hasOnly(['uid', 'magasinId', 'source', 'type', 'duree', 'oney', 'packChoisi', 'envoyeAt', 'imprimeAt']);
+        request.resource.data.keys().hasOnly(['uid', 'magasinId', 'source', 'type', 'duree', 'oney', 'packChoisi', 'france', 'envoyeAt', 'imprimeAt']);
       allow update: if isSignedIn() && resource.data.uid == request.auth.uid &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['imprimeAt']);
       allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;

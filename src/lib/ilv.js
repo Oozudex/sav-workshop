@@ -121,10 +121,11 @@ export function ilvTypesFor({ prixEngage, prixOp, prixBonPlan, prixFort }) {
  * Contenu d'une ILV : prix calculés (pack inclus) et textes prêts à dessiner.
  * p : { type, nom, marque, reference, segment, presqueParfait, prixFort, prixOp, prixBonPlan, prixEngage, pack, dateDebut, dateFin }
  * Accessoires et jouets : pas de pack, ni dans le prix ni dans le détail.
- * options : { duree: 1 | 2 (pack 1 an / 2 ans), oney: null | 3 | 4 (ILV normale uniquement) }
+ * options : { duree: 1 | 2 (pack 1 an / 2 ans), oney: null | 3 | 4 (ILV normale uniquement),
+ *             france: badge « Conçu et assemblé en France » }
  * Renvoie { error } si une donnée manque.
  */
-export function buildIlv(p, { duree = 1, oney = null } = {}) {
+export function buildIlv(p, { duree = 1, oney = null, france = false } = {}) {
   const noPack = sansPack(p.segment, p.famille)
   const pack = noPack ? 0 : packPrice(p.pack, duree)
   if (pack == null) return { error: 'Pack optionnel non renseigné pour ce produit.' }
@@ -137,6 +138,7 @@ export function buildIlv(p, { duree = 1, oney = null } = {}) {
   const base = {
     type: p.type,
     marque: p.marque || '',
+    france: !!france,
     refLine: `Réf. :  ${p.reference || p.refFournisseur || p.chrono || ''} / ${titleName(nomBase)}${pp ? ` ${PP_MENTION}` : ''}`,
     packLine: noPack ? null : `PRIX PACK OPTIONNEL : ${fmtPoint(pack)}`,
     prixLine: `PRIX ${nom} : ${fmtPoint(p.prixFort)}`,
@@ -212,9 +214,9 @@ export function opIlvBatch(items, { duree = 1 } = {}) {
  * uniquement), pack choisi à la main quand la base n'en a pas. Même calcul pour l'aperçu, le téléchargement
  * et l'historique d'impression. Renvoie { error } si le modèle n'est plus possible (OP terminée, bon plan retiré…).
  */
-export function ilvChoisie(item, { type, duree = 1, oney = null, packChoisi = null }) {
+export function ilvChoisie(item, { type, duree = 1, oney = null, packChoisi = null, france = false }) {
   if (!ilvTypesFor(item).includes(type)) return { error: 'Ce modèle d’ILV n’est plus possible pour ce produit.' }
   const noPack = sansPack(item.segment, item.famille)
   return buildIlv({ ...item, type, pack: noPack ? null : item.pack || packChoisi || null },
-    { duree, oney: type === 'normal' ? oney : null })
+    { duree, oney: type === 'normal' ? oney : null, france })
 }

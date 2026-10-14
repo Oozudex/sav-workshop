@@ -27,7 +27,8 @@ const fmtQuand = v => {
 
 // Choix faits sur le téléphone, en clair
 function detailChoix(i) {
-  return [ILV_TYPES[i.type] || i.type, i.duree === 2 ? 'pack 2 ans' : 'pack 1 an', i.oney ? `Oney ${i.oney}x` : null].filter(Boolean).join(' · ')
+  return [ILV_TYPES[i.type] || i.type, i.duree === 2 ? 'pack 2 ans' : 'pack 1 an', i.oney ? `Oney ${i.oney}x` : null,
+    i.france ? 'logo France' : null].filter(Boolean).join(' · ')
 }
 
 function Ligne({ i, checked, onCheck, onRemove, quand }) {

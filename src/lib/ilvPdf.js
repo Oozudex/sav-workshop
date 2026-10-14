@@ -56,6 +56,16 @@ const IMAGES = {
   oney4:   'oney/4x.png',
   oney3t:  'oney/3x-texte.png',
   oney4t:  'oney/4x-texte.png',
+  france:  'badges/concu-en-france.png',
+}
+
+// Badge « Conçu et assemblé en France » (option de la fenêtre ILV) : à gauche du gros prix sur l'ILV
+// normale, sous le logo de la marque sur les autres modèles
+const FRANCE_BOX = {
+  normal:  [18, 104, 56, 142],
+  promo:   [16, 180.5, 41.5, 206],
+  bonplan: [124, 172, 155, 203],
+  engage:  [124, 172, 155, 203],
 }
 
 // Logo de marque : public/ilv/logos/marques/<marque en minuscules, sans accents ni espaces>.png
@@ -341,12 +351,13 @@ export async function renderIlvPages(ilvs, load, title) {
   for (const ilv of ilvs) {
     const page = doc.addPage([W * PT, H * PT])
     const fontEntries = await Promise.all(FONTS_BY_TYPE[ilv.type].map(async k => [k, await font(k)]))
-    const imageEntries = await Promise.all(wanted[ilv.type].map(async k => [k, await image(k)]))
+    const imageEntries = await Promise.all([...wanted[ilv.type], ...(ilv.france ? ['france'] : [])].map(async k => [k, await image(k)]))
     const logoPath = brandLogoPath(ilv.marque)
     const logoImage = logoPath ? await logo(logoPath) : null
     if (logoImage) imageEntries.push(['marque', logoImage])
     const ctx = makeCtx(doc, page, Object.fromEntries(fontEntries), Object.fromEntries(imageEntries))
     DRAW[ilv.type](ctx, ilv)
+    if (ilv.france) ctx.imageContain(ctx.images.france, FRANCE_BOX[ilv.type])
   }
   return doc.save()
 }

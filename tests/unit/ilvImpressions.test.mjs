@@ -15,6 +15,13 @@ describe('envoi à l’impression', () => {
     assert.equal('vide' in d.source, false)
     assert.deepEqual([d.type, d.duree, d.oney, d.packChoisi, d.imprimeAt], ['promo', 2, null, null, null]) // Oney : ILV normale seulement
   })
+  it('garde le choix du logo « Conçu et assemblé en France », repris à l’impression', () => {
+    const avec = impressionData({ uid: 'u1', source: SOURCE, choix: { type: 'promo', duree: 1, france: true } })
+    assert.equal(avec.france, true)
+    assert.equal(impressionData({ uid: 'u1', source: SOURCE, choix: { type: 'promo', duree: 1 } }).france, false)
+    assert.equal(ilvChoisie(SOURCE, avec).france, true)
+    assert.equal(ilvChoisie(SOURCE, { type: 'promo' }).france, false)
+  })
   it('redevient une source d’ILV avec la clé de l’envoi', () => {
     assert.deepEqual(impressionSources([{ id: 'imp1', source: { chrono: '0-1' } }]), [{ chrono: '0-1', key: 'imp1' }])
   })
