@@ -1,18 +1,23 @@
 // Un budget (ex. BUDGET AH27) : imports de la base et du N-1, puis deux lectures
-// Univers › Segment › Magasin ou Magasin › Univers › Segment. Ouvrir un magasin affiche la saisie par marque.
+// Univers › Segment › Marques (tableau marques × magasins) ou Magasin › Univers › Segment (saisie d'un magasin).
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
+import BrandGrid from '../components/budgets/BrandGrid'
+import BuyerFilter from '../components/budgets/BuyerFilter'
 import SegmentSaisie from '../components/budgets/SegmentSaisie'
 import { ImportBaseDialog, ImportN1Dialog } from '../components/budgets/ImportDialogs'
 import { BTN_PRIMARY, BTN_SECONDARY, EmptyState, Notice } from '../components/admin/ui'
-import { SAISONS, addTotals, canEditUnivers, computeTotals, formatBudget, previousSeason, sortSegments } from '../lib/budgets'
 import {
-  carryOverN1, deleteBudget, useBudget, useBudgetMagasins, useBudgetMarques, useBudgetUnivers, useBudgetUser,
+  FILTRE_SANS_ACHETEUR, SAISONS, addTotals, brandsBySegment, buyerFilterTest, canEditUnivers, computeTotals, defaultBuyerFilter,
+  formatBudget, previousSeason, sortSegments,
+} from '../lib/budgets'
+import {
+  carryOverN1, deleteBudget, useAcheteurs, useBrands, useBudget, useBudgetLines, useBudgetMagasins, useBudgetUnivers, useBudgetUser,
   useBudgets,
 } from '../lib/budgetsStore'
 
-const VIEWS = [['univers', 'Univers › Segment › Magasin'], ['magasin', 'Magasin › Univers › Segment']]
+const VIEWS = [['univers', 'Univers › Segment › Marques'], ['magasin', 'Magasin › Univers › Segment']]
 const GRID = 'grid grid-cols-[minmax(12rem,1fr)_repeat(3,6.5rem)_8.5rem] items-center gap-2'
 const LEVEL_PAD = ['pl-2', 'pl-7', 'pl-12']
 
@@ -75,7 +80,8 @@ export default function BudgetDetail() {
   const navigate = useNavigate()
   const user = useBudgetUser()
   const { budget, loading } = useBudget(id)
-  const { list: marques } = useBudgetMarques(id)
+  const { list: lines } = useBudgetLines(id)
+  const { list: brands } = useBrands()
   const { list: universList } = useBudgetUnivers()
   const { list: magasins } = useBudgetMagasins()
   const { list: budgets } = useBudgets()
@@ -83,8 +89,9 @@ export default function BudgetDetail() {
   const [view, setView] = useState('univers')
   const isAcheteur = user.role === 'acheteur'
   const isDirection = user.role === 'directeurgen'
-  // Filtre : '' tous les univers, '*' mes univers (acheteur), sinon un univers
-  const [filtre, setFiltre] = useState(() => (isAcheteur && user.univers.length ? '*' : ''))
+  const acheteurs = useAcheteurs()
+  // Filtre par acheteur : ses univers attribués (par défaut, les miens pour un acheteur)
+  const [filtre, setFiltre] = useState(() => defaultBuyerFilter(user))
   const [open, setOpen] = useState(() => new Set())
   const [dialog, setDialog] = useState(null)
   const [notice, setNotice] = useState(null)
@@ -94,15 +101,8 @@ export default function BudgetDetail() {
   const toggle = key => setOpen(s => { const n = new Set(s); if (n.has(key)) n.delete(key); else n.add(key); return n })
 
   const segments = useMemo(() => sortSegments(budget?.segments || [], universList.map(u => u.nom)), [budget?.segments, universList])
-  const totals = useMemo(() => computeTotals(segments, budget?.base, marques), [segments, budget?.base, marques])
-  const marquesBySeg = useMemo(() => {
-    const m = new Map()
-    for (const x of [...marques].sort((a, b) => a.nom.localeCompare(b.nom))) {
-      if (!m.has(x.segId)) m.set(x.segId, [])
-      m.get(x.segId).push(x)
-    }
-    return m
-  }, [marques])
+  const totals = useMemo(() => computeTotals(segments, budget?.base, lines), [segments, budget?.base, lines])
+  const brandsBySeg = useMemo(() => brandsBySegment(brands, lines), [brands, lines])
   const groups = useMemo(() => {
     const g = []
     for (const s of segments) {
@@ -111,8 +111,10 @@ export default function BudgetDetail() {
     }
     return g
   }, [segments])
-  const shown = filtre === '*' ? groups.filter(g => user.univers.includes(g.univers))
-    : filtre ? groups.filter(g => g.univers === filtre) : groups
+  const keep = buyerFilterTest(filtre, acheteurs)
+  const shown = groups.filter(g => keep(g.univers))
+  const filtreLabel = filtre === FILTRE_SANS_ACHETEUR ? ' des univers sans acheteur'
+    : filtre ? ` · ${acheteurs.find(a => `a:${a.id}` === filtre)?.displayName || ''}` : ''
 
   const prevSeason = budget ? previousSeason(budget) : null
   const prev = prevSeason && budgets.find(b => b.saison === prevSeason.saison && b.annee === prevSeason.annee)
@@ -124,21 +126,27 @@ export default function BudgetDetail() {
   const total = cellOf(shown.flatMap(g => g.segments), magasins)
   const onlyUnivers = g => g.segments.length === 1 && !g.segments[0].nom
   const segLabel = s => s.nom || 'Sans segment'
-  const nbMarques = s => marquesBySeg.get(s.id)?.length || 0
+  const nbMarques = s => brandsBySeg.get(s.id)?.length || 0
 
   const saisie = (seg, mag) => (
     <div className="px-2 py-2 bg-gray-50 dark:bg-neutral-950/50 border-b border-gray-100 dark:border-neutral-800">
       <SegmentSaisie budgetId={budget.id} seg={seg} magasin={mag} base={totals[seg.id]?.[mag.id]?.base || 0}
-        marques={marquesBySeg.get(seg.id) || []} user={user} readOnly={!canEditUnivers(user, seg.univers)} />
+        brands={brandsBySeg.get(seg.id) || []} user={user} readOnly={!canEditUnivers(user, seg.univers)} />
+    </div>
+  )
+  const grid = seg => (
+    <div className="px-2 py-2 bg-gray-50 dark:bg-neutral-950/50 border-b border-gray-100 dark:border-neutral-800">
+      <BrandGrid budgetId={budget.id} seg={seg} magasins={magasins} totals={totals[seg.id]}
+        brands={brandsBySeg.get(seg.id) || []} user={user} readOnly={!canEditUnivers(user, seg.univers)} />
     </div>
   )
 
   async function carryOver() {
-    if (!confirm(`Reprendre les marques de ${prev.nom} et leur saisie comme N-1${isAcheteur ? ' (tes univers uniquement)' : ''} ?\nLe N-1 des marques déjà présentes est remplacé ; la saisie de ${budget.nom} n’est pas touchée.`)) return
+    if (!confirm(`Reprendre la saisie de ${prev.nom} comme N-1${isAcheteur ? ' (tes univers uniquement)' : ''} ?\nLe N-1 actuel est remplacé ; la saisie de ${budget.nom} n’est pas touchée.`)) return
     setBusy(true)
     try {
-      const plan = await carryOverN1(budget, marques, prev, user)
-      setNotice({ tone: 'ok', text: `N-1 repris de ${prev.nom} : ${plan.updates.length} marque(s) mises à jour, ${plan.creates.length} ajoutée(s).` })
+      const { count } = await carryOverN1(budget, prev, user)
+      setNotice({ tone: 'ok', text: `N-1 repris de ${prev.nom} : ${count} marque(s).` })
     } catch (err) { setNotice({ text: err.message }) }
     setBusy(false)
   }
@@ -208,12 +216,7 @@ export default function BudgetDetail() {
               </button>
             ))}
           </div>
-          <select value={filtre} onChange={e => setFiltre(e.target.value)} aria-label="Filtrer par univers"
-            className="h-9 px-2 rounded-lg border text-sm bg-white dark:bg-neutral-950 border-gray-200 dark:border-neutral-700 text-gray-900 dark:text-white">
-            {isAcheteur && user.univers.length > 0 && <option value="*">Mes univers ({user.univers.length})</option>}
-            <option value="">Tous les univers</option>
-            {groups.map(g => <option key={g.univers} value={g.univers}>{g.univers}</option>)}
-          </select>
+          <BuyerFilter value={filtre} onChange={setFiltre} acheteurs={acheteurs} me={user.uid} />
           {open.size > 0 && <button type="button" onClick={() => setOpen(new Set())} className={BTN_SECONDARY}>Tout replier</button>}
         </div>
 
@@ -227,30 +230,14 @@ export default function BudgetDetail() {
                   <TreeRow level={0} label={g.univers} cell={cellOf(g.segments, magasins)} open={isOpen(uKey)} onToggle={() => toggle(uKey)}
                     hint={onlyUnivers(g) ? '' : `${g.segments.length} segment${g.segments.length > 1 ? 's' : ''}`} />
                   {isOpen(uKey) && (onlyUnivers(g)
-                    ? magasins.map(mag => {
-                      const k = `${uKey}|m:${mag.id}`
-                      return (
-                        <div key={k}>
-                          <TreeRow level={1} label={mag.nom} cell={cellOf(g.segments, [mag])} open={isOpen(k)} onToggle={() => toggle(k)} />
-                          {isOpen(k) && saisie(g.segments[0], mag)}
-                        </div>
-                      )
-                    })
+                    ? grid(g.segments[0])
                     : g.segments.map(seg => {
                       const sKey = `s:${seg.id}`
                       return (
                         <div key={sKey}>
                           <TreeRow level={1} label={segLabel(seg)} hint={`${nbMarques(seg)} marque${nbMarques(seg) > 1 ? 's' : ''}`}
                             cell={cellOf([seg], magasins)} open={isOpen(sKey)} onToggle={() => toggle(sKey)} />
-                          {isOpen(sKey) && magasins.map(mag => {
-                            const k = `${sKey}|m:${mag.id}`
-                            return (
-                              <div key={k}>
-                                <TreeRow level={2} label={mag.nom} cell={cellOf([seg], [mag])} open={isOpen(k)} onToggle={() => toggle(k)} />
-                                {isOpen(k) && saisie(seg, mag)}
-                              </div>
-                            )
-                          })}
+                          {isOpen(sKey) && grid(seg)}
                         </div>
                       )
                     }))}
@@ -283,7 +270,7 @@ export default function BudgetDetail() {
               )
             })}
             <div className={`${GRID} px-2 py-2 text-sm font-bold text-gray-900 dark:text-white`}>
-              <span>Total{filtre === '*' ? ' de mes univers' : filtre ? ` ${filtre}` : ''}</span>
+              <span>Total{filtreLabel}</span>
               <span className="text-right tabular-nums">{formatBudget(total.base)}</span>
               <span className="text-right tabular-nums">{formatBudget(total.n1)}</span>
               <span className="text-right tabular-nums">{formatBudget(total.saisie)}</span>
@@ -295,7 +282,7 @@ export default function BudgetDetail() {
       </>}
 
       {dialog === 'base' && <ImportBaseDialog budget={budget} univers={universList} magasins={magasins} user={user} onClose={() => setDialog(null)} />}
-      {dialog === 'n1' && <ImportN1Dialog budget={budget} marques={marques} univers={universList} magasins={magasins} user={user} onClose={() => setDialog(null)} />}
+      {dialog === 'n1' && <ImportN1Dialog budget={budget} brands={brands} univers={universList} magasins={magasins} user={user} onClose={() => setDialog(null)} />}
     </Page>
   )
 }

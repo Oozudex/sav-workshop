@@ -100,7 +100,7 @@ export function ImportBaseDialog({ budget, univers, magasins, user, onClose }) {
   )
 }
 
-export function ImportN1Dialog({ budget, marques, univers, magasins, user, onClose }) {
+export function ImportN1Dialog({ budget, brands, univers, magasins, user, onClose }) {
   const [wb, setWb] = useState(null)
   const [sheet, setSheet] = useState('')
   const [column, setColumn] = useState('')
@@ -133,13 +133,13 @@ export function ImportN1Dialog({ budget, marques, univers, magasins, user, onClo
   const parsed = useMemo(() => (rows && column
     ? parseN1Sheet(rows, { univers: univers.map(u => u.nom), matchMagasin, column }) : null), [rows, column, univers, matchMagasin])
   const lines = useMemo(() => (parsed?.lines ? editableLines(parsed.lines, user) : null), [parsed, user])
-  const plan = useMemo(() => (lines ? planN1Import(lines, marques, budget.segments) : null), [lines, marques, budget.segments])
+  const plan = useMemo(() => (lines ? planN1Import(lines, brands, budget.segments) : null), [lines, brands, budget.segments])
   const ignored = parsed?.lines ? parsed.lines.length - lines.length : 0
 
   async function save() {
     setBusy(true)
     try {
-      await applyN1(budget, marques, parsed.lines, `Excel · ${column}`, user)
+      await applyN1(budget, brands, parsed.lines, `Excel · ${column}`, user)
       setDone(plan)
     } catch (err) { setError(err.message) }
     setBusy(false)
@@ -153,11 +153,11 @@ export function ImportN1Dialog({ budget, marques, univers, magasins, user, onClo
         <button type="button" onClick={save} disabled={!plan || busy} className={BTN_PRIMARY}>{busy && plan ? 'Import…' : 'Importer'}</button>
       </>}>
       {notReady ? <Notice notice={{ text: notReady }} /> : done ? (
-        <Notice notice={{ tone: 'ok', text: `N-1 importé : ${done.updates.length} marque(s) mises à jour, ${done.creates.length} ajoutée(s)${done.newSegments.length ? `, ${done.newSegments.length} segment(s) ajouté(s)` : ''}.` }} />
+        <Notice notice={{ tone: 'ok', text: `N-1 importé : ${done.matched.length + done.missing.length} marque(s), dont ${done.missing.length} ajoutée(s) à la liste des marques${done.newSegments.length ? ` ; ${done.newSegments.length} segment(s) ajouté(s)` : ''}.` }} />
       ) : <>
         <p className="text-xs text-gray-600 dark:text-neutral-300 leading-relaxed">
-          Fichier du budget précédent (onglet « BUDGET PAR MARQUES »). Les marques absentes du budget sont ajoutées ;
-          le N-1 des marques déjà présentes est remplacé, la saisie n’est pas touchée.
+          Fichier du budget précédent (onglet « BUDGET PAR MARQUES »). Les marques absentes de la liste des marques y sont
+          ajoutées ; le N-1 est remplacé, la saisie n’est pas touchée.
         </p>
         <FileField label="Fichier du budget N-1" onFile={read} busy={busy && !wb} />
         {error && <Notice notice={{ text: error }} />}
@@ -180,8 +180,8 @@ export function ImportN1Dialog({ budget, marques, univers, magasins, user, onClo
         {plan && <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <Stat label="Magasins" value={parsed.magasins} />
-            <Stat label="Marques ajoutées" value={plan.creates.length} />
-            <Stat label="Mises à jour" value={plan.updates.length} />
+            <Stat label="Marques" value={plan.matched.length + plan.missing.length} />
+            <Stat label="Nouvelles marques" value={plan.missing.length} />
             <Stat label="Total N-1" value={formatBudget(total)} />
           </div>
           {ignored > 0 && (

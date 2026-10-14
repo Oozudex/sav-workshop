@@ -445,6 +445,14 @@ service cloud.firestore {
     match /budget_magasins/{id} {
       allow read, write: if isSignedIn() && isGlobal();
     }
+    // Liste des marques par univers et segment : même droits que les lignes par marque
+    match /budget_marques/{id} {
+      allow read: if isSignedIn() && isGlobal();
+      allow create: if isSignedIn() && canEditBudgetUnivers(request.resource.data.univers);
+      allow update: if isSignedIn() && canEditBudgetUnivers(resource.data.univers) &&
+        request.resource.data.univers == resource.data.univers;
+      allow delete: if isSignedIn() && canEditBudgetUnivers(resource.data.univers);
+    }
     match /budgets/{budgetId} {
       allow read, create, update: if isSignedIn() && isGlobal();
       allow delete: if isSignedIn() && isDirGen();

@@ -60,6 +60,30 @@ export function editableLines(lines, user) {
   return lines.filter(l => canEditUnivers(user, l.univers))
 }
 
+// ── Filtre par acheteur ─────────────────────────────────────────────────────────
+// '' : tout ; 'a:<uid>' : les univers attribués à cet acheteur ; FILTRE_SANS_ACHETEUR : les univers
+// que personne n'a en charge.
+
+export const FILTRE_SANS_ACHETEUR = '!sans'
+export const filtreAcheteur = uid => `a:${uid}`
+
+// Un acheteur qui a des univers voit d'abord les siens
+export function defaultBuyerFilter(user) {
+  return user?.role === 'acheteur' && user.univers?.length ? filtreAcheteur(user.uid) : ''
+}
+
+// Univers retenus par le filtre : fonction (univers → booléen)
+export function buyerFilterTest(filtre, acheteurs) {
+  if (!filtre) return () => true
+  if (filtre === FILTRE_SANS_ACHETEUR) {
+    const pris = new Set(acheteurs.flatMap(a => a.univers || []))
+    return u => !pris.has(u)
+  }
+  const a = acheteurs.find(x => filtreAcheteur(x.id) === filtre)
+  const siens = new Set(a?.univers || [])
+  return u => siens.has(u)
+}
+
 // ── Noms et identifiants ────────────────────────────────────────────────────────
 
 // Comparaison des libellés : sans accents, majuscules, espaces réduits
@@ -274,30 +298,60 @@ export function parseN1Sheet(rows, { univers, matchMagasin, column }) {
   }
 }
 
-// Lignes N-1 tirées des marques d'un budget précédent (saisie → N-1)
-export function linesFromBudget(marques) {
-  return marques.map(m => ({
-    segId: m.segId, univers: m.univers, segment: m.segment || '', nom: m.nom,
-    n1: { ...(m.saisie || {}) }, commentaire: m.commentaire || '',
+// ── Marques ─────────────────────────────────────────────────────────────────────
+// Liste commune des marques (budget_marques : univers, segment, segId, nom). Dans un budget, la ligne
+// d'une marque (N-1, saisie, commentaire) porte l'id de la marque : budgets/{id}/marques/{idMarque}.
+
+// Lignes N-1 tirées d'un budget précédent (sa saisie devient le N-1), même id de marque
+export function linesFromBudget(lines) {
+  return lines.map(l => ({
+    id: l.id, segId: l.segId, univers: l.univers, segment: l.segment || '', nom: l.nom || '',
+    n1: { ...(l.saisie || {}) }, commentaire: l.commentaire || '',
   }))
 }
 
-// Rapprochement des lignes N-1 avec les marques du budget : mises à jour (N-1 remplacé),
-// créations (nouvelles marques) et segments à ajouter (absents de la base)
-export function planN1Import(lines, marques, segments = []) {
-  const byKey = new Map(marques.map(m => [marqueKey(m.segId, m.nom), m]))
+// Rapprochement des lignes N-1 avec la liste des marques : marques trouvées, marques à ajouter
+// à la liste et segments à ajouter au budget (absents de la base)
+export function planN1Import(lines, brands, segments = []) {
+  const byKey = new Map(brands.map(b => [marqueKey(b.segId, b.nom), b]))
   const segIds = new Set(segments.map(s => s.id))
-  const updates = [], creates = [], newSegments = []
+  const matched = [], missing = [], newSegments = []
   for (const l of lines) {
-    const existing = byKey.get(marqueKey(l.segId, l.nom))
-    if (existing) updates.push({ id: existing.id, n1: l.n1, commentaireN1: l.commentaire })
-    else creates.push(l)
+    const b = byKey.get(marqueKey(l.segId, l.nom))
+    if (b) matched.push({ id: b.id, line: l })
+    else missing.push(l)
     if (!segIds.has(l.segId)) {
       segIds.add(l.segId)
       newSegments.push({ id: l.segId, univers: l.univers, nom: l.segment })
     }
   }
-  return { updates, creates, newSegments }
+  return { matched, missing, newSegments }
+}
+
+const hasAmounts = l => Object.values(l?.n1 || {}).some(v => typeof v === 'number')
+  || Object.values(l?.saisie || {}).some(v => typeof v === 'number')
+
+// Marques de chaque segment d'un budget : celles de la liste, plus les lignes du budget dont la marque
+// a été retirée de la liste mais qui ont encore des montants (orphan). { segId: [{ id, nom, line, … }] }
+export function brandsBySegment(brands, lines) {
+  const lineById = new Map(lines.map(l => [l.id, l]))
+  const bySeg = new Map()
+  const push = (segId, item) => { if (!bySeg.has(segId)) bySeg.set(segId, []); bySeg.get(segId).push(item) }
+  for (const b of brands) push(b.segId, { id: b.id, nom: b.nom, univers: b.univers, segId: b.segId, segment: b.segment || '', line: lineById.get(b.id) || null, orphan: false })
+  const ids = new Set(brands.map(b => b.id))
+  for (const l of lines) {
+    if (ids.has(l.id) || !hasAmounts(l)) continue
+    push(l.segId, { id: l.id, nom: l.nom || '—', univers: l.univers, segId: l.segId, segment: l.segment || '', line: l, orphan: true })
+  }
+  for (const list of bySeg.values()) list.sort((a, b) => a.nom.localeCompare(b.nom, 'fr'))
+  return bySeg
+}
+
+// Segments connus (tous budgets confondus), pour ranger la liste des marques
+export function segmentsCatalog(budgets, extra = []) {
+  const byId = new Map()
+  for (const s of [...budgets.flatMap(b => b.segments || []), ...extra]) if (!byId.has(s.id)) byId.set(s.id, s)
+  return [...byId.values()]
 }
 
 // ── Totaux ──────────────────────────────────────────────────────────────────────

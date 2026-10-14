@@ -1,22 +1,22 @@
-// Saisie d'un segment pour un magasin : budget de base, puis par marque le N-1 et le budget à remplir.
-// Le commentaire d'une marque est commun à tous les magasins (comme la colonne COMMENTAIRES du N-1).
-// readOnly : univers non attribué à l'acheteur (lecture seule).
+// Saisie d'un segment pour un magasin (vue Magasin › Univers › Segment) : budget de base, puis par marque
+// le N-1 et le budget à remplir. Le commentaire d'une marque est commun à tous les magasins.
+// readOnly : univers non attribué à l'acheteur.
 import { useState } from 'react'
 import { IconButton } from '../admin/ui'
-import { formatBudget, hasValue, marqueKey, normLabel, toAmount } from '../../lib/budgets'
-import { addMarque, deleteMarque, setSaisie, updateMarque } from '../../lib/budgetsStore'
+import { formatBudget, hasValue, normLabel, toAmount } from '../../lib/budgets'
+import { addBrand, deleteLine, setCommentaire, setSaisie } from '../../lib/budgetsStore'
 
-const CELL_INPUT = 'w-full h-8 px-2 rounded-lg border text-sm bg-white dark:bg-neutral-950 border-gray-200 dark:border-neutral-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-black/10 dark:focus:ring-white/20'
+export const CELL_INPUT = 'w-full h-8 px-2 rounded-lg border text-sm bg-white dark:bg-neutral-950 border-gray-200 dark:border-neutral-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-black/10 dark:focus:ring-white/20'
 
 const inputValue = v => (typeof v === 'number' ? String(v).replace('.', ',') : '')
 
-// Entrée : enregistre et passe à la ligne suivante
+// Entrée : enregistre et passe au champ suivant
 function focusNext(el) {
   const all = [...document.querySelectorAll('input[data-budget-saisie]')]
   all[all.indexOf(el) + 1]?.focus()
 }
 
-function AmountInput({ value, onSave, label }) {
+export function AmountInput({ value, onSave, label, className = '' }) {
   const [draft, setDraft] = useState(null)
   const [invalid, setInvalid] = useState(false)
 
@@ -39,11 +39,11 @@ function AmountInput({ value, onSave, label }) {
         if (e.key === 'Enter') { e.preventDefault(); const el = e.currentTarget; commit(); focusNext(el) }
         if (e.key === 'Escape') { setDraft(null); e.currentTarget.blur() }
       }}
-      className={`${CELL_INPUT} text-right tabular-nums ${invalid ? '!border-red-400' : ''}`} />
+      className={`${CELL_INPUT} text-right tabular-nums ${invalid ? '!border-red-400' : ''} ${className}`} />
   )
 }
 
-function TextInput({ value, onSave, label, placeholder }) {
+export function TextInput({ value, onSave, label, placeholder }) {
   const [draft, setDraft] = useState(null)
   function commit() {
     if (draft == null) return
@@ -59,98 +59,69 @@ function TextInput({ value, onSave, label, placeholder }) {
   )
 }
 
-function Reste({ base, saisie }) {
+export function Reste({ base, saisie, short = false }) {
   const reste = base - saisie
+  if (!base && !saisie) return <span className="text-gray-400 dark:text-neutral-500">—</span>
   const cls = Math.round(reste) === 0 ? 'text-emerald-700 dark:text-emerald-400'
     : reste < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-neutral-300'
-  return <span className={`font-semibold tabular-nums ${cls}`}>{reste < 0 ? `Dépassement ${formatBudget(-reste)}` : `Reste ${formatBudget(reste)}`}</span>
+  const text = short ? (reste < 0 ? `+${formatBudget(-reste)}` : formatBudget(reste))
+    : reste < 0 ? `Dépassement ${formatBudget(-reste)}` : `Reste ${formatBudget(reste)}`
+  return <span className={`font-semibold tabular-nums ${cls}`}>{text}</span>
 }
 
-function MarqueRow({ budgetId, marque, magasin, user, siblings, readOnly }) {
-  const [renaming, setRenaming] = useState(null)
-  const [error, setError] = useState('')
-  const n1 = marque.n1?.[magasin.id]
-  const run = p => p.catch(err => setError(err.message))
-
-  function rename(e) {
-    e.preventDefault()
-    if (renaming == null) return
-    const nom = renaming.trim().toUpperCase()
-    if (!nom || nom === marque.nom) return setRenaming(null)
-    if (siblings.some(m => m.id !== marque.id && marqueKey(m.segId, m.nom) === marqueKey(marque.segId, nom))) {
-      return setError(`« ${nom} » existe déjà dans ce segment.`)
-    }
-    setError('')
-    setRenaming(null)
-    run(updateMarque(budgetId, marque.id, { nom }, user))
-  }
-
-  function remove() {
-    if (!confirm(`Supprimer la marque « ${marque.nom} » de ce segment ?\nSon N-1 et sa saisie sont supprimés pour tous les magasins.`)) return
-    run(deleteMarque(budgetId, marque.id))
-  }
-
+export function OrphanTag() {
   return (
-    <tr className="border-t border-gray-100 dark:border-neutral-800 align-middle">
-      <td className="py-1.5 pr-2">
-        {renaming != null ? (
-          <form onSubmit={rename}>
-            <input autoFocus value={renaming} onChange={e => setRenaming(e.target.value)} onBlur={rename}
-              onKeyDown={e => e.key === 'Escape' && setRenaming(null)} aria-label="Nouveau nom de la marque" className={`${CELL_INPUT} uppercase`} />
-          </form>
-        ) : (
-          <span className="text-sm font-medium text-gray-900 dark:text-white">{marque.nom}</span>
-        )}
-        {error && <p role="alert" className="text-[11px] text-red-600 dark:text-red-400">{error}</p>}
-      </td>
-      <td className="py-1.5 px-2 text-right text-sm tabular-nums text-gray-600 dark:text-neutral-300 whitespace-nowrap">
-        {hasValue(marque.n1, magasin.id) ? formatBudget(n1) : '—'}
-        {marque.commentaireN1 && (
-          <span title={`Commentaire N-1 : ${marque.commentaireN1}`} aria-label={`Commentaire N-1 : ${marque.commentaireN1}`}
-            className="ml-1 inline-grid place-items-center h-4 w-4 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-300 cursor-help">i</span>
-        )}
-      </td>
-      {readOnly ? <>
-        <td className="py-1.5 px-2 w-32 text-right text-sm tabular-nums text-gray-900 dark:text-white">
-          {hasValue(marque.saisie, magasin.id) ? formatBudget(marque.saisie[magasin.id]) : '—'}
-        </td>
-        <td className="py-1.5 px-2 min-w-[12rem] text-sm text-gray-600 dark:text-neutral-300">{marque.commentaire}</td>
-        <td />
-      </> : <>
-        <td className="py-1.5 px-2 w-32">
-          <AmountInput value={marque.saisie?.[magasin.id]} label={`Budget ${marque.nom} – ${magasin.nom}`}
-            onSave={v => run(setSaisie(budgetId, marque.id, magasin.id, v, user))} />
-        </td>
-        <td className="py-1.5 px-2 min-w-[12rem]">
-          <TextInput value={marque.commentaire} label={`Commentaire ${marque.nom}`} placeholder="Commentaire"
-            onSave={v => run(updateMarque(budgetId, marque.id, { commentaire: v }, user))} />
-        </td>
-        <td className="py-1.5 pl-1">
-          <div className="flex items-center justify-end gap-0.5">
-            <IconButton icon="edit" label={`Renommer ${marque.nom}`} onClick={() => setRenaming(marque.nom)} />
-            <IconButton icon="delete" danger label={`Supprimer ${marque.nom}`} onClick={remove} />
-          </div>
-        </td>
-      </>}
-    </tr>
+    <span title="Marque retirée de la liste : ses montants restent dans ce budget"
+      className="ml-1.5 h-4 px-1 inline-flex items-center rounded text-[9px] font-semibold uppercase bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
+      retirée
+    </span>
   )
 }
 
-export default function SegmentSaisie({ budgetId, seg, magasin, base, marques, user, readOnly = false }) {
+export function N1Comment({ text }) {
+  if (!text) return null
+  return (
+    <span title={`Commentaire N-1 : ${text}`} aria-label={`Commentaire N-1 : ${text}`}
+      className="ml-1 inline-grid place-items-center h-4 w-4 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-300 cursor-help">i</span>
+  )
+}
+
+// Ajout rapide d'une marque à la liste (segment courant)
+export function AddBrandForm({ seg, brands, user }) {
   const [nom, setNom] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const n1 = marques.reduce((t, m) => t + (m.n1?.[magasin.id] || 0), 0)
-  const saisie = marques.reduce((t, m) => t + (m.saisie?.[magasin.id] || 0), 0)
-
   async function add(e) {
     e.preventDefault()
     const v = nom.trim().toUpperCase()
     if (!v) return
-    if (marques.some(m => normLabel(m.nom) === normLabel(v))) return setError(`« ${v} » existe déjà dans ce segment.`)
+    if (brands.some(b => normLabel(b.nom) === normLabel(v))) return setError(`« ${v} » existe déjà dans ce segment.`)
     setBusy(true); setError('')
-    try { await addMarque(budgetId, seg, v, user); setNom('') } catch (err) { setError(err.message) }
+    try { await addBrand(seg, v, user); setNom('') } catch (err) { setError(err.message) }
     setBusy(false)
+  }
+  return (
+    <form onSubmit={add} className="flex flex-wrap items-center gap-2 pt-1">
+      <input value={nom} onChange={e => setNom(e.target.value)} placeholder="Nouvelle marque"
+        aria-label={`Ajouter une marque à ${seg.univers}${seg.nom ? ` › ${seg.nom}` : ''}`} className={`${CELL_INPUT} max-w-xs uppercase`} />
+      <button type="submit" disabled={busy || !nom.trim()}
+        className="h-8 px-3 rounded-lg border text-xs font-semibold text-gray-700 border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50 dark:bg-neutral-900 dark:text-neutral-200 dark:border-neutral-700 dark:hover:bg-neutral-800">
+        Ajouter la marque
+      </button>
+      {error && <p role="alert" className="text-[11px] text-red-600 dark:text-red-400">{error}</p>}
+    </form>
+  )
+}
+
+export default function SegmentSaisie({ budgetId, seg, magasin, base, brands, user, readOnly = false }) {
+  const [error, setError] = useState('')
+  const run = p => p.catch(err => setError(err.message))
+  const n1 = brands.reduce((t, b) => t + (b.line?.n1?.[magasin.id] || 0), 0)
+  const saisie = brands.reduce((t, b) => t + (b.line?.saisie?.[magasin.id] || 0), 0)
+
+  function removeOrphan(b) {
+    if (!confirm(`Supprimer « ${b.nom} » de ce budget ? Son N-1 et sa saisie sont supprimés pour tous les magasins.`)) return
+    run(deleteLine(budgetId, b.id))
   }
 
   return (
@@ -166,6 +137,7 @@ export default function SegmentSaisie({ budgetId, seg, magasin, base, marques, u
           </span>
         )}
       </div>
+      {error && <p role="alert" className="text-[11px] text-red-600 dark:text-red-400">{error}</p>}
       <div className="overflow-x-auto">
         <table className="w-full text-left">
           <thead>
@@ -178,12 +150,41 @@ export default function SegmentSaisie({ budgetId, seg, magasin, base, marques, u
             </tr>
           </thead>
           <tbody>
-            {marques.map(m => <MarqueRow key={m.id} budgetId={budgetId} marque={m} magasin={magasin} user={user} siblings={marques} readOnly={readOnly} />)}
-            {marques.length === 0 && (
-              <tr><td colSpan={5} className="py-3 text-xs text-gray-500 dark:text-neutral-400">Aucune marque dans ce segment.</td></tr>
+            {brands.map(b => (
+              <tr key={b.id} className="border-t border-gray-100 dark:border-neutral-800 align-middle">
+                <th scope="row" className="py-1.5 pr-2 text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap">
+                  {b.nom}{b.orphan && <OrphanTag />}
+                </th>
+                <td className="py-1.5 px-2 text-right text-sm tabular-nums text-gray-600 dark:text-neutral-300 whitespace-nowrap">
+                  {hasValue(b.line?.n1, magasin.id) ? formatBudget(b.line.n1[magasin.id]) : '—'}
+                  <N1Comment text={b.line?.commentaireN1} />
+                </td>
+                {readOnly ? <>
+                  <td className="py-1.5 px-2 w-32 text-right text-sm tabular-nums text-gray-900 dark:text-white">
+                    {hasValue(b.line?.saisie, magasin.id) ? formatBudget(b.line.saisie[magasin.id]) : '—'}
+                  </td>
+                  <td className="py-1.5 px-2 min-w-[12rem] text-sm text-gray-600 dark:text-neutral-300">{b.line?.commentaire}</td>
+                  <td />
+                </> : <>
+                  <td className="py-1.5 px-2 w-32">
+                    <AmountInput value={b.line?.saisie?.[magasin.id]} label={`Budget ${b.nom} – ${magasin.nom}`}
+                      onSave={v => run(setSaisie(budgetId, b, magasin.id, v, user))} />
+                  </td>
+                  <td className="py-1.5 px-2 min-w-[12rem]">
+                    <TextInput value={b.line?.commentaire} label={`Commentaire ${b.nom}`} placeholder="Commentaire"
+                      onSave={v => run(setCommentaire(budgetId, b, v, user))} />
+                  </td>
+                  <td className="py-1.5 pl-1 text-right">
+                    {b.orphan && <IconButton icon="delete" danger label={`Supprimer ${b.nom} de ce budget`} onClick={() => removeOrphan(b)} />}
+                  </td>
+                </>}
+              </tr>
+            ))}
+            {brands.length === 0 && (
+              <tr><td colSpan={5} className="py-3 text-xs text-gray-500 dark:text-neutral-400">Aucune marque dans ce segment : ajoute-les dans l’onglet Marques des budgets.</td></tr>
             )}
           </tbody>
-          {marques.length > 0 && (
+          {brands.length > 0 && (
             <tfoot>
               <tr className="border-t border-gray-200 dark:border-neutral-700 text-sm font-semibold text-gray-900 dark:text-white">
                 <td className="py-1.5 pr-2">Total</td>
@@ -195,15 +196,7 @@ export default function SegmentSaisie({ budgetId, seg, magasin, base, marques, u
           )}
         </table>
       </div>
-      {!readOnly && <form onSubmit={add} className="flex items-center gap-2 pt-1">
-        <input value={nom} onChange={e => setNom(e.target.value)} placeholder="Nouvelle marque"
-          aria-label={`Ajouter une marque à ${seg.univers}${seg.nom ? ` › ${seg.nom}` : ''}`} className={`${CELL_INPUT} max-w-xs uppercase`} />
-        <button type="submit" disabled={busy || !nom.trim()}
-          className="h-8 px-3 rounded-lg border text-xs font-semibold text-gray-700 border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50 dark:bg-neutral-900 dark:text-neutral-200 dark:border-neutral-700 dark:hover:bg-neutral-800">
-          Ajouter la marque
-        </button>
-        {error && <p role="alert" className="text-[11px] text-red-600 dark:text-red-400">{error}</p>}
-      </form>}
+      {!readOnly && <AddBrandForm seg={seg} brands={brands} user={user} />}
     </div>
   )
 }

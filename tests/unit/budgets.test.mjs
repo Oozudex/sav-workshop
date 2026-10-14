@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  addTotals, budgetName, canEditUnivers, computeTotals, editableLines, findN1Sheet, linesFromBudget, magasinMatcher, mergeSegments, n1Columns,
+  FILTRE_SANS_ACHETEUR, addTotals, brandsBySegment, budgetName, buyerFilterTest, defaultBuyerFilter, filtreAcheteur, canEditUnivers, computeTotals, editableLines, segmentsCatalog, findN1Sheet, linesFromBudget, magasinMatcher, mergeSegments, n1Columns,
   parseBaseSheet, parseN1Sheet, planN1Import, previousSeason, segmentId, sortSegments,
 } from '../../src/lib/budgets.js'
 
@@ -49,6 +49,24 @@ describe('droits', () => {
   })
   it("un acheteur n'importe que ses univers", () => {
     assert.deepEqual(editableLines([{ univers: 'CYCLE' }, { univers: 'GOLF' }], acheteur), [{ univers: 'CYCLE' }])
+  })
+})
+
+describe('filtre par acheteur', () => {
+  const ACHETEURS = [{ id: 'paul', univers: ['CYCLE', 'GOLF'] }, { id: 'lea', univers: ['RUNNING'] }]
+  const garde = (filtre, univers) => univers.filter(buyerFilterTest(filtre, ACHETEURS))
+  const TOUS = ['CYCLE', 'GOLF', 'RUNNING', 'PECHE']
+
+  it("un acheteur part de ses univers, la direction de tout", () => {
+    assert.equal(defaultBuyerFilter({ role: 'acheteur', uid: 'paul', univers: ['CYCLE'] }), filtreAcheteur('paul'))
+    assert.equal(defaultBuyerFilter({ role: 'acheteur', uid: 'x', univers: [] }), '')
+    assert.equal(defaultBuyerFilter({ role: 'directeurgen', uid: 'd' }), '')
+  })
+  it("garde les univers de l'acheteur choisi, ou ceux sans acheteur", () => {
+    assert.deepEqual(garde('', TOUS), TOUS)
+    assert.deepEqual(garde(filtreAcheteur('paul'), TOUS), ['CYCLE', 'GOLF'])
+    assert.deepEqual(garde(FILTRE_SANS_ACHETEUR, TOUS), ['PECHE'])
+    assert.deepEqual(garde(filtreAcheteur('inconnu'), TOUS), [])
   })
 })
 
@@ -139,21 +157,50 @@ describe('parseN1Sheet', () => {
 describe('planN1Import', () => {
   const base = parseBaseSheet(BASE, { univers: UNIVERS, matchMagasin })
   const { lines } = parseN1Sheet(N1, { univers: UNIVERS, matchMagasin, column: 'BUDGET AH26' })
-  const existing = [{ id: 'x', segId: segmentId('ACCESSOIRE TEXTILE', 'CHAUSSETTES'), nom: 'adidas', n1: { cht: 1 } }]
-  const plan = planN1Import(lines, existing, base.segments)
+  const brands = [{ id: 'x', segId: segmentId('ACCESSOIRE TEXTILE', 'CHAUSSETTES'), nom: 'adidas' }]
+  const plan = planN1Import(lines, brands, base.segments)
 
-  it('met à jour les marques existantes et crée les autres', () => {
-    assert.deepEqual(plan.updates, [{ id: 'x', n1: { cht: 12393, lf: 6174 }, commentaireN1: 'Voir conditions' }])
-    assert.deepEqual(plan.creates.map(l => l.nom), ['PUMA', 'MILLET'])
+  it('rattache les marques de la liste et ajoute les autres à la liste', () => {
+    assert.deepEqual(plan.matched.map(m => [m.id, m.line.nom]), [['x', 'ADIDAS']])
+    assert.deepEqual(plan.missing.map(l => l.nom), ['PUMA', 'MILLET'])
   })
 
   it('ajoute les segments absents de la base', () => {
     assert.deepEqual(plan.newSegments, [{ id: segmentId('ALPINISME ET ESCALADE', 'HABILLEMENT'), univers: 'ALPINISME ET ESCALADE', nom: 'HABILLEMENT' }])
   })
 
-  it('reprend la saisie du budget précédent comme N-1', () => {
-    const l = linesFromBudget([{ segId: 's', univers: 'U', segment: 'S', nom: 'NIKE', saisie: { cht: 10 }, commentaire: 'ok' }])
-    assert.deepEqual(l, [{ segId: 's', univers: 'U', segment: 'S', nom: 'NIKE', n1: { cht: 10 }, commentaire: 'ok' }])
+  it('reprend la saisie du budget précédent comme N-1, sur la même marque', () => {
+    const l = linesFromBudget([{ id: 'm1', segId: 's', univers: 'U', segment: 'S', nom: 'NIKE', saisie: { cht: 10 }, commentaire: 'ok' }])
+    assert.deepEqual(l, [{ id: 'm1', segId: 's', univers: 'U', segment: 'S', nom: 'NIKE', n1: { cht: 10 }, commentaire: 'ok' }])
+  })
+})
+
+describe('marques des segments', () => {
+  const brands = [
+    { id: 'b', segId: 's1', univers: 'U', nom: 'PUMA' },
+    { id: 'a', segId: 's1', univers: 'U', nom: 'ADIDAS' },
+    { id: 'c', segId: 's2', univers: 'U', nom: 'NIKE' },
+  ]
+  const lines = [
+    { id: 'a', segId: 's1', saisie: { cht: 5 } },
+    { id: 'old', segId: 's1', nom: 'LEVIS', n1: { cht: 3 } },
+    { id: 'vide', segId: 's1', nom: 'KAPPA', saisie: {} },
+  ]
+  const bySeg = brandsBySegment(brands, lines)
+
+  it('liste les marques du segment, triées, avec leur ligne du budget', () => {
+    assert.deepEqual(bySeg.get('s1').map(b => [b.nom, b.orphan]), [['ADIDAS', false], ['LEVIS', true], ['PUMA', false]])
+    assert.deepEqual(bySeg.get('s1')[0].line.saisie, { cht: 5 })
+    assert.equal(bySeg.get('s1')[2].line, null)
+  })
+
+  it('garde une marque retirée de la liste tant que le budget a des montants pour elle', () => {
+    assert.ok(!bySeg.get('s1').some(b => b.id === 'vide'))
+  })
+
+  it('rassemble les segments de tous les budgets', () => {
+    const cat = segmentsCatalog([{ segments: [{ id: 'x' }, { id: 'y' }] }, { segments: [{ id: 'y' }, { id: 'z' }] }])
+    assert.deepEqual(cat.map(s => s.id), ['x', 'y', 'z'])
   })
 })
 

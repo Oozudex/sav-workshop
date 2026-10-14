@@ -474,6 +474,22 @@ describe('budgets acheteurs', () => {
     // Sans univers attribué : lecture seule
     await assertFails(updateDoc(doc(as('acheteur'), 'budgets', 'b', 'marques', 'cycle'), { 'saisie.a': 1 }))
   })
+  it("la liste des marques : un acheteur gère celles de ses univers, la direction toutes", async () => {
+    await env.withSecurityRulesDisabled(async ctx => {
+      await setDoc(doc(ctx.firestore(), 'budget_marques', 'golf'), marque('GOLF'))
+    })
+    const db = as('acheteurCycle')
+    await assertSucceeds(getDocs(collection(db, 'budget_marques')))
+    await assertSucceeds(setDoc(doc(db, 'budget_marques', 'n'), marque('CYCLE')))
+    await assertSucceeds(updateDoc(doc(db, 'budget_marques', 'n'), { nom: 'SHIMANO' }))
+    await assertFails(updateDoc(doc(db, 'budget_marques', 'n'), { univers: 'GOLF' }))
+    await assertSucceeds(deleteDoc(doc(db, 'budget_marques', 'n')))
+    await assertFails(setDoc(doc(db, 'budget_marques', 'x'), marque('GOLF')))
+    await assertFails(updateDoc(doc(db, 'budget_marques', 'golf'), { nom: 'PING' }))
+    await assertFails(deleteDoc(doc(db, 'budget_marques', 'golf')))
+    await assertSucceeds(updateDoc(doc(as('dirgen'), 'budget_marques', 'golf'), { nom: 'PING' }))
+    await assertFails(getDocs(collection(as('veloA'), 'budget_marques')))
+  })
   it("un acheteur ne peut pas s'attribuer d'univers", async () => {
     await assertFails(updateDoc(doc(as('acheteurCycle'), 'users', 'acheteurCycle'), { univers: ['CYCLE', 'GOLF'] }))
   })
