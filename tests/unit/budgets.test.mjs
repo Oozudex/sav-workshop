@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  FILTRE_SANS_ACHETEUR, addTotals, brandsBySegment, budgetName, buyerFilterTest, defaultBuyerFilter, filtreAcheteur, canEditUnivers, computeTotals, editableLines, segmentsCatalog, findN1Sheet, linesFromBudget, magasinMatcher, mergeSegments, n1Columns,
+  FILTRE_SANS_ACHETEUR, addTotals, evolution, formatPct, groupeRatio, groupeTotal, objectif, brandsBySegment, budgetName, buyerFilterTest, defaultBuyerFilter, filtreAcheteur, canEditUnivers, computeTotals, editableLines, segmentsCatalog, findN1Sheet, linesFromBudget, magasinMatcher, mergeSegments, n1Columns,
   parseBaseSheet, parseN1Sheet, planN1Import, previousSeason, segmentId, sortSegments,
 } from '../../src/lib/budgets.js'
 
@@ -225,7 +225,36 @@ describe('segments et totaux', () => {
       { segId: 's', n1: { cht: 30 }, saisie: { cht: 40, lf: 5 } },
       { segId: 's', n1: { cht: 20 }, saisie: { cht: 10 } },
     ])
-    assert.deepEqual(t.s.cht, { base: 100, n1: 50, saisie: 50 })
-    assert.deepEqual(addTotals([t.s.cht, t.s.lf]), { base: 100, n1: 50, saisie: 55 })
+    assert.deepEqual(t.s.cht, { base: 100, groupe: 0, n1: 50, saisie: 50 })
+    assert.deepEqual(addTotals([t.s.cht, t.s.lf]), { base: 100, groupe: 0, n1: 50, saisie: 55 })
+  })
+  it('répartit le budget groupe au prorata de la base, sans toucher à la base', () => {
+    const t = computeTotals([{ id: 's' }, { id: 'u' }], { s: { cht: 300 }, u: { cht: 100, lf: 600 } }, [], 1.1)
+    assert.deepEqual(t.s.cht, { base: 300, groupe: 330, n1: 0, saisie: 0 })
+    assert.equal(Math.round(addTotals([t.s.cht, t.u.cht, t.u.lf]).groupe), 1100)
+  })
+})
+
+describe('budget groupe', () => {
+  it('se fixe en montant ou en % du N-1 total', () => {
+    assert.equal(groupeTotal({ mode: 'montant', montant: 950000 }, 1000000), 950000)
+    assert.equal(groupeTotal({ mode: 'pct', pct: -3 }, 1000000), 970000)
+    assert.equal(groupeTotal({ mode: 'pct', pct: 5 }, 0), null)
+    assert.equal(groupeTotal(null, 1000000), null)
+  })
+  it('donne le coefficient appliqué à la base et le reste à répartir', () => {
+    assert.equal(groupeRatio(970000, 800000), 1.2125)
+    assert.equal(groupeRatio(970000, 0), null)
+    assert.equal(groupeRatio(null, 800000), null)
+    const cell = { base: 100, groupe: 120, saisie: 0 }
+    assert.equal(objectif(cell, true), 120)
+    assert.equal(objectif(cell, false), 100)
+  })
+  it('affiche les évolutions en %', () => {
+    assert.equal(evolution(970000, 1000000).toFixed(1), '-3.0')
+    assert.equal(evolution(5, 0), null)
+    assert.equal(formatPct(-3), '−3 %')
+    assert.equal(formatPct(2.46), '+2,5 %')
+    assert.equal(formatPct(null), '—')
   })
 })

@@ -3,8 +3,9 @@
 // readOnly : univers non attribué à l'acheteur.
 import { useState } from 'react'
 import { IconButton } from '../admin/ui'
-import { formatBudget, hasValue, normLabel, toAmount } from '../../lib/budgets'
+import { formatBudget, hasValue, normLabel, objectif, toAmount } from '../../lib/budgets'
 import { addBrand, deleteLine, setCommentaire, setSaisie } from '../../lib/budgetsStore'
+import { TONE } from './tones'
 
 export const CELL_INPUT = 'w-full h-8 px-2 rounded-lg border text-sm bg-white dark:bg-neutral-950 border-gray-200 dark:border-neutral-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-black/10 dark:focus:ring-white/20'
 
@@ -59,11 +60,13 @@ export function TextInput({ value, onSave, label, placeholder }) {
   )
 }
 
-export function Reste({ base, saisie, short = false }) {
-  const reste = base - saisie
-  if (!base && !saisie) return <span className="text-gray-400 dark:text-neutral-500">—</span>
-  const cls = Math.round(reste) === 0 ? 'text-emerald-700 dark:text-emerald-400'
-    : reste < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-neutral-300'
+// Reste à répartir : objectif (budget groupe, sinon base) moins saisi ; vert = tout est réparti, rouge = dépassement
+// Une base négative (retours) ne laisse rien à répartir
+export function Reste({ objectif, saisie, short = false }) {
+  const reste = Math.max(objectif, 0) - saisie
+  if (objectif <= 0 && !saisie) return <span className="text-gray-400 dark:text-neutral-500">—</span>
+  const cls = Math.round(reste) === 0 ? TONE.ok.text
+    : reste < 0 ? TONE.depassement.text : 'text-gray-700 dark:text-neutral-300'
   const text = short ? (reste < 0 ? `+${formatBudget(-reste)}` : formatBudget(reste))
     : reste < 0 ? `Dépassement ${formatBudget(-reste)}` : `Reste ${formatBudget(reste)}`
   return <span className={`font-semibold tabular-nums ${cls}`}>{text}</span>
@@ -113,7 +116,7 @@ export function AddBrandForm({ seg, brands, user }) {
   )
 }
 
-export default function SegmentSaisie({ budgetId, seg, magasin, base, brands, user, readOnly = false }) {
+export default function SegmentSaisie({ budgetId, seg, magasin, cell, hasGroupe, brands, user, readOnly = false }) {
   const [error, setError] = useState('')
   const run = p => p.catch(err => setError(err.message))
   const n1 = brands.reduce((t, b) => t + (b.line?.n1?.[magasin.id] || 0), 0)
@@ -128,9 +131,10 @@ export default function SegmentSaisie({ budgetId, seg, magasin, base, brands, us
     <div className="rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-3 space-y-2">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600 dark:text-neutral-300">
         <span className="font-semibold text-gray-900 dark:text-white">{magasin.nom} · {seg.univers}{seg.nom ? ` › ${seg.nom}` : ''}</span>
-        <span>Base <strong className="tabular-nums">{formatBudget(base)}</strong></span>
+        <span className={TONE.base.text}>Base <strong className="tabular-nums">{formatBudget(cell.base)}</strong></span>
+        {hasGroupe && <span className={TONE.groupe.text}>Groupe <strong className="tabular-nums">{formatBudget(cell.groupe)}</strong></span>}
         <span>Saisi <strong className="tabular-nums">{formatBudget(saisie)}</strong></span>
-        <Reste base={base} saisie={saisie} />
+        <Reste objectif={objectif(cell, hasGroupe)} saisie={saisie} />
         {readOnly && (
           <span className="ml-auto h-5 px-1.5 inline-flex items-center rounded text-[10px] font-semibold bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
             Lecture seule · univers non attribué
@@ -143,7 +147,7 @@ export default function SegmentSaisie({ budgetId, seg, magasin, base, brands, us
           <thead>
             <tr className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-neutral-400">
               <th scope="col" className="py-1 pr-2">Marque</th>
-              <th scope="col" className="py-1 px-2 text-right">N-1</th>
+              <th scope="col" className={`py-1 px-2 text-right ${TONE.n1.head}`}>N-1</th>
               <th scope="col" className="py-1 px-2 text-right">Budget</th>
               <th scope="col" className="py-1 px-2">Commentaire <span className="normal-case font-normal">(tous magasins)</span></th>
               <th scope="col" className="py-1 pl-1"><span className="sr-only">Actions</span></th>
@@ -155,7 +159,7 @@ export default function SegmentSaisie({ budgetId, seg, magasin, base, brands, us
                 <th scope="row" className="py-1.5 pr-2 text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap">
                   {b.nom}{b.orphan && <OrphanTag />}
                 </th>
-                <td className="py-1.5 px-2 text-right text-sm tabular-nums text-gray-600 dark:text-neutral-300 whitespace-nowrap">
+                <td className={`py-1.5 px-2 text-right text-sm tabular-nums whitespace-nowrap ${TONE.n1.text}`}>
                   {hasValue(b.line?.n1, magasin.id) ? formatBudget(b.line.n1[magasin.id]) : '—'}
                   <N1Comment text={b.line?.commentaireN1} />
                 </td>
@@ -188,7 +192,7 @@ export default function SegmentSaisie({ budgetId, seg, magasin, base, brands, us
             <tfoot>
               <tr className="border-t border-gray-200 dark:border-neutral-700 text-sm font-semibold text-gray-900 dark:text-white">
                 <td className="py-1.5 pr-2">Total</td>
-                <td className="py-1.5 px-2 text-right tabular-nums">{formatBudget(n1)}</td>
+                <td className={`py-1.5 px-2 text-right tabular-nums ${TONE.n1.text}`}>{formatBudget(n1)}</td>
                 <td className="py-1.5 px-2 text-right tabular-nums pr-4">{formatBudget(saisie)}</td>
                 <td colSpan={2} />
               </tr>

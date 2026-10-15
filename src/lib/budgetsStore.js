@@ -132,6 +132,13 @@ export async function deleteBudget(id) {
   await deleteDoc(doc(db, 'budgets', id))
 }
 
+// Budget groupe fixé par la direction : { mode: 'montant', montant } ou { mode: 'pct', pct } ; null l'efface
+export function setGroupe(budgetId, groupe, user) {
+  return updateDoc(doc(db, 'budgets', budgetId), {
+    groupe: groupe ? { ...groupe, at: serverTimestamp(), by: author(user) } : deleteField(),
+  })
+}
+
 // Base importée : remplace le budget de base, garde les segments venus du N-1 et toute la saisie
 export function saveBase(budget, parsed, fileName, user) {
   return updateDoc(doc(db, 'budgets', budget.id), {

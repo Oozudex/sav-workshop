@@ -383,11 +383,18 @@ export function sortSegments(segments, universOrder) {
     || (pos.get(a.id) - pos.get(b.id)))
 }
 
-// Totaux par segment et magasin : { [segId]: { [magId]: { base, n1, saisie } } }
-export function computeTotals(segments, base, marques) {
+// Totaux par segment et magasin : { [segId]: { [magId]: { base, groupe, n1, saisie } } }
+// ratio : coefficient du budget groupe appliqué au budget de base (null : budget groupe non fixé)
+export function computeTotals(segments, base, marques, ratio = null) {
   const t = {}
-  const cell = (segId, magId) => ((t[segId] ??= {})[magId] ??= { base: 0, n1: 0, saisie: 0 })
-  for (const s of segments) for (const [magId, v] of Object.entries(base?.[s.id] || {})) cell(s.id, magId).base += v
+  const cell = (segId, magId) => ((t[segId] ??= {})[magId] ??= { base: 0, groupe: 0, n1: 0, saisie: 0 })
+  for (const s of segments) {
+    for (const [magId, v] of Object.entries(base?.[s.id] || {})) {
+      const c = cell(s.id, magId)
+      c.base += v
+      if (ratio != null) c.groupe += v * ratio
+    }
+  }
   for (const m of marques) {
     for (const [magId, v] of Object.entries(m.n1 || {})) if (typeof v === 'number') cell(m.segId, magId).n1 += v
     for (const [magId, v] of Object.entries(m.saisie || {})) if (typeof v === 'number') cell(m.segId, magId).saisie += v
@@ -395,9 +402,42 @@ export function computeTotals(segments, base, marques) {
   return t
 }
 
-// Addition de cellules de totaux { base, n1, saisie }
+// Addition de cellules de totaux { base, groupe, n1, saisie }
 export function addTotals(cells) {
-  const r = { base: 0, n1: 0, saisie: 0 }
-  for (const c of cells) if (c) { r.base += c.base; r.n1 += c.n1; r.saisie += c.saisie }
+  const r = { base: 0, groupe: 0, n1: 0, saisie: 0 }
+  for (const c of cells) if (c) { r.base += c.base; r.groupe += c.groupe || 0; r.n1 += c.n1; r.saisie += c.saisie }
   return r
+}
+
+// ── Budget groupe ───────────────────────────────────────────────────────────────
+// Fixé par la direction pour tout le budget : un montant, ou une évolution en % du N-1 total
+// (−3 % = 97 % du N-1). Il est réparti sur chaque univers, segment et magasin au prorata du budget
+// de base, sans toucher à la base. budget.groupe = { mode: 'montant' | 'pct', montant?, pct? }
+
+export function groupeTotal(groupe, n1Total) {
+  if (groupe?.mode === 'pct') return typeof groupe.pct === 'number' && n1Total > 0 ? n1Total * (1 + groupe.pct / 100) : null
+  if (groupe?.mode === 'montant') return typeof groupe.montant === 'number' ? groupe.montant : null
+  return null
+}
+
+// Coefficient appliqué au budget de base (null : pas de budget groupe ou base vide)
+export function groupeRatio(total, baseTotal) {
+  return total != null && baseTotal > 0 ? total / baseTotal : null
+}
+
+// Évolution en % de value par rapport à ref (null si ref nul)
+export function evolution(value, ref) {
+  return ref > 0 && value != null ? (value / ref - 1) * 100 : null
+}
+
+// −3.25 → « −3,3 % » ; +2 → « +2 % »
+export function formatPct(p) {
+  if (p == null) return '—'
+  const r = Math.round(p * 10) / 10
+  return `${r > 0 ? '+' : r < 0 ? '−' : ''}${Math.abs(r).toLocaleString('fr-FR')} %`
+}
+
+// Budget à répartir : le budget groupe une fois fixé, sinon la base
+export function objectif(cell, hasGroupe) {
+  return hasGroupe ? cell.groupe : cell.base
 }

@@ -5,12 +5,14 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import BrandGrid from '../components/budgets/BrandGrid'
 import BuyerFilter from '../components/budgets/BuyerFilter'
+import GroupeCards from '../components/budgets/GroupeCards'
 import SegmentSaisie from '../components/budgets/SegmentSaisie'
+import { Legend, TONE } from '../components/budgets/tones'
 import { ImportBaseDialog, ImportN1Dialog } from '../components/budgets/ImportDialogs'
 import { BTN_PRIMARY, BTN_SECONDARY, EmptyState, Notice } from '../components/admin/ui'
 import {
   FILTRE_SANS_ACHETEUR, SAISONS, addTotals, brandsBySegment, buyerFilterTest, canEditUnivers, computeTotals, defaultBuyerFilter,
-  formatBudget, previousSeason, sortSegments,
+  formatBudget, groupeRatio, groupeTotal, objectif, previousSeason, sortSegments,
 } from '../lib/budgets'
 import {
   carryOverN1, deleteBudget, useAcheteurs, useBrands, useBudget, useBudgetLines, useBudgetMagasins, useBudgetUnivers, useBudgetUser,
@@ -18,7 +20,7 @@ import {
 } from '../lib/budgetsStore'
 
 const VIEWS = [['univers', 'Univers › Segment › Marques'], ['magasin', 'Magasin › Univers › Segment']]
-const GRID = 'grid grid-cols-[minmax(12rem,1fr)_repeat(3,6.5rem)_8.5rem] items-center gap-2'
+const GRID = 'grid grid-cols-[minmax(12rem,1fr)_repeat(4,6.5rem)_8.5rem] items-center gap-2'
 const LEVEL_PAD = ['pl-2', 'pl-7', 'pl-12']
 
 function dateLabel(ts) {
@@ -26,27 +28,27 @@ function dateLabel(ts) {
   return d ? d.toLocaleDateString('fr-FR') : ''
 }
 
-function Reste({ cell }) {
-  const reste = cell.base - cell.saisie
-  if (!cell.base && !cell.saisie) return <span className="text-gray-400 dark:text-neutral-500">—</span>
-  const cls = Math.round(reste) === 0 ? 'text-emerald-700 dark:text-emerald-400'
-    : reste < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-neutral-300'
+function Reste({ cell, hasGroupe }) {
+  const reste = Math.max(objectif(cell, hasGroupe), 0) - cell.saisie
+  if (objectif(cell, hasGroupe) <= 0 && !cell.saisie) return <span className="text-gray-400 dark:text-neutral-500">—</span>
+  const cls = Math.round(reste) === 0 ? TONE.ok.text : reste < 0 ? TONE.depassement.text : 'text-gray-700 dark:text-neutral-300'
   return <span className={`tabular-nums ${cls}`}>{reste < 0 ? `+${formatBudget(-reste)}` : formatBudget(reste)}</span>
 }
 
-function HeaderRow() {
+function HeaderRow({ hasGroupe }) {
   return (
     <div className={`${GRID} px-2 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-neutral-400 border-b border-gray-200 dark:border-neutral-800`}>
       <span>Libellé</span>
-      <span className="text-right">Base</span>
-      <span className="text-right">N-1</span>
+      <span className={`text-right ${TONE.base.head}`}>Base</span>
+      <span className={`text-right ${TONE.groupe.head}`} title="Budget groupe réparti au prorata de la base">Groupe</span>
+      <span className={`text-right ${TONE.n1.head}`}>N-1</span>
       <span className="text-right">Saisi</span>
-      <span className="text-right" title="Base moins saisi ; + = dépassement">Reste</span>
+      <span className="text-right" title={`${hasGroupe ? 'Budget groupe' : 'Base'} moins saisi ; + = dépassement`}>Reste</span>
     </div>
   )
 }
 
-function TreeRow({ level, label, hint, cell, open, onToggle }) {
+function TreeRow({ level, label, hint, cell, hasGroupe, open, onToggle }) {
   const strong = level === 0
   return (
     <div className={`${GRID} py-1.5 pr-2 border-b border-gray-100 dark:border-neutral-800 ${strong ? 'bg-gray-50/60 dark:bg-neutral-800/30' : ''}`}>
@@ -58,19 +60,21 @@ function TreeRow({ level, label, hint, cell, open, onToggle }) {
         <span className="truncate">{label}</span>
         {hint && <span className="shrink-0 text-[11px] font-normal text-gray-500 dark:text-neutral-400">{hint}</span>}
       </button>
-      <span className="text-right text-sm tabular-nums text-gray-900 dark:text-white">{formatBudget(cell.base)}</span>
-      <span className="text-right text-sm tabular-nums text-gray-600 dark:text-neutral-300">{formatBudget(cell.n1)}</span>
-      <span className="text-right text-sm tabular-nums text-gray-900 dark:text-white">{formatBudget(cell.saisie)}</span>
-      <span className="text-right text-sm"><Reste cell={cell} /></span>
+      <span className={`text-right text-sm tabular-nums ${TONE.base.text}`}>{formatBudget(cell.base)}</span>
+      <span className={`text-right text-sm tabular-nums ${TONE.groupe.text}`}>{hasGroupe ? formatBudget(cell.groupe) : '—'}</span>
+      <span className={`text-right text-sm tabular-nums ${TONE.n1.text}`}>{formatBudget(cell.n1)}</span>
+      <span className={`text-right text-sm tabular-nums ${TONE.saisie.text}`}>{formatBudget(cell.saisie)}</span>
+      <span className="text-right text-sm"><Reste cell={cell} hasGroupe={hasGroupe} /></span>
     </div>
   )
 }
 
-function Kpi({ label, value, tone = '' }) {
+function Kpi({ label, value, tone, hint }) {
   return (
-    <div className="rounded-2xl border px-4 py-3 bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800">
+    <div className={`rounded-2xl border border-t-4 ${TONE[tone].bar} px-4 py-3 bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800`}>
       <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">{label}</p>
-      <p className={`text-xl font-bold tabular-nums ${tone || 'text-gray-900 dark:text-white'}`}>{value}</p>
+      <p className={`text-xl font-bold tabular-nums ${TONE[tone].text}`}>{value}</p>
+      {hint && <p className="text-[11px] text-gray-500 dark:text-neutral-400">{hint}</p>}
     </div>
   )
 }
@@ -101,7 +105,16 @@ export default function BudgetDetail() {
   const toggle = key => setOpen(s => { const n = new Set(s); if (n.has(key)) n.delete(key); else n.add(key); return n })
 
   const segments = useMemo(() => sortSegments(budget?.segments || [], universList.map(u => u.nom)), [budget?.segments, universList])
-  const totals = useMemo(() => computeTotals(segments, budget?.base, lines), [segments, budget?.base, lines])
+  // Budget groupe : montant, ou % du N-1 total du budget, réparti au prorata de la base
+  const sums = useMemo(() => {
+    const t = computeTotals(segments, budget?.base, lines)
+    const all = addTotals(segments.flatMap(s => magasins.map(m => t[s.id]?.[m.id])))
+    return { n1: all.n1, base: all.base }
+  }, [segments, budget?.base, lines, magasins])
+  const groupeMontant = groupeTotal(budget?.groupe, sums.n1)
+  const ratio = groupeRatio(groupeMontant, sums.base)
+  const hasGroupe = ratio != null
+  const totals = useMemo(() => computeTotals(segments, budget?.base, lines, ratio), [segments, budget?.base, lines, ratio])
   const brandsBySeg = useMemo(() => brandsBySegment(brands, lines), [brands, lines])
   const groups = useMemo(() => {
     const g = []
@@ -124,19 +137,20 @@ export default function BudgetDetail() {
 
   const cellOf = (segs, mags) => addTotals(segs.flatMap(s => mags.map(m => totals[s.id]?.[m.id])))
   const total = cellOf(shown.flatMap(g => g.segments), magasins)
+  const reste = objectif(total, hasGroupe) - total.saisie
   const onlyUnivers = g => g.segments.length === 1 && !g.segments[0].nom
   const segLabel = s => s.nom || 'Sans segment'
   const nbMarques = s => brandsBySeg.get(s.id)?.length || 0
 
   const saisie = (seg, mag) => (
     <div className="px-2 py-2 bg-gray-50 dark:bg-neutral-950/50 border-b border-gray-100 dark:border-neutral-800">
-      <SegmentSaisie budgetId={budget.id} seg={seg} magasin={mag} base={totals[seg.id]?.[mag.id]?.base || 0}
+      <SegmentSaisie budgetId={budget.id} seg={seg} magasin={mag} cell={cellOf([seg], [mag])} hasGroupe={hasGroupe}
         brands={brandsBySeg.get(seg.id) || []} user={user} readOnly={!canEditUnivers(user, seg.univers)} />
     </div>
   )
   const grid = seg => (
     <div className="px-2 py-2 bg-gray-50 dark:bg-neutral-950/50 border-b border-gray-100 dark:border-neutral-800">
-      <BrandGrid budgetId={budget.id} seg={seg} magasins={magasins} totals={totals[seg.id]}
+      <BrandGrid budgetId={budget.id} seg={seg} magasins={magasins} totals={totals[seg.id]} hasGroupe={hasGroupe}
         brands={brandsBySeg.get(seg.id) || []} user={user} readOnly={!canEditUnivers(user, seg.univers)} />
     </div>
   )
@@ -197,13 +211,15 @@ export default function BudgetDetail() {
         </div>
       ) : <>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <Kpi label="Budget de base" value={formatBudget(total.base)} />
-          <Kpi label="N-1" value={formatBudget(total.n1)} />
-          <Kpi label="Saisi" value={formatBudget(total.saisie)} />
-          <Kpi label={total.saisie > total.base ? 'Dépassement' : 'Reste à répartir'}
-            value={formatBudget(Math.abs(total.base - total.saisie))}
-            tone={total.saisie > total.base ? 'text-red-600 dark:text-red-400' : ''} />
+          <Kpi label="Budget de base" value={formatBudget(total.base)} tone="base" />
+          <Kpi label="N-1" value={formatBudget(total.n1)} tone="n1" />
+          <Kpi label="Saisi" value={formatBudget(total.saisie)} tone="saisie" />
+          <Kpi label={reste < 0 ? 'Dépassement' : 'Reste à répartir'} value={formatBudget(Math.abs(reste))}
+            tone={reste < 0 ? 'depassement' : Math.round(reste) === 0 ? 'ok' : 'saisie'}
+            hint={hasGroupe ? 'sur le budget groupe' : 'sur le budget de base'} />
         </div>
+        <GroupeCards budget={budget} n1Total={sums.n1} baseTotal={sums.base} canEdit={isDirection} user={user} />
+        <Legend keys={['n1', 'base', 'groupe', 'ok', 'depassement']} />
 
         <div className="flex flex-wrap items-center gap-2">
           <div role="radiogroup" aria-label="Affichage" className="inline-flex p-1 rounded-xl bg-gray-100 dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800">
@@ -221,13 +237,13 @@ export default function BudgetDetail() {
         </div>
 
         <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-x-auto">
-          <div className="min-w-[44rem]">
-            <HeaderRow />
+          <div className="min-w-[51rem]">
+            <HeaderRow hasGroupe={hasGroupe} />
             {view === 'univers' ? shown.map(g => {
               const uKey = `u:${g.univers}`
               return (
                 <div key={uKey}>
-                  <TreeRow level={0} label={g.univers} cell={cellOf(g.segments, magasins)} open={isOpen(uKey)} onToggle={() => toggle(uKey)}
+                  <TreeRow level={0} label={g.univers} cell={cellOf(g.segments, magasins)} hasGroupe={hasGroupe} open={isOpen(uKey)} onToggle={() => toggle(uKey)}
                     hint={onlyUnivers(g) ? '' : `${g.segments.length} segment${g.segments.length > 1 ? 's' : ''}`} />
                   {isOpen(uKey) && (onlyUnivers(g)
                     ? grid(g.segments[0])
@@ -236,7 +252,7 @@ export default function BudgetDetail() {
                       return (
                         <div key={sKey}>
                           <TreeRow level={1} label={segLabel(seg)} hint={`${nbMarques(seg)} marque${nbMarques(seg) > 1 ? 's' : ''}`}
-                            cell={cellOf([seg], magasins)} open={isOpen(sKey)} onToggle={() => toggle(sKey)} />
+                            cell={cellOf([seg], magasins)} hasGroupe={hasGroupe} open={isOpen(sKey)} onToggle={() => toggle(sKey)} />
                           {isOpen(sKey) && grid(seg)}
                         </div>
                       )
@@ -247,18 +263,18 @@ export default function BudgetDetail() {
               const mKey = `m:${mag.id}`
               return (
                 <div key={mKey}>
-                  <TreeRow level={0} label={mag.nom} cell={cellOf(shown.flatMap(g => g.segments), [mag])} open={isOpen(mKey)} onToggle={() => toggle(mKey)} />
+                  <TreeRow level={0} label={mag.nom} cell={cellOf(shown.flatMap(g => g.segments), [mag])} hasGroupe={hasGroupe} open={isOpen(mKey)} onToggle={() => toggle(mKey)} />
                   {isOpen(mKey) && shown.map(g => {
                     const uKey = `${mKey}|u:${g.univers}`
                     return (
                       <div key={uKey}>
-                        <TreeRow level={1} label={g.univers} cell={cellOf(g.segments, [mag])} open={isOpen(uKey)} onToggle={() => toggle(uKey)} />
+                        <TreeRow level={1} label={g.univers} cell={cellOf(g.segments, [mag])} hasGroupe={hasGroupe} open={isOpen(uKey)} onToggle={() => toggle(uKey)} />
                         {isOpen(uKey) && (onlyUnivers(g) ? saisie(g.segments[0], mag) : g.segments.map(seg => {
                           const k = `${mKey}|s:${seg.id}`
                           return (
                             <div key={k}>
                               <TreeRow level={2} label={segLabel(seg)} hint={`${nbMarques(seg)} marque${nbMarques(seg) > 1 ? 's' : ''}`}
-                                cell={cellOf([seg], [mag])} open={isOpen(k)} onToggle={() => toggle(k)} />
+                                cell={cellOf([seg], [mag])} hasGroupe={hasGroupe} open={isOpen(k)} onToggle={() => toggle(k)} />
                               {isOpen(k) && saisie(seg, mag)}
                             </div>
                           )
@@ -271,10 +287,11 @@ export default function BudgetDetail() {
             })}
             <div className={`${GRID} px-2 py-2 text-sm font-bold text-gray-900 dark:text-white`}>
               <span>Total{filtreLabel}</span>
-              <span className="text-right tabular-nums">{formatBudget(total.base)}</span>
-              <span className="text-right tabular-nums">{formatBudget(total.n1)}</span>
+              <span className={`text-right tabular-nums ${TONE.base.text}`}>{formatBudget(total.base)}</span>
+              <span className={`text-right tabular-nums ${TONE.groupe.text}`}>{hasGroupe ? formatBudget(total.groupe) : '—'}</span>
+              <span className={`text-right tabular-nums ${TONE.n1.text}`}>{formatBudget(total.n1)}</span>
               <span className="text-right tabular-nums">{formatBudget(total.saisie)}</span>
-              <span className="text-right"><Reste cell={total} /></span>
+              <span className="text-right"><Reste cell={total} hasGroupe={hasGroupe} /></span>
             </div>
           </div>
         </div>

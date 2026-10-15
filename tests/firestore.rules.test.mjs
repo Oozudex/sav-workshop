@@ -8,7 +8,7 @@ import {
   assertFails, assertSucceeds, initializeTestEnvironment,
 } from '@firebase/rules-unit-testing'
 import {
-  collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, query,
+  collection, collectionGroup, deleteDoc, deleteField, doc, getDoc, getDocs, query,
   Timestamp, serverTimestamp, setDoc, updateDoc, where, writeBatch,
 } from 'firebase/firestore'
 
@@ -493,6 +493,17 @@ describe('budgets acheteurs', () => {
   })
   it("un acheteur ne peut pas s'attribuer d'univers", async () => {
     await assertFails(updateDoc(doc(as('acheteurCycle'), 'users', 'acheteurCycle'), { univers: ['CYCLE', 'GOLF'] }))
+  })
+  it("seule la direction fixe le budget groupe", async () => {
+    const groupe = { mode: 'pct', pct: -3 }
+    for (const uid of ['acheteur', 'acheteurCycle']) {
+      await assertFails(updateDoc(doc(as(uid), 'budgets', 'b'), { groupe }))
+      await assertFails(setDoc(doc(as(uid), 'budgets', `g-${uid}`), { nom: 'BUDGET PE28', groupe }))
+    }
+    for (const uid of ['dirgen', 'admin']) await assertSucceeds(updateDoc(doc(as(uid), 'budgets', 'b'), { groupe: { ...groupe, by: uid } }))
+    // Le reste du budget (base, segments) reste modifiable par les acheteurs
+    await assertSucceeds(updateDoc(doc(as('acheteurCycle'), 'budgets', 'b'), { segments: [] }))
+    await assertFails(updateDoc(doc(as('acheteurCycle'), 'budgets', 'b'), { groupe: deleteField() }))
   })
   it("seule la direction supprime un budget", async () => {
     await assertFails(deleteDoc(doc(as('acheteurCycle'), 'budgets', 'b')))

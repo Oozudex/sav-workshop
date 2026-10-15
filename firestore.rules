@@ -505,8 +505,12 @@ service cloud.firestore {
         request.resource.data.univers == resource.data.univers;
       allow delete: if isSignedIn() && canEditBudgetUnivers(resource.data.univers);
     }
+    // Le budget groupe (budgets/{id}.groupe) n'est fixé que par la direction
     match /budgets/{budgetId} {
-      allow read, create, update: if isSignedIn() && isGlobal();
+      allow read: if isSignedIn() && isGlobal();
+      allow create: if isSignedIn() && isGlobal() && (isDirGen() || !('groupe' in request.resource.data));
+      allow update: if isSignedIn() && isGlobal() &&
+        (isDirGen() || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['groupe']));
       allow delete: if isSignedIn() && isDirGen();
 
       match /marques/{marqueId} {
