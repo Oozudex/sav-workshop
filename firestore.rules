@@ -378,8 +378,11 @@ service cloud.firestore {
     }
 
     /* ── Balises de diagnostic (appartiennent au groupe) ──────────────── */
-    // Fiches : acheteur et administrateur. Le magasin qui reçoit une balise la passe chez lui,
+    // Fiches : administrateur et acheteur cycle. Le magasin qui reçoit une balise la passe chez lui,
     // en citant la demande « en route » vers son magasin.
+    // Gestion des fiches : administrateur et acheteur qui a l'univers CYCLE (users/{uid}.univers)
+    function gereBalises() { return isAdmin() || (isAcheteur() && 'CYCLE' in userDoc().get('univers', [])); }
+
     match /balises/{baliseId} {
       function seulsChamps(champs) {
         return request.resource.data.diff(resource.data).affectedKeys().hasOnly(champs);
@@ -392,9 +395,9 @@ service cloud.firestore {
           && d.toMagasinId == magasinId() && d.fromMagasinId == resource.data.magasinId;
       }
       allow read: if isSignedIn();
-      allow create, delete: if isSignedIn() && (isAcheteur() || isAdmin());
+      allow create, delete: if isSignedIn() && gereBalises();
       allow update: if isSignedIn() && (
-        isAcheteur() || isAdmin() ||
+        gereBalises() ||
         (isLocalUser() && receptionValide())
       );
     }
@@ -423,7 +426,7 @@ service cloud.firestore {
         (isLocalUser() && resource.data.toMagasinId == magasinId()
           && (passe('pending', ['cancelled']) || passe('shipped', ['completed'])))
       );
-      allow delete: if isSignedIn() && (isAcheteur() || isAdmin());
+      allow delete: if isSignedIn() && gereBalises();
     }
 
     /* ── Infos importantes (acheteurs → équipes rayon) ─────────────────── */

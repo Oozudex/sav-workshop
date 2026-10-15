@@ -22,6 +22,7 @@ const USERS = {
   dirgen:     { role: 'directeurgen' },
   dirgen2:    { role: 'directeurgen' },
   acheteur:   { role: 'acheteur', rayons: ['velo'] },
+  acheteurCycle: { role: 'acheteur', univers: ['CYCLE'] },
   dirmagA:    { role: 'directeurmag', magasinId: 'A' },
   dirmagNew:  { role: 'directeurmag', magasinId: null },
   veloA:      { role: 'velo', magasinId: 'A' },
@@ -518,10 +519,15 @@ describe('balises de diagnostic', () => {
   })
   const nouvelle = (uid, over = {}) => ({ baliseId: 'b1', fromMagasinId: 'A', toMagasinId: 'B', createdBy: uid, status: 'pending', ...over })
 
-  it("l'acheteur et l'admin créent les fiches, pas les magasins", async () => {
+  it("l'acheteur cycle et l'admin gèrent les fiches, pas les autres acheteurs ni les magasins", async () => {
     const fiche = { type: 'Shimano', nom: 'E-Tube', magasinId: 'B' }
-    await assertSucceeds(setDoc(doc(as('acheteur'), 'balises', 'x'), fiche))
+    await assertSucceeds(setDoc(doc(as('acheteurCycle'), 'balises', 'x'), fiche))
     await assertSucceeds(setDoc(doc(as('admin'), 'balises', 'y'), fiche))
+    // Acheteur sans l'univers CYCLE, directeur général (non administrateur) : non
+    await assertFails(setDoc(doc(as('acheteur'), 'balises', 'z'), fiche))
+    await assertFails(setDoc(doc(as('dirgen'), 'balises', 'z'), fiche))
+    await assertFails(deleteDoc(doc(as('acheteur'), 'balises', 'x')))
+    await assertSucceeds(deleteDoc(doc(as('acheteurCycle'), 'balises', 'x')))
     await assertFails(setDoc(doc(as('dirmagA'), 'balises', 'z'), fiche))
     await assertFails(setDoc(doc(as('veloA'), 'balises', 'z'), fiche))
   })
@@ -530,7 +536,8 @@ describe('balises de diagnostic', () => {
     await assertFails(updateDoc(doc(as('veloA'), 'balises', 'b1'), { note: 'écran cassé' }))
     await assertFails(updateDoc(doc(as('veloA'), 'balises', 'b1'), { magasinId: 'B' }))
     await assertFails(updateDoc(doc(as('veloB'), 'balises', 'b1'), { magasinId: 'B' }))
-    await assertSucceeds(updateDoc(doc(as('acheteur'), 'balises', 'b1'), { note: 'câbles fournis' }))
+    await assertFails(updateDoc(doc(as('acheteur'), 'balises', 'b1'), { note: 'câbles fournis' }))
+    await assertSucceeds(updateDoc(doc(as('acheteurCycle'), 'balises', 'b1'), { note: 'câbles fournis' }))
   })
   it("un magasin demande la balise d'un autre, pour lui-même seulement", async () => {
     await seed()

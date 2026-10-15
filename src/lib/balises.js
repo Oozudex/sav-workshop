@@ -25,9 +25,11 @@ export const etapesFranchies = d => ({ pending: 1, accepted: 2, refused: 2, canc
 export const TYPES_SUGGERES = ['Bosch', 'Shimano', 'Yamaha', 'Brose', 'Bafang', 'Giant', 'Specialized', 'Fazua', 'TQ']
 
 // ── Droits ──────────────────────────────────────────────────────────────────
-// Fiches des balises : l'acheteur et l'administrateur (côté application, l'administrateur est un
-// « directeurgen » avec isAdmin, cf. store/useAuth.js)
-export const peutGererBalises = profile => profile?.role === 'acheteur' || profile?.role === 'admin' || profile?.isAdmin === true
+// Fiches des balises : l'administrateur et l'acheteur qui a l'univers CYCLE (users/{uid}.univers) ;
+// côté application, l'administrateur est un « directeurgen » avec isAdmin, cf. store/useAuth.js
+export const UNIVERS_CYCLE = 'CYCLE'
+export const peutGererBalises = profile => profile?.role === 'admin' || profile?.isAdmin === true
+  || (profile?.role === 'acheteur' && (profile.univers || []).includes(UNIVERS_CYCLE))
 // Comptes d'un magasin (rayons, directeur) : demandent, répondent, envoient, reçoivent
 const LOCAUX = ['velo', 'chaussure', 'textile', 'randonnee', 'caisse', 'directeurmag']
 export const estCompteMagasin = profile => LOCAUX.includes(profile?.role) && !!profile?.magasinId
@@ -107,16 +109,20 @@ export function typesBalises(balises) {
 }
 
 // ── Fiche d'une balise (acheteur, administrateur) ───────────────────────────
+// magasinId : magasin de la balise (modification) ; magasinIds : magasins cochés à la création,
+// une balise du même nom par magasin
 export const baliseFormInitial = b => ({
   type: b?.type || '', nom: b?.nom || '', numeroSerie: b?.numeroSerie || '',
-  magasinId: b?.magasinId || '', note: b?.note || '',
+  magasinId: b?.magasinId || '', magasinIds: [], note: b?.note || '',
 })
 
-export function baliseFormErrors(f) {
+export function baliseFormErrors(f, { creation = false } = {}) {
   const e = {}
   if (!f.type.trim()) e.type = 'Indique le type (Bosch, Shimano…).'
   if (!f.nom.trim()) e.nom = 'Donne-lui un nom pour la reconnaître (ex. « Bosch n° 2 »).'
-  if (!f.magasinId) e.magasinId = 'Choisis le magasin où elle se trouve.'
+  if (creation ? !f.magasinIds?.length : !f.magasinId) {
+    e.magasinId = creation ? 'Coche au moins un magasin.' : 'Choisis le magasin où elle se trouve.'
+  }
   if (f.note.length > 300) e.note = '300 caractères au plus.'
   return e
 }
@@ -128,4 +134,11 @@ export function balisePayload(f, magasins = []) {
     magasinId: f.magasinId, magasinNom: magasins.find(m => m.id === f.magasinId)?.nom || null,
     note: t(f.note) || null,
   }
+}
+
+// Création : une balise par magasin coché (mêmes type, nom et note). Le n° de série est propre à
+// une balise : il n'est repris que si un seul magasin est coché.
+export function balisesACreer(f, magasins = []) {
+  const ids = magasins.map(m => m.id).filter(id => f.magasinIds.includes(id))
+  return ids.map(id => balisePayload({ ...f, magasinId: id, numeroSerie: ids.length > 1 ? '' : f.numeroSerie }, magasins))
 }

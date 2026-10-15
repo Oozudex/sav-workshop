@@ -15,7 +15,7 @@ import { useAuth } from '../store/useAuth'
 import { toDate } from '../lib/ticketStats'
 import {
   BALISE_COLLECTION, BALISE_TRANSFERT_COLLECTION, DEMANDE_ACTIVES, DEMANDE_STATUTS, ETAPES_DEMANDE,
-  TYPES_SUGGERES, baliseFormErrors, baliseFormInitial, balisePayload, demandesActivesParBalise, enTransfert,
+  TYPES_SUGGERES, baliseFormErrors, baliseFormInitial, balisePayload, balisesACreer, demandesActivesParBalise, enTransfert,
   estCompteMagasin, estGlobal, etapeDemande, etapesFranchies, grilleBalises, nomBalise, peutGererBalises,
   raisonPasDemande, typesBalises,
 } from '../lib/balises'
@@ -82,7 +82,7 @@ function DemandeCarte({ d, magasinId, global, onAction }) {
   )
 }
 
-// Fiche d'une balise : où elle est, demande, historique, modification (acheteur, admin)
+// Fiche d'une balise : où elle est, demande, historique, modification (admin, acheteur de l'univers CYCLE)
 function BaliseFiche({ b, demande, historique, profile, gestion, onClose, onDemander, onModifier }) {
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
@@ -139,22 +139,26 @@ function BaliseFiche({ b, demande, historique, profile, gestion, onClose, onDema
   )
 }
 
-// Création et modification d'une fiche (acheteur, admin)
+// Création et modification d'une fiche (admin, acheteur de l'univers CYCLE). À la création, on coche
+// un ou plusieurs magasins : une balise du même nom est créée dans chacun.
 function BaliseForm({ balise, magasins, types, onClose, onSave, onDelete }) {
+  const creation = !balise
   const [f, setF] = useState(() => baliseFormInitial(balise))
   const [tried, setTried] = useState(false)
   const [busy, setBusy] = useState(false)
   const [echec, setEchec] = useState(false)
-  const errors = baliseFormErrors(f)
+  const errors = baliseFormErrors(f, { creation })
   const err = k => (tried ? errors[k] : null)
   const set = (k, v) => setF(x => ({ ...x, [k]: v }))
   const listId = useId()
   const suggestions = [...new Set([...types, ...TYPES_SUGGERES])]
+  const plusieurs = f.magasinIds.length > 1
+  const tous = magasins.length > 0 && magasins.every(m => f.magasinIds.includes(m.id))
   async function submit(e) {
     e.preventDefault(); setTried(true)
     if (Object.keys(errors).length) return
     setBusy(true); setEchec(false)
-    try { await onSave(balisePayload(f, magasins)); onClose() } catch { setEchec(true) } finally { setBusy(false) }
+    try { await onSave(creation ? balisesACreer(f, magasins) : balisePayload(f, magasins)); onClose() } catch { setEchec(true) } finally { setBusy(false) }
   }
   const champ = (k, label, input, required) => (
     <label className="block space-y-1">
@@ -178,14 +182,47 @@ function BaliseForm({ balise, magasins, types, onClose, onSave, onDelete }) {
               <datalist id={listId}>{suggestions.map(t => <option key={t} value={t} />)}</datalist>
             </>, true)}
             {champ('nom', 'Nom', <input className={`Input ${bad('nom')}`} value={f.nom} onChange={e => set('nom', e.target.value)} placeholder="Bosch n° 2" />, true)}
-            {champ('numeroSerie', 'N° de série', <input className="Input font-mono" value={f.numeroSerie} onChange={e => set('numeroSerie', e.target.value)} />)}
-            {champ('magasinId', 'Magasin où elle est', (
+            {creation && plusieurs ? (
+              <div className="space-y-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-neutral-400">N° de série</span>
+                <p className="text-xs text-gray-500 dark:text-neutral-400 pt-1.5">Propre à chaque balise : à saisir ensuite sur chacune.</p>
+              </div>
+            ) : champ('numeroSerie', 'N° de série', <input className="Input font-mono" value={f.numeroSerie} onChange={e => set('numeroSerie', e.target.value)} />)}
+            {!creation && champ('magasinId', 'Magasin où elle est', (
               <select className={`Input ${bad('magasinId')}`} value={f.magasinId} onChange={e => set('magasinId', e.target.value)}>
                 <option value="">— Choisir</option>
                 {magasins.map(m => <option key={m.id} value={m.id}>{m.nom}</option>)}
               </select>
             ), true)}
           </div>
+          {creation && (
+            <fieldset className="space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <legend className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-neutral-400">
+                  Magasins * <span className="normal-case font-normal">· une balise par magasin coché</span>
+                </legend>
+                <button type="button" onClick={() => set('magasinIds', tous ? [] : magasins.map(m => m.id))}
+                  className="text-[11px] font-semibold text-gray-700 hover:underline dark:text-neutral-200 shrink-0">
+                  {tous ? 'Tout décocher' : 'Tout cocher'}
+                </button>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                {magasins.map(m => {
+                  const on = f.magasinIds.includes(m.id)
+                  return (
+                    <label key={m.id} className={['flex items-center gap-2 h-9 px-2.5 rounded-lg border cursor-pointer transition-colors',
+                      on ? 'border-gray-900 bg-gray-50 dark:border-white dark:bg-neutral-800' : 'border-gray-200 hover:bg-gray-50 dark:border-neutral-700 dark:hover:bg-neutral-800',
+                      err('magasinId') ? '!border-red-400' : ''].join(' ')}>
+                      <input type="checkbox" className="h-3.5 w-3.5 shrink-0" checked={on}
+                        onChange={() => set('magasinIds', on ? f.magasinIds.filter(x => x !== m.id) : [...f.magasinIds, m.id])} />
+                      <span className="text-xs text-gray-700 dark:text-neutral-200 truncate">{m.nom}</span>
+                    </label>
+                  )
+                })}
+              </div>
+              {err('magasinId') && <p className="text-xs text-red-600 dark:text-red-400">{err('magasinId')}</p>}
+            </fieldset>
+          )}
           {echec && <p role="alert" className="text-xs text-red-600 dark:text-red-400">L’enregistrement a échoué. Vérifie ta connexion et réessaie.</p>}
           {champ('note', 'Note', <textarea rows={2} className={`Input ${bad('note')}`} value={f.note} onChange={e => set('note', e.target.value)} placeholder="Câbles fournis, logiciel…" />)}
         </div>
@@ -196,7 +233,9 @@ function BaliseForm({ balise, magasins, types, onClose, onSave, onDelete }) {
           ) : <span />}
           <div className="flex gap-2">
             <button type="button" className={BTN_SECONDARY} onClick={onClose}>Annuler</button>
-            <button type="submit" disabled={busy} className={BTN_PRIMARY}>{busy ? 'Enregistrement…' : 'Enregistrer'}</button>
+            <button type="submit" disabled={busy} className={BTN_PRIMARY}>
+              {busy ? 'Enregistrement…' : creation && plusieurs ? `Créer ${f.magasinIds.length} balises` : 'Enregistrer'}
+            </button>
           </div>
         </div>
       </form>
@@ -289,9 +328,12 @@ export default function Balises() {
     }
   })
 
+  // Modification : une fiche ; création : une balise par magasin coché, en une écriture groupée
   const enregistrer = async data => {
-    if (form?.id) await updateDoc(doc(db, BALISE_COLLECTION, form.id), { ...data, updatedAt: serverTimestamp(), updatedBy: user.uid, updatedByName: qui })
-    else await addDoc(collection(db, BALISE_COLLECTION), { ...data, createdAt: serverTimestamp(), createdBy: user.uid, updatedAt: serverTimestamp() })
+    if (form?.id) return updateDoc(doc(db, BALISE_COLLECTION, form.id), { ...data, updatedAt: serverTimestamp(), updatedBy: user.uid, updatedByName: qui })
+    const batch = writeBatch(db)
+    for (const b of data) batch.set(doc(collection(db, BALISE_COLLECTION)), { ...b, createdAt: serverTimestamp(), createdBy: user.uid, updatedAt: serverTimestamp() })
+    return batch.commit()
   }
   const supprimer = async b => { await deleteDoc(doc(db, BALISE_COLLECTION, b.id)); setOuverte(null) }
 
@@ -344,7 +386,7 @@ export default function Balises() {
             {chargement ? <p className="text-sm text-gray-500 dark:text-neutral-400 py-8 text-center">Chargement…</p>
               : !(balises || []).length ? (
                 <p className="rounded-2xl border border-dashed border-gray-300 dark:border-neutral-700 text-sm text-gray-500 dark:text-neutral-400 py-10 text-center">
-                  Aucune balise enregistrée.{gestion ? ' Ajoute la première avec « + Nouvelle balise ».' : ' L’acheteur les ajoutera ici.'}
+                  Aucune balise enregistrée.{gestion ? ' Ajoute la première avec « + Nouvelle balise ».' : ' L’acheteur cycle ou l’administrateur les ajoutera ici.'}
                 </p>
               ) : !types.length ? (
                 <p className="text-sm text-gray-500 dark:text-neutral-400 py-8 text-center">Aucune balise ne correspond à « {recherche.trim()} ».</p>

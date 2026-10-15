@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   baliseFormErrors, baliseFormInitial, balisePayload, demandesActivesParBalise, enTransfert, estCompteMagasin, etapeDemande,
-  grilleBalises, peutGererBalises, raisonPasDemande, typesBalises,
+  balisesACreer, grilleBalises, peutGererBalises, raisonPasDemande, typesBalises,
 } from '../../src/lib/balises.js'
 import { autoObsolete, baliseTodoSpecs } from '../../src/lib/todos.js'
 
@@ -35,7 +35,9 @@ describe('balises : où elles sont', () => {
 describe('balises : droits et demandes', () => {
   const velosSud = { role: 'velo', magasinId: 'sud' }
   it('acheteur et admin gèrent les fiches ; les comptes magasin demandent', () => {
-    assert.equal(peutGererBalises({ role: 'acheteur' }), true)
+    assert.equal(peutGererBalises({ role: 'acheteur', univers: ['CYCLE', 'GOLF'] }), true)
+    assert.equal(peutGererBalises({ role: 'acheteur', univers: ['GOLF'] }), false)
+    assert.equal(peutGererBalises({ role: 'acheteur' }), false)
     assert.equal(peutGererBalises({ role: 'admin' }), true)
     assert.equal(peutGererBalises({ role: 'directeurgen', isAdmin: true }), true)
     assert.equal(peutGererBalises({ role: 'directeurgen' }), false)
@@ -90,5 +92,12 @@ describe('balises : fiche', () => {
     assert.deepEqual(balisePayload(f, magasins), {
       type: 'Bosch', nom: 'Bosch n° 3', numeroSerie: null, magasinId: 'sud', magasinNom: 'Magasin Sud', note: null,
     })
+  })
+  it('création : au moins un magasin coché, une balise du même nom par magasin', () => {
+    const f = { ...baliseFormInitial(), type: 'Bosch', nom: 'Bosch', numeroSerie: 'SN1' }
+    assert.ok(baliseFormErrors(f, { creation: true }).magasinId)
+    const deux = balisesACreer({ ...f, magasinIds: ['sud', 'nord'] }, magasins)
+    assert.deepEqual(deux.map(b => [b.nom, b.magasinId, b.numeroSerie]), magasins.filter(m => ['sud', 'nord'].includes(m.id)).map(m => ['Bosch', m.id, null]))
+    assert.equal(balisesACreer({ ...f, magasinIds: ['sud'] }, magasins)[0].numeroSerie, 'SN1')
   })
 })
