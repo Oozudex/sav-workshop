@@ -17,6 +17,8 @@ import {
 } from '../lib/budgets'
 import { carryOverN1, deleteBudget, useAcheteurs, useBudgetUser } from '../lib/budgetsStore'
 import { useBudgetModel } from '../lib/useBudgetModel'
+import { budgetWorkbook, exportFileName, reimportColumn } from '../lib/budgetExport'
+import { downloadWorkbook } from '../lib/excel'
 
 const VIEWS = [['univers', 'Univers › Segment › Marques'], ['magasin', 'Magasin › Univers › Segment'], ['notation', 'Notation des marques']]
 const GRID = 'grid grid-cols-[minmax(12rem,1fr)_repeat(4,6.5rem)_8.5rem] items-center gap-2'
@@ -151,6 +153,17 @@ export default function BudgetDetail() {
     setBusy(false)
   }
 
+  // Export Excel du budget entier (tous univers, quel que soit le filtre)
+  async function exportExcel() {
+    setBusy(true)
+    try {
+      const sheets = budgetWorkbook({ budget, segments, magasins, totals, brandsBySeg, adapte, fournisseur, fiche, hasGroupe, groupeMontant, sums, reglages })
+      await downloadWorkbook(sheets, exportFileName(budget))
+      setNotice({ tone: 'ok', text: `Export téléchargé. L’an prochain, il se réimporte comme N-1 : onglet « BUDGET PAR MARQUES », colonne « ${reimportColumn(budget)} ».` })
+    } catch (err) { setNotice({ text: `Export impossible : ${err.message}` }) }
+    setBusy(false)
+  }
+
   async function remove() {
     if (!confirm(`Supprimer ${budget.nom} ? Toutes les marques et la saisie seront perdues.`)) return
     if (prompt(`Pour confirmer, tape le nom du budget : ${budget.nom}`)?.trim().toUpperCase() !== budget.nom) return
@@ -175,6 +188,7 @@ export default function BudgetDetail() {
             {budget.baseImport ? 'Réimporter la base' : 'Importer la base'}
           </button>
           <button type="button" onClick={() => setDialog('n1')} className={BTN_SECONDARY}>Importer le N-1 (Excel)</button>
+          {segments.length > 0 && <button type="button" onClick={exportExcel} disabled={busy} className={BTN_SECONDARY}>Exporter (Excel)</button>}
           {prev && <button type="button" onClick={carryOver} disabled={busy} className={BTN_SECONDARY}>Reprendre le N-1 de {prev.nom}</button>}
           {isDirection && (
             <button type="button" onClick={remove} disabled={busy}

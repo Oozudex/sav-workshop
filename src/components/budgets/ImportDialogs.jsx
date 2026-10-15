@@ -117,7 +117,8 @@ export function ImportN1Dialog({ budget, brands, univers, magasins, user, onClos
   function chooseSheet(name, w = wb) {
     setSheet(name)
     const cols = name ? n1Columns(w.rows(name), matchMagasin) : []
-    setColumn(cols.find(c => c.endsWith(prevCode)) || cols.at(-1) || '')
+    // « BUDGET AH26 » d'abord (un export de l'appli a aussi « ADAPTÉ AH26 » et « QTÉ AH26 »)
+    setColumn(cols.find(c => c === `BUDGET ${prevCode}`) || cols.find(c => c.endsWith(prevCode)) || cols.at(-1) || '')
   }
 
   async function read(f) {
