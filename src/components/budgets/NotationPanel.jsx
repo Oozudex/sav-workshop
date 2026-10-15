@@ -36,22 +36,121 @@ function NumInput({ value, onSave, label, min, max, placeholder, className = '' 
   )
 }
 
-// Explication du calcul (point info demandé par les acheteurs)
-export function AdapteInfo({ reglages, defaultOpen = false }) {
-  const { amplitude } = notationReglages(reglages)
+// Petit tableau d'exemple de l'explication du budget adapté
+function ExTable({ head, rows, foot }) {
   return (
-    <details open={defaultOpen} className={`rounded-xl border px-4 py-2.5 text-xs border-violet-200 bg-violet-50/50 dark:border-violet-500/30 dark:bg-violet-500/5 text-gray-700 dark:text-neutral-300`}>
+    <div className="overflow-x-auto">
+      <table className="my-1.5 min-w-[22rem] text-[11px] bg-white dark:bg-neutral-900 rounded-lg overflow-hidden">
+        <thead><tr>{head.map((h, i) => <th key={i} className={`px-2 py-1 font-semibold text-gray-500 dark:text-neutral-400 ${i ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-t border-gray-100 dark:border-neutral-800">
+              {r.map((c, j) => <td key={j} className={`px-2 py-1 tabular-nums ${j ? 'text-right' : 'font-medium text-gray-900 dark:text-white'} ${j === r.length - 1 ? `font-semibold ${TONE.adapte.text}` : ''}`}>{c}</td>)}
+            </tr>
+          ))}
+        </tbody>
+        {foot && <tfoot><tr className="border-t border-gray-200 dark:border-neutral-700">{foot.map((c, j) => <td key={j} className={`px-2 py-1 font-semibold tabular-nums ${j ? 'text-right' : ''}`}>{c}</td>)}</tr></tfoot>}
+      </table>
+    </div>
+  )
+}
+
+const eur = n => formatBudget(n)
+const pc = n => `${(Math.round(n * 10) / 10).toLocaleString('fr-FR')} %`
+
+// Explication du calcul (point info demandé par les acheteurs), avec les chiffres du budget pour le
+// budget groupe et des exemples pour les autres étapes. enveloppe : { n1, base, groupe } du budget entier.
+export function AdapteInfo({ reglages, enveloppe, defaultOpen = false }) {
+  const { amplitude } = notationReglages(reglages)
+  const { n1 = 0, base = 0, groupe = null } = enveloppe || {}
+  const ratio = groupe != null && base > 0 ? groupe / base : null
+  const evolN1 = groupe != null && n1 > 0 ? (groupe / n1 - 1) * 100 : null
+  // Exemple des étapes 2 et 3 (même calcul que l'application, avec l'effet de note réglé)
+  const cN = coefMarque(8, amplitude), cA = coefMarque(4, amplitude)
+  const rawN = 60000 * cN, rawA = 40000 * cA
+  const nike = 100000 * rawN / (rawN + rawA), asics = 100000 - nike
+  const pris = Math.max(70000 - nike, 0) * 0.8
+  const H = 'font-semibold text-gray-900 dark:text-white'
+  return (
+    <details open={defaultOpen || undefined} className="rounded-xl border px-4 py-2.5 text-xs leading-relaxed border-violet-200 bg-violet-50/50 dark:border-violet-500/30 dark:bg-violet-500/5 text-gray-700 dark:text-neutral-300">
       <summary className={`cursor-pointer font-semibold ${TONE.adapte.text}`}>ⓘ Comment est calculé le budget adapté ?</summary>
-      <ol className="mt-2 space-y-1.5 list-decimal pl-4">
-        <li><strong>Part du N-1.</strong> Dans chaque segment et chaque magasin, le budget groupe (ou la base s’il n’est pas fixé) est partagé entre les marques selon leur N-1. Une marque sans N-1 part de 0.</li>
-        <li><strong>Note.</strong> La note de la marque (moyenne pondérée des 3 critères) ajuste sa part : 5/10 ne change rien, 10/10 donne +{amplitude} %, 0/10 donne −{amplitude} %. Une marque non notée compte comme 5/10. On recale ensuite pour que le total du segment reste égal à son budget.</li>
-        <li><strong>Budget demandé</strong> (facultatif). Si la marque demande plus que son budget adapté, on comble l’écart à hauteur de sa note (8/10 → 80 % de l’écart), en prenant d’abord le budget non réparti du segment, puis sur les autres marques du segment. Une demande déjà couverte ne change rien.</li>
-      </ol>
-      <p className="mt-2 text-gray-600 dark:text-neutral-400">
-        Exemple : segment à 100 000 €, Nike 60 % du N-1 notée 8/10, Asics 40 % notée 4/10. Après la note : Nike 63 636 €, Asics 36 364 €.
-        Nike demande 70 000 € : il manque 6 364 €, on en comble 80 % → Nike 68 727 €, Asics 31 273 €.
-        Le budget adapté est une recommandation : il ne modifie ni la base, ni le budget groupe, ni la saisie.
-      </p>
+      <div className="mt-3 space-y-4 max-w-3xl">
+        <p>
+          Le budget adapté est une <strong>recommandation par marque et par magasin</strong> : il découpe le budget groupe entre les marques
+          selon leur historique (N-1), leur note et ce qu’elles demandent. Il ne modifie ni la base, ni le budget groupe, ni la saisie.
+          Il se calcule en 4 étapes.
+        </p>
+
+        <section>
+          <p className={H}>1. Le budget groupe donne l’enveloppe de chaque segment et magasin</p>
+          <p>
+            La direction fixe le budget groupe sur <strong>le total du budget</strong> (en montant, ou en % du N-1 total). Ce total est ensuite
+            réparti sur chaque segment et chaque magasin <strong>au prorata du budget de base</strong> : toutes les cases de la base sont multipliées
+            par le même coefficient.
+          </p>
+          {ratio != null ? (
+            <p className="mt-1">
+              <strong>Ici :</strong> budget groupe {eur(groupe)}{evolN1 != null && <> ({evolN1 >= 0 ? '+' : '−'}{pc(Math.abs(evolN1))} du N-1 total de {eur(n1)})</>},
+              base totale {eur(base)} → chaque case de la base est multipliée par <strong>{ratio.toLocaleString('fr-FR', { maximumFractionDigits: 3 })}</strong>.
+            </p>
+          ) : <p className="mt-1">Tant que le budget groupe n’est pas fixé, l’enveloppe est le budget de base.</p>}
+          <p className="mt-1">
+            ⚠️ Le % s’applique au <strong>total</strong>, pas à chaque marque. Un segment dont la base est au-dessus de son N-1 reste au-dessus de son N-1
+            (exemple : base 75 715 €, N-1 60 596 €, coefficient 0,921 → enveloppe 69 730 €, soit +15 % sur le N-1 du segment alors que le budget
+            global est à −5 %). Une base négative dans un magasin donne une enveloppe à 0.
+          </p>
+        </section>
+
+        <section>
+          <p className={H}>2. L’enveloppe est partagée selon le N-1 de chaque marque, magasin par magasin</p>
+          <p>Chaque marque reçoit la même part de l’enveloppe que sa part du N-1 du segment dans ce magasin.</p>
+          <ExTable head={['Exemple · Château-Gontier, enveloppe 6 806 €', 'N-1', 'Part du N-1', 'Budget adapté']}
+            rows={[['ADIDAS', '726 €', '12,2 %', '831 €'], ['ARENA', '4 383 €', '73,7 %', '5 017 €'], ['ENERGETICS', '837 €', '14,1 %', '958 €'], ['SPEEDO', '0 €', '0 %', '0 €']]}
+            foot={['Total', '5 946 €', '100 %', '6 806 €']} />
+          <p>
+            Une marque <strong>sans N-1</strong> (SPEEDO) part de 0 : elle ne reçoit du budget que si elle a un budget demandé (étape 4).
+            Dans un magasin où aucune marque du segment n’a de N-1, l’enveloppe n’est pas répartie.
+          </p>
+        </section>
+
+        <section>
+          <p className={H}>3. La note du fournisseur augmente ou diminue sa part</p>
+          <p>
+            La note (moyenne pondérée des 3 critères) donne un coefficient : <strong>5/10 ne change rien</strong>, 10/10 donne +{amplitude} %,
+            0/10 donne −{amplitude} %. Un fournisseur non noté compte comme 5/10. Les parts sont ensuite recalées pour que le total reste égal à l’enveloppe :
+            ce que gagnent les bien notés est pris aux moins bien notés.
+          </p>
+          <ExTable head={['Exemple · enveloppe 100 000 €', 'Part N-1', 'Note', 'Coefficient', 'Budget adapté']}
+            rows={[
+              ['NIKE', '60 %', '8/10', `×${cN.toLocaleString('fr-FR', { maximumFractionDigits: 2 })}`, eur(nike)],
+              ['ASICS', '40 %', '4/10', `×${cA.toLocaleString('fr-FR', { maximumFractionDigits: 2 })}`, eur(asics)],
+            ]} foot={['Total', '100 %', '', '', '100 000 €']} />
+        </section>
+
+        <section>
+          <p className={H}>4. Le budget demandé rapproche le fournisseur de sa demande (facultatif)</p>
+          <p>
+            Si un fournisseur demande plus que son budget adapté (par exemple pour débloquer ses conditions), on comble l’écart
+            <strong> à hauteur de sa note</strong> : noté 8/10 → 80 % de l’écart, non noté → 50 %. Le complément est pris d’abord sur l’enveloppe
+            non répartie, puis sur les autres marques du même segment et magasin. Une demande déjà couverte ne change rien.
+          </p>
+          <ExTable head={['Exemple · NIKE demande 70 000 €', 'Avant', 'Écart comblé', 'Budget adapté']}
+            rows={[
+              ['NIKE (8/10)', eur(nike), `+${eur(pris)} (80 % de ${eur(70000 - nike)})`, eur(nike + pris)],
+              ['ASICS', eur(asics), `−${eur(pris)}`, eur(asics - pris)],
+            ]} />
+        </section>
+
+        <section>
+          <p className={H}>À retenir</p>
+          <ul className="list-disc pl-4 space-y-0.5">
+            <li>Le total des budgets adaptés d’un segment est égal à son budget groupe : la notation ne crée pas de budget, elle le déplace entre les marques.</li>
+            <li>Les déclinaisons d’un fournisseur (ADIDAS FEMME, ADIDAS OFFRE TERRAIN…) partagent sa note et son budget demandé.</li>
+            <li>Une marque retirée de la liste n’a pas de budget adapté.</li>
+            <li>Tout se recalcule en direct quand on change le budget groupe, une note, une pondération ou une demande.</li>
+          </ul>
+        </section>
+      </div>
     </details>
   )
 }
@@ -118,7 +217,7 @@ function LienInput({ decl, listId, onSave }) {
 const sumMap = map => Object.values(map || {}).reduce((t, v) => t + (typeof v === 'number' ? v : 0), 0)
 
 // Une ligne par fournisseur (ses déclinaisons regroupées : « ADIDAS FEMME », « ADIDAS OFFRE TERRAIN »…)
-export default function NotationPanel({ budget, segments, brandsBySeg, adapte, fiche, fournisseur, liens, reglages, keep, user }) {
+export default function NotationPanel({ budget, segments, brandsBySeg, adapte, fiche, fournisseur, liens, reglages, keep, user, enveloppe }) {
   const [q, setQ] = useState('')
   const [error, setError] = useState('')
   const [open, setOpen] = useState(() => new Set())
@@ -158,7 +257,7 @@ export default function NotationPanel({ budget, segments, brandsBySeg, adapte, f
   return (
     <div className="space-y-3">
       <Reglages reglages={reglages} user={user} />
-      <AdapteInfo reglages={reglages} />
+      <AdapteInfo reglages={reglages} enveloppe={enveloppe} />
       <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-3 space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-sm font-semibold text-gray-900 dark:text-white mr-auto">Notes des fournisseurs <span className="font-normal text-gray-500 dark:text-neutral-400">· {shown.length}</span></p>

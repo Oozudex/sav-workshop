@@ -87,8 +87,10 @@ export default function BudgetDetail() {
   const user = useBudgetUser()
   const {
     budget, loading, brands, universList, magasins, segments, sums, hasGroupe, brandsBySeg, prev, fiche, reglages, liens,
-    fournisseur, adapte, totals,
+    fournisseur, adapte, totals, groupeMontant,
   } = useBudgetModel(id)
+  // Budget entier (sans filtre) pour l'explication du budget adapté
+  const enveloppe = { n1: sums.n1, base: sums.base, groupe: groupeMontant }
   const [view, setView] = useState('univers')
   const isAcheteur = user.role === 'acheteur'
   const isDirection = user.role === 'directeurgen'
@@ -231,9 +233,9 @@ export default function BudgetDetail() {
 
         {view === 'notation' ? (
           <NotationPanel budget={budget} segments={segments} brandsBySeg={brandsBySeg} adapte={adapte.marques}
-            fiche={fiche} fournisseur={fournisseur} liens={liens} reglages={reglages} keep={keep} user={user} />
+            fiche={fiche} fournisseur={fournisseur} liens={liens} reglages={reglages} keep={keep} user={user} enveloppe={enveloppe} />
         ) : <>
-        <AdapteInfo reglages={reglages} />
+        <AdapteInfo reglages={reglages} enveloppe={enveloppe} />
         <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-x-auto">
           <div className="min-w-[51rem]">
             <HeaderRow hasGroupe={hasGroupe} />
