@@ -386,7 +386,7 @@ export function sortSegments(segments, universOrder) {
 // Totaux par segment et magasin : { [segId]: { [magId]: cellule } }. Cellule : base, groupe, n1, saisie,
 // engage (saisie des marques déjà commandées : line.engage, pour tous les magasins), qte et qteN1 (quantités).
 // ratio : coefficient du budget groupe appliqué au budget de base (null : budget groupe non fixé)
-const EMPTY_CELL = { base: 0, groupe: 0, n1: 0, saisie: 0, engage: 0, qte: 0, qteN1: 0 }
+const EMPTY_CELL = { base: 0, groupe: 0, adapte: 0, n1: 0, saisie: 0, engage: 0, qte: 0, qteN1: 0 }
 export const emptyCell = () => ({ ...EMPTY_CELL })
 
 export function computeTotals(segments, base, marques, ratio = null) {
@@ -455,4 +455,164 @@ export function formatPct(p) {
 // Budget à répartir : le budget groupe une fois fixé, sinon la base
 export function objectif(cell, hasGroupe) {
   return hasGroupe ? cell.groupe : cell.base
+}
+
+// ── Notation des marques et budget adapté ───────────────────────────────────────
+// Chaque marque (une fiche pour tout le groupe, par budget) est notée sur 10 selon 3 critères ; la
+// moyenne pondérée donne un coefficient (5/10 neutre, ± amplitude %). Elle peut aussi demander un
+// budget (total groupe, facultatif). Pondérations et amplitude : réglage commun à tous.
+
+export const CRITERES = [
+  { key: 'reassort', label: 'Réassort', hint: 'Disponibilité du réassort en cours de saison avec cette marque' },
+  { key: 'conditions', label: 'Conditions commerciales', hint: 'Impact stratégique sur la marge (RFA, marge nette…)' },
+  { key: 'service', label: 'Taux de service', hint: 'Le fournisseur livre-t-il correctement (dans la période, la commande saisie) ?' },
+]
+export const NOTE_NEUTRE = 5
+export const NOTATION_DEFAUT = { poids: { reassort: 1, conditions: 1, service: 1 }, amplitude: 20 }
+
+export function notationReglages(doc) {
+  return {
+    poids: { ...NOTATION_DEFAUT.poids, ...(doc?.poids || {}) },
+    amplitude: typeof doc?.amplitude === 'number' ? doc.amplitude : NOTATION_DEFAUT.amplitude,
+  }
+}
+
+// Identifiant de la fiche d'une marque (même marque dans plusieurs univers : une seule fiche)
+export function fournisseurKey(nom) {
+  return normLabel(nom).replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '') || '_'
+}
+
+// Fournisseur d'une marque : ses déclinaisons (« ADIDAS FEMME », « ADIDAS OFFRE TERRAIN »…) partagent la
+// fiche du fournisseur (notes, budget demandé). Lien choisi par un acheteur : liens[clé de la marque] =
+// nom du fournisseur ('' : marque seule). Sinon automatique : la plus courte autre marque dont le nom
+// commence le sien suivi d'un espace (« ADIDAS FEMME » → « ADIDAS »). nom → { key, nom, auto, manuel }
+export function fournisseurResolver(noms, liens = {}) {
+  const names = [...new Set(noms.map(normLabel))].sort((a, b) => a.length - b.length)
+  const cache = new Map()
+  const auto = n => names.find(p => p.length < n.length && n.startsWith(`${p} `)) || n
+  return nom => {
+    const n = normLabel(nom)
+    if (cache.has(n)) return cache.get(n)
+    const a = auto(n)
+    const lien = liens?.[fournisseurKey(n)]
+    let f = typeof lien === 'string' ? (normLabel(lien) || n) : a
+    // Le fournisseur automatique peut lui-même être lié à la main (« ADIDAS » → « ADIDAS GROUP »)
+    if (typeof lien !== 'string' && f !== n && typeof liens?.[fournisseurKey(f)] === 'string') f = normLabel(liens[fournisseurKey(f)]) || f
+    const r = { key: fournisseurKey(f), nom: f, auto: a, manuel: typeof lien === 'string' }
+    cache.set(n, r)
+    return r
+  }
+}
+
+// Ordre chronologique des budgets : PE (printemps-été) puis AH (automne-hiver) d'une même année
+export const budgetRank = b => b.annee * 2 + (b.saison === 'AH' ? 1 : 0)
+
+// Moyenne pondérée des notes présentes (null : aucune note)
+export function noteMarque(notes, poids = NOTATION_DEFAUT.poids) {
+  let t = 0, w = 0
+  for (const { key } of CRITERES) {
+    const n = notes?.[key], p = poids?.[key] ?? 1
+    if (typeof n === 'number' && p > 0) { t += n * p; w += p }
+  }
+  return w > 0 ? t / w : null
+}
+
+// Coefficient : 5/10 → ×1 ; 10/10 → ×(1 + amplitude %) ; 0/10 → ×(1 − amplitude %). Non notée : ×1
+export function coefMarque(note, amplitude = NOTATION_DEFAUT.amplitude) {
+  return note == null ? 1 : 1 + (amplitude / 100) * (note - NOTE_NEUTRE) / NOTE_NEUTRE
+}
+
+// Budget adapté de chaque marque, par magasin.
+// 1. Dans chaque segment et magasin, l'enveloppe (budget groupe, sinon base ; négative = 0) est
+//    partagée selon le N-1 de chaque marque multiplié par son coefficient (total = l'enveloppe).
+//    Une marque sans N-1 part de 0 ; une marque retirée de la liste (orphan) n'a pas de budget adapté.
+// 2. Une marque qui demande un budget plus élevé que son budget adapté s'en rapproche à hauteur de sa
+//    note (8/10 : 80 % de l'écart ; non notée : 50 %). Le complément est pris d'abord sur l'enveloppe
+//    non répartie, puis sur les autres marques du même segment et magasin.
+// fiche(key) → { notes, demande } ; fournisseur(nom) → { key, nom } (déclinaisons regroupées) ; renvoie { byBrand: Map id → { magId: € }, cells: { segId: { magId: € } },
+// marques: Map key → { key, nom, note, coef, demande, avant, total }, keyOf: Map id de marque → clé }
+export function computeAdapte({ segments, totals, brandsBySeg, magIds, fiche, reglages, hasGroupe, fournisseur }) {
+  const fournOf = fournisseur || (nom => ({ key: fournisseurKey(nom), nom: normLabel(nom) }))
+  const { poids, amplitude } = notationReglages(reglages)
+  const byBrand = new Map()
+  const marques = new Map()
+  const keyOf = new Map() // id de la marque → clé de son fournisseur
+  const get = (id, m) => byBrand.get(id)?.[m] || 0
+  const set = (id, m, v) => { if (!byBrand.has(id)) byBrand.set(id, {}); byBrand.get(id)[m] = v }
+  const env = (segId, m) => Math.max(objectif(totals[segId]?.[m] || EMPTY_CELL, hasGroupe), 0)
+  const infoOf = b => {
+    const { key, nom } = fournOf(b.nom)
+    if (!marques.has(key)) {
+      const f = fiche(key)
+      const note = noteMarque(f?.notes, poids)
+      marques.set(key, {
+        key, nom, note, coef: coefMarque(note, amplitude),
+        demande: typeof f?.demande === 'number' && f.demande > 0 ? f.demande : null, cells: [],
+      })
+    }
+    return marques.get(key)
+  }
+
+  const actives = segId => (brandsBySeg.get(segId) || []).filter(b => !b.orphan)
+  for (const s of segments) {
+    const list = actives(s.id)
+    for (const b of list) {
+      infoOf(b).cells.push(...magIds.map(m => ({ id: b.id, segId: s.id, m })))
+      keyOf.set(b.id, fournOf(b.nom).key)
+    }
+    for (const m of magIds) {
+      const raw = list.map(b => Math.max(b.line?.n1?.[m] || 0, 0) * infoOf(b).coef)
+      const t = raw.reduce((a, x) => a + x, 0)
+      list.forEach((b, i) => set(b.id, m, t > 0 ? env(s.id, m) * raw[i] / t : 0))
+    }
+  }
+
+  const sumCells = cells => cells.reduce((a, c) => a + get(c.id, c.m), 0)
+  for (const info of marques.values()) info.avant = sumCells(info.cells)
+  const demandeurs = [...marques.values()].filter(i => i.demande != null)
+    .sort((a, b) => (b.note ?? NOTE_NEUTRE) - (a.note ?? NOTE_NEUTRE))
+  for (const info of demandeurs) {
+    const total = sumCells(info.cells)
+    const voulu = (info.demande - total) * (info.note ?? NOTE_NEUTRE) / 10
+    if (voulu <= 0) continue
+    // Réparti sur les cases de la marque selon son budget adapté, sinon selon l'enveloppe
+    let w = info.cells.map(c => get(c.id, c.m))
+    if (!(total > 0)) w = info.cells.map(c => env(c.segId, c.m))
+    const wt = w.reduce((a, x) => a + x, 0)
+    if (!(wt > 0)) continue
+    info.cells.forEach((c, i) => {
+      let besoin = voulu * w[i] / wt
+      if (!(besoin > 0)) return
+      const voisins = actives(c.segId).filter(b => fournOf(b.nom).key !== info.key)
+      const pris = voisins.reduce((a, b) => a + get(b.id, c.m), 0)
+      const libre = Math.max(env(c.segId, c.m) - pris - get(c.id, c.m), 0)
+      const surLibre = Math.min(besoin, libre)
+      besoin -= surLibre
+      const surVoisins = Math.min(besoin, pris)
+      if (surVoisins > 0) for (const b of voisins) set(b.id, c.m, get(b.id, c.m) * (1 - surVoisins / pris))
+      set(c.id, c.m, get(c.id, c.m) + surLibre + surVoisins)
+    })
+  }
+
+  const cells = {}
+  for (const s of segments) {
+    for (const b of brandsBySeg.get(s.id) || []) {
+      for (const m of magIds) {
+        const v = get(b.id, m)
+        if (v) ((cells[s.id] ??= {})[m] = (cells[s.id]?.[m] || 0) + v)
+      }
+    }
+  }
+  for (const info of marques.values()) { info.total = sumCells(info.cells); delete info.cells }
+  return { byBrand, cells, marques, keyOf }
+}
+
+// Ajoute le budget adapté aux totaux par segment et magasin
+export function withAdapte(totals, cells) {
+  const t = {}
+  for (const [segId, mags] of Object.entries(totals)) {
+    t[segId] = {}
+    for (const [m, c] of Object.entries(mags)) t[segId][m] = { ...c, adapte: cells[segId]?.[m] || 0 }
+  }
+  return t
 }

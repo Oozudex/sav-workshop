@@ -48,6 +48,38 @@ export function useAcheteurs() {
   return list
 }
 
+// Fiches des marques d'un budget (notes, budget demandé) : budgets/{id}/fournisseurs/{clé de la marque}
+export const useFiches = id => useCollection(['budgets', id || '_', 'fournisseurs'], [], !!id)
+
+// Réglage commun budget_reglages/{id} (null tant qu'il n'existe pas)
+function useReglage(id) {
+  const [state, setState] = useState(null)
+  useEffect(() => onSnapshot(doc(db, 'budget_reglages', id),
+    snap => setState(snap.exists() ? snap.data() : null), () => setState(null)), [id])
+  return state
+}
+
+// Pondérations des critères et amplitude du coefficient (budget_reglages/notation)
+export const useNotationReglages = () => ({ reglages: useReglage('notation') })
+
+// Liens marque → fournisseur choisis par les acheteurs (budget_reglages/fournisseurs : { liens })
+export const useFournisseurLiens = () => useReglage('fournisseurs')?.liens || EMPTY
+
+const EMPTY = {}
+
+// Fiches des budgets précédents, du plus récent au plus ancien : [{ budget, list }]
+export function useFichesHistory(budgetsAvant) {
+  const ids = budgetsAvant.map(b => b.id).join(',')
+  const [byId, setById] = useState({})
+  useEffect(() => {
+    if (!ids) return
+    const unsubs = ids.split(',').map(id => onSnapshot(collection(db, 'budgets', id, 'fournisseurs'),
+      snap => setById(s => ({ ...s, [id]: snap.docs.map(d => ({ id: d.id, ...d.data() })) })), () => {}))
+    return () => unsubs.forEach(u => u())
+  }, [ids])
+  return useMemo(() => budgetsAvant.map(b => ({ budget: b, list: byId[b.id] || [] })), [budgetsAvant, byId])
+}
+
 export function useBudget(id) {
   const [state, setState] = useState({ budget: null, loading: true })
   useEffect(() => onSnapshot(doc(db, 'budgets', id),
@@ -254,4 +286,28 @@ export function setCommentaire(budgetId, brand, commentaire, user) {
 // Ligne d'une marque retirée de la liste (et ses montants)
 export function deleteLine(budgetId, id) {
   return deleteDoc(lineRef(budgetId, id))
+}
+
+// ── Notation des marques ────────────────────────────────────────────────────────
+
+export function saveNotationReglages(data, user) {
+  return setDoc(doc(db, 'budget_reglages', 'notation'), { ...data, updatedAt: serverTimestamp(), updatedBy: author(user) }, { merge: true })
+}
+
+// Fiche d'une marque dans un budget. univers : univers où la marque est présente (droits des acheteurs).
+// changes : { notes: { critere: n | null } } et/ou { demande: n | null }
+export function saveFiche(budgetId, key, { nom, univers }, changes, user) {
+  const data = { nom, univers, updatedAt: serverTimestamp(), updatedBy: author(user) }
+  // Un objet vide écraserait les notes existantes (merge) : seulement les notes modifiées
+  if (changes.notes && Object.keys(changes.notes).length) data.notes = Object.fromEntries(Object.entries(changes.notes).map(([k, v]) => [k, v == null ? deleteField() : v]))
+  if ('demande' in changes) data.demande = changes.demande == null ? deleteField() : changes.demande
+  return setDoc(doc(db, 'budgets', budgetId, 'fournisseurs', key), data, { merge: true })
+}
+
+// Lien d'une marque vers son fournisseur : nom du fournisseur, '' (marque seule) ou null (automatique)
+export function saveLien(marqueKey, fournisseur, user) {
+  return setDoc(doc(db, 'budget_reglages', 'fournisseurs'), {
+    liens: { [marqueKey]: fournisseur == null ? deleteField() : fournisseur },
+    updatedAt: serverTimestamp(), updatedBy: author(user),
+  }, { merge: true })
 }

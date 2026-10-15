@@ -505,6 +505,20 @@ describe('budgets acheteurs', () => {
     await assertSucceeds(updateDoc(doc(as('acheteurCycle'), 'budgets', 'b'), { segments: [] }))
     await assertFails(updateDoc(doc(as('acheteurCycle'), 'budgets', 'b'), { groupe: deleteField() }))
   })
+  it("notation des marques : réglage commun, fiche modifiable par la direction et les acheteurs de la marque", async () => {
+    for (const uid of ['acheteur', 'acheteurCycle', 'dirgen', 'admin']) {
+      await assertSucceeds(setDoc(doc(as(uid), 'budget_reglages', 'notation'), { poids: { reassort: 2 } }, { merge: true }))
+    }
+    await assertFails(getDoc(doc(as('veloA'), 'budget_reglages', 'notation')))
+    const fiche = univers => ({ nom: 'NIKE', univers, notes: { reassort: 8 } })
+    await assertSucceeds(setDoc(doc(as('acheteurCycle'), 'budgets', 'b', 'fournisseurs', 'NIKE'), fiche(['RUNNING', 'CYCLE'])))
+    await assertFails(setDoc(doc(as('acheteurCycle'), 'budgets', 'b', 'fournisseurs', 'PING'), fiche(['GOLF'])))
+    await assertFails(setDoc(doc(as('acheteur'), 'budgets', 'b', 'fournisseurs', 'NIKE'), fiche(['RUNNING', 'CYCLE'])))
+    await assertSucceeds(setDoc(doc(as('dirgen'), 'budgets', 'b', 'fournisseurs', 'PING'), fiche(['GOLF'])))
+    await assertSucceeds(getDocs(collection(as('acheteur'), 'budgets', 'b', 'fournisseurs')))
+    await assertFails(deleteDoc(doc(as('acheteurCycle'), 'budgets', 'b', 'fournisseurs', 'NIKE')))
+    await assertSucceeds(deleteDoc(doc(as('admin'), 'budgets', 'b', 'fournisseurs', 'NIKE')))
+  })
   it("seule la direction supprime un budget", async () => {
     await assertFails(deleteDoc(doc(as('acheteurCycle'), 'budgets', 'b')))
     await assertSucceeds(deleteDoc(doc(as('dirgen'), 'budgets', 'b')))

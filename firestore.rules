@@ -497,6 +497,10 @@ service cloud.firestore {
     match /budget_magasins/{id} {
       allow read, write: if isSignedIn() && isGlobal();
     }
+    // Réglages communs (pondérations de la notation des marques) : acheteurs et direction
+    match /budget_reglages/{id} {
+      allow read, write: if isSignedIn() && isGlobal();
+    }
     // Liste des marques par univers et segment : même droits que les lignes par marque
     match /budget_marques/{id} {
       allow read: if isSignedIn() && isGlobal();
@@ -512,6 +516,15 @@ service cloud.firestore {
       allow update: if isSignedIn() && isGlobal() &&
         (isDirGen() || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['groupe']));
       allow delete: if isSignedIn() && isDirGen();
+
+      // Fiche d'une marque (notes, budget demandé), une pour tout le groupe : la direction, ou un acheteur
+      // qui a cette marque dans un de ses univers (univers : univers où la marque est présente)
+      match /fournisseurs/{key} {
+        allow read: if isSignedIn() && isGlobal();
+        allow create, update: if isSignedIn() && (isDirGen() ||
+          (isAcheteur() && request.resource.data.get('univers', []).hasAny(userDoc().get('univers', []))));
+        allow delete: if isSignedIn() && isDirGen();
+      }
 
       match /marques/{marqueId} {
         allow read: if isSignedIn() && isGlobal();

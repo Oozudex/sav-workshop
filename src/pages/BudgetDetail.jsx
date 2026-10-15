@@ -1,25 +1,27 @@
 // Un budget (ex. BUDGET AH27) : imports de la base et du N-1, puis deux lectures
-// Univers › Segment › Marques (tableau marques × magasins) ou Magasin › Univers › Segment (saisie d'un magasin).
-import { useMemo, useState } from 'react'
+// Univers › Segment › Marques (tableau marques × magasins) ou Magasin › Univers › Segment (saisie d'un magasin),
+// et la notation des marques qui donne le budget adapté.
+import { useCallback, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import BrandGrid from '../components/budgets/BrandGrid'
 import BuyerFilter from '../components/budgets/BuyerFilter'
 import GroupeCards from '../components/budgets/GroupeCards'
+import NotationPanel, { AdapteInfo } from '../components/budgets/NotationPanel'
 import SegmentSaisie from '../components/budgets/SegmentSaisie'
 import { Legend, SplitBar, TONE } from '../components/budgets/tones'
 import { ImportBaseDialog, ImportN1Dialog } from '../components/budgets/ImportDialogs'
 import { BTN_PRIMARY, BTN_SECONDARY, EmptyState, Notice } from '../components/admin/ui'
 import {
-  FILTRE_SANS_ACHETEUR, SAISONS, addTotals, brandsBySegment, buyerFilterTest, canEditUnivers, computeTotals, defaultBuyerFilter,
-  formatBudget, formatQte, groupeRatio, groupeTotal, objectif, previousSeason, sortSegments,
+  FILTRE_SANS_ACHETEUR, SAISONS, addTotals, brandsBySegment, buyerFilterTest, canEditUnivers, computeAdapte, computeTotals,
+  budgetRank, defaultBuyerFilter, formatBudget, formatQte, fournisseurResolver, groupeRatio, groupeTotal, objectif, previousSeason, sortSegments, withAdapte,
 } from '../lib/budgets'
 import {
   carryOverN1, deleteBudget, useAcheteurs, useBrands, useBudget, useBudgetLines, useBudgetMagasins, useBudgetUnivers, useBudgetUser,
-  useBudgets,
+  useBudgets, useFiches, useFichesHistory, useFournisseurLiens, useNotationReglages,
 } from '../lib/budgetsStore'
 
-const VIEWS = [['univers', 'Univers › Segment › Marques'], ['magasin', 'Magasin › Univers › Segment']]
+const VIEWS = [['univers', 'Univers › Segment › Marques'], ['magasin', 'Magasin › Univers › Segment'], ['notation', 'Notation des marques']]
 const GRID = 'grid grid-cols-[minmax(12rem,1fr)_repeat(4,6.5rem)_8.5rem] items-center gap-2'
 const LEVEL_PAD = ['pl-2', 'pl-7', 'pl-12']
 
@@ -117,8 +119,34 @@ export default function BudgetDetail() {
   const groupeMontant = groupeTotal(budget?.groupe, sums.n1)
   const ratio = groupeRatio(groupeMontant, sums.base)
   const hasGroupe = ratio != null
-  const totals = useMemo(() => computeTotals(segments, budget?.base, lines, ratio), [segments, budget?.base, lines, ratio])
+  const rawTotals = useMemo(() => computeTotals(segments, budget?.base, lines, ratio), [segments, budget?.base, lines, ratio])
   const brandsBySeg = useMemo(() => brandsBySegment(brands, lines), [brands, lines])
+
+  // Budget adapté. Fiches des fournisseurs : celles de ce budget, sinon la plus récente des budgets
+  // précédents (les notes se reportent d'année en année sans ressaisie). Déclinaisons regroupées.
+  const prevSeason = budget ? previousSeason(budget) : null
+  const prev = prevSeason && budgets.find(b => b.saison === prevSeason.saison && b.annee === prevSeason.annee)
+  const avant = useMemo(() => (budget ? budgets.filter(b => budgetRank(b) < budgetRank(budget))
+    .sort((a, b) => budgetRank(b) - budgetRank(a)) : []), [budgets, budget])
+  const { list: fiches } = useFiches(id)
+  const history = useFichesHistory(avant)
+  const { reglages } = useNotationReglages()
+  const liens = useFournisseurLiens()
+  const fiche = useCallback(key => {
+    const f = fiches.find(x => x.id === key)
+    if (f) return f
+    for (const h of history) {
+      const p = h.list.find(x => x.id === key)
+      if (p) return { ...p, herite: true, source: h.budget.nom }
+    }
+    return null
+  }, [fiches, history])
+  const fournisseur = useMemo(() => fournisseurResolver([...brands, ...lines].map(b => b.nom || ''), liens), [brands, lines, liens])
+  const adapte = useMemo(() => computeAdapte({
+    segments, totals: rawTotals, brandsBySeg, magIds: magasins.map(m => m.id), fiche, reglages, hasGroupe, fournisseur,
+  }), [segments, rawTotals, brandsBySeg, magasins, fiche, reglages, hasGroupe, fournisseur])
+  const totals = useMemo(() => withAdapte(rawTotals, adapte.cells), [rawTotals, adapte])
+
   const groups = useMemo(() => {
     const g = []
     for (const s of segments) {
@@ -132,9 +160,6 @@ export default function BudgetDetail() {
   const filtreLabel = filtre === FILTRE_SANS_ACHETEUR ? ' des univers sans acheteur'
     : filtre ? ` · ${acheteurs.find(a => `a:${a.id}` === filtre)?.displayName || ''}` : ''
 
-  const prevSeason = budget ? previousSeason(budget) : null
-  const prev = prevSeason && budgets.find(b => b.saison === prevSeason.saison && b.annee === prevSeason.annee)
-
   if (loading) return <Page><p className="text-sm text-gray-500 dark:text-neutral-400">Chargement…</p></Page>
   if (!budget) return <Page><EmptyState title="Budget introuvable" action={<Link to="/budgets" className={BTN_SECONDARY + ' inline-flex items-center'}>Retour aux budgets</Link>} /></Page>
 
@@ -147,13 +172,13 @@ export default function BudgetDetail() {
 
   const saisie = (seg, mag) => (
     <div className="px-2 py-2 bg-gray-50 dark:bg-neutral-950/50 border-b border-gray-100 dark:border-neutral-800">
-      <SegmentSaisie budgetId={budget.id} seg={seg} magasin={mag} cell={cellOf([seg], [mag])} hasGroupe={hasGroupe}
+      <SegmentSaisie budgetId={budget.id} seg={seg} magasin={mag} cell={cellOf([seg], [mag])} hasGroupe={hasGroupe} adapte={adapte}
         brands={brandsBySeg.get(seg.id) || []} user={user} readOnly={!canEditUnivers(user, seg.univers)} />
     </div>
   )
   const grid = seg => (
     <div className="px-2 py-2 bg-gray-50 dark:bg-neutral-950/50 border-b border-gray-100 dark:border-neutral-800">
-      <BrandGrid budgetId={budget.id} seg={seg} magasins={magasins} totals={totals[seg.id]} hasGroupe={hasGroupe}
+      <BrandGrid budgetId={budget.id} seg={seg} magasins={magasins} totals={totals[seg.id]} hasGroupe={hasGroupe} adapte={adapte}
         brands={brandsBySeg.get(seg.id) || []} user={user} readOnly={!canEditUnivers(user, seg.univers)} />
     </div>
   )
@@ -231,7 +256,7 @@ export default function BudgetDetail() {
             hint={hasGroupe ? 'sur le budget groupe' : 'sur le budget de base'} />
         </div>
         <GroupeCards budget={budget} n1Total={sums.n1} baseTotal={sums.base} canEdit={isDirection} user={user} />
-        <Legend keys={['n1', 'base', 'groupe', 'engage', 'previsionnel', 'ok', 'depassement']} />
+        <Legend keys={['n1', 'base', 'groupe', 'adapte', 'engage', 'previsionnel', 'ok', 'depassement']} />
 
         <div className="flex flex-wrap items-center gap-2">
           <div role="radiogroup" aria-label="Affichage" className="inline-flex p-1 rounded-xl bg-gray-100 dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800">
@@ -248,6 +273,11 @@ export default function BudgetDetail() {
           {open.size > 0 && <button type="button" onClick={() => setOpen(new Set())} className={BTN_SECONDARY}>Tout replier</button>}
         </div>
 
+        {view === 'notation' ? (
+          <NotationPanel budget={budget} segments={segments} brandsBySeg={brandsBySeg} adapte={adapte.marques}
+            fiche={fiche} fournisseur={fournisseur} liens={liens} reglages={reglages} keep={keep} user={user} />
+        ) : <>
+        <AdapteInfo reglages={reglages} />
         <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-x-auto">
           <div className="min-w-[51rem]">
             <HeaderRow hasGroupe={hasGroupe} />
@@ -307,6 +337,7 @@ export default function BudgetDetail() {
             </div>
           </div>
         </div>
+        </>}
         {magasins.length === 0 && <Notice notice={{ text: 'La liste des magasins est vide : remplis-la dans l’onglet Magasins des budgets.' }} />}
       </>}
 

@@ -53,9 +53,23 @@ export function BrandEngage({ budgetId, brand, user, readOnly, run }) {
     onChange={v => run(setEngage(budgetId, brand, v, user))} />
 }
 
+// Note de la marque (coefficient) et budget demandé, sous son nom
+export function BrandNote({ info, brand }) {
+  if (!info || (info.note == null && info.demande == null)) return null
+  const r = n => (Math.round(n * 10) / 10).toLocaleString('fr-FR')
+  return (
+    <span className={`block mt-0.5 text-[10px] font-normal ${TONE.adapte.text}`}
+      title={`Note pondérée ${info.note == null ? 'non notée' : `${r(info.note)}/10`} · coefficient ×${(Math.round(info.coef * 100) / 100).toLocaleString('fr-FR')}${info.demande != null ? ` · demande ${formatBudget(info.demande)}` : ''}`}>
+      {brand && info.nom !== normLabel(brand.nom) && `${info.nom} · `}{info.note != null && `Note ${r(info.note)}/10`}{info.note != null && info.demande != null && ' · '}{info.demande != null && `Demande ${formatBudget(info.demande)}`}
+    </span>
+  )
+}
+
+export const brandInfo = (adapte, brand) => adapte?.marques.get(adapte.keyOf.get(brand.id))
+
 // Case d'une marque pour un magasin (tableau marques × magasins) : montant, quantité (vert si la marque
-// est engagée, ambre si prévisionnelle) et rappel du N-1
-export function SaisieCell({ budgetId, brand, mag, user, readOnly, run }) {
+// est engagée, ambre si prévisionnelle), rappel du N-1 et budget adapté
+export function SaisieCell({ budgetId, brand, mag, user, readOnly, run, adapte }) {
   const line = brand.line
   const tone = saisieTone(line, mag.id)
   const engage = line?.engage === true
@@ -76,6 +90,7 @@ export function SaisieCell({ budgetId, brand, mag, user, readOnly, run }) {
         onSave={v => run(setQuantite(budgetId, brand, mag.id, v, user))} />
     </>}
     <p className={`mt-0.5 text-right text-[10px] tabular-nums ${TONE.n1.head}`}>N-1 {n1 || '—'}</p>
+    {adapte != null && <p className={`text-right text-[10px] tabular-nums ${TONE.adapte.text}`}>Adapté {formatBudget(adapte)}</p>}
   </>
 }
 
@@ -151,7 +166,7 @@ export function AddBrandForm({ seg, brands, user }) {
   )
 }
 
-export default function SegmentSaisie({ budgetId, seg, magasin, cell, hasGroupe, brands, user, readOnly = false }) {
+export default function SegmentSaisie({ budgetId, seg, magasin, cell, hasGroupe, adapte, brands, user, readOnly = false }) {
   const [error, setError] = useState('')
   const run = p => p.catch(err => setError(err.message))
   const id = magasin.id
@@ -187,6 +202,7 @@ export default function SegmentSaisie({ budgetId, seg, magasin, cell, hasGroupe,
             <tr className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-neutral-400">
               <th scope="col" className="py-1 pr-2">Marque</th>
               <th scope="col" className={`py-1 px-2 text-right ${TONE.n1.head}`}>N-1</th>
+              <th scope="col" className={`py-1 px-2 text-right ${TONE.adapte.head}`}>Adapté</th>
               <th scope="col" className="py-1 px-2 text-right">Budget</th>
               <th scope="col" className="py-1 px-2 text-right">Quantité</th>
               <th scope="col" className="py-1 px-2">Statut <span className="normal-case font-normal">(tous magasins)</span></th>
@@ -206,11 +222,15 @@ export default function SegmentSaisie({ budgetId, seg, magasin, cell, hasGroupe,
                 <tr key={b.id} className="border-t border-gray-100 dark:border-neutral-800 align-middle">
                   <th scope="row" className="py-1.5 pr-2 text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap">
                     {b.nom}{b.orphan && <OrphanTag />}
+                    <BrandNote info={brandInfo(adapte, b)} brand={b} />
                   </th>
                   <td className={`py-1.5 px-2 text-right text-sm tabular-nums whitespace-nowrap ${TONE.n1.text}`}>
                     {hasValue(line?.n1, id) ? formatBudget(line.n1[id]) : '—'}
                     {hasValue(line?.quantiteN1, id) && <span className="block text-[11px]">{formatQte(line.quantiteN1[id])}</span>}
                     <N1Comment text={line?.commentaireN1} />
+                  </td>
+                  <td className={`py-1.5 px-2 text-right text-sm tabular-nums whitespace-nowrap ${TONE.adapte.text}`}>
+                    {formatBudget(adapte?.byBrand.get(b.id)?.[id])}
                   </td>
                   {readOnly ? <>
                     <td className={`py-1.5 px-2 w-32 text-right text-sm tabular-nums ${textTone}`}>
@@ -246,7 +266,7 @@ export default function SegmentSaisie({ budgetId, seg, magasin, cell, hasGroupe,
               )
             })}
             {brands.length === 0 && (
-              <tr><td colSpan={7} className="py-3 text-xs text-gray-500 dark:text-neutral-400">Aucune marque dans ce segment : ajoute-les dans l’onglet Marques des budgets.</td></tr>
+              <tr><td colSpan={8} className="py-3 text-xs text-gray-500 dark:text-neutral-400">Aucune marque dans ce segment : ajoute-les dans l’onglet Marques des budgets.</td></tr>
             )}
           </tbody>
           {brands.length > 0 && (
@@ -256,6 +276,7 @@ export default function SegmentSaisie({ budgetId, seg, magasin, cell, hasGroupe,
                 <td className={`py-1.5 px-2 text-right tabular-nums ${TONE.n1.text}`}>
                   {formatBudget(n1)}{qteN1 > 0 && <span className="block text-[11px] font-normal">{formatQte(qteN1)}</span>}
                 </td>
+                <td />
                 <td className="py-1.5 px-2 text-right tabular-nums pr-4">{formatBudget(saisie)}</td>
                 <td className="py-1.5 px-2 text-right tabular-nums pr-4">{qte > 0 ? formatQte(qte) : ''}</td>
                 <td colSpan={3} />

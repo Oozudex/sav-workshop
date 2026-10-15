@@ -5,18 +5,21 @@ import { useState } from 'react'
 import { IconButton } from '../admin/ui'
 import { emptyCell, formatBudget, formatQte, objectif, sumValues } from '../../lib/budgets'
 import { deleteLine, setCommentaire } from '../../lib/budgetsStore'
-import { AddBrandForm, BrandEngage, N1Comment, OrphanTag, Reste, SaisieCell, TextInput } from './SegmentSaisie'
+import { AddBrandForm, BrandEngage, BrandNote, N1Comment, OrphanTag, Reste, SaisieCell, TextInput, brandInfo } from './SegmentSaisie'
 import { TONE } from './tones'
 
 const TH = 'py-1.5 px-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-neutral-400'
 const STICKY = 'sticky left-0 z-10 bg-white dark:bg-neutral-900'
 
-export default function BrandGrid({ budgetId, seg, magasins, totals, hasGroupe, brands, user, readOnly = false }) {
+export default function BrandGrid({ budgetId, seg, magasins, totals, hasGroupe, adapte, brands, user, readOnly = false }) {
   const [error, setError] = useState('')
   const run = p => p.catch(err => setError(err.message))
   const cell = magId => totals?.[magId] || emptyCell()
   const sum = key => magasins.reduce((t, m) => t + cell(m.id)[key], 0)
   const total = { base: sum('base'), groupe: sum('groupe') }
+  // Le budget adapté répartit l'enveloppe du segment entre ses marques : son total est celui du budget
+  // groupe, sauf dans les magasins où aucune marque n'a de N-1 (rien à répartir)
+  const nonReparti = magasins.reduce((t, m) => t + Math.max(objectif(cell(m.id), hasGroupe), 0) - cell(m.id).adapte, 0)
   const refRow = (key, value) => (
     <tr className={TONE[key].row}>
       <th scope="row" className={`${STICKY} ${TONE[key].sticky} py-1.5 pr-2 text-xs font-semibold ${TONE[key].text}`}>{TONE[key].label}</th>
@@ -59,6 +62,11 @@ export default function BrandGrid({ budgetId, seg, magasins, totals, hasGroupe, 
           </span>
         )}
       </div>
+      {nonReparti >= 1 && brands.length > 0 && (
+        <p className={`text-[11px] ${TONE.adapte.text}`}>
+          Budget adapté : {formatBudget(nonReparti)} non réparti entre les marques (magasins où aucune marque n’a de N-1 ni de demande).
+        </p>
+      )}
       {error && <p role="alert" className="text-[11px] text-red-600 dark:text-red-400">{error}</p>}
 
       <div className="overflow-x-auto">
@@ -79,21 +87,31 @@ export default function BrandGrid({ budgetId, seg, magasins, totals, hasGroupe, 
               const n1Total = sumValues(b.line?.n1)
               const saisieTotal = sumValues(b.line?.saisie)
               const qte = sumValues(b.line?.quantite), qteN1 = sumValues(b.line?.quantiteN1)
+              const adapteB = adapte?.byBrand.get(b.id) || {}
+              const adapteTotal = sumValues(adapteB)
+              const ecart = saisieTotal - adapteTotal
               return (
                 <tr key={b.id} className="align-top">
                   <th scope="row" className={`${STICKY} border-t border-gray-100 dark:border-neutral-800 py-1.5 pr-2 text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap`}>
                     {b.nom}{b.orphan && <OrphanTag />}<N1Comment text={b.line?.commentaireN1} />
+                    <BrandNote info={brandInfo(adapte, b)} brand={b} />
                     <div className="mt-2"><BrandEngage budgetId={budgetId} brand={b} user={user} readOnly={readOnly} run={run} /></div>
                   </th>
                   {magasins.map(m => (
                     <td key={m.id} className="border-t border-gray-100 dark:border-neutral-800 py-1.5 px-1.5">
-                      <SaisieCell budgetId={budgetId} brand={b} mag={m} user={user} readOnly={readOnly} run={run} />
+                      <SaisieCell budgetId={budgetId} brand={b} mag={m} user={user} readOnly={readOnly} run={run} adapte={adapteB[m.id] || 0} />
                     </td>
                   ))}
                   <td className="border-t border-gray-100 dark:border-neutral-800 py-1.5 px-1.5 text-right">
                     <p className="h-8 leading-8 text-sm font-semibold tabular-nums text-gray-900 dark:text-white">{formatBudget(saisieTotal)}</p>
                     {(qte > 0 || !readOnly) && <p className="h-7 leading-7 mt-1 text-xs tabular-nums text-gray-700 dark:text-neutral-300">{qte > 0 ? formatQte(qte) : ''}</p>}
                     <p className={`mt-0.5 text-[10px] tabular-nums ${TONE.n1.head}`}>N-1 {formatBudget(n1Total)}{qteN1 > 0 ? ` · ${formatQte(qteN1)}` : ''}</p>
+                    <p className={`text-[10px] tabular-nums ${TONE.adapte.text}`}>Adapté {formatBudget(adapteTotal)}</p>
+                    {saisieTotal > 0 && Math.round(ecart) !== 0 && (
+                      <p className={`text-[10px] tabular-nums ${ecart > 0 ? TONE.depassement.text : 'text-gray-500 dark:text-neutral-400'}`}>
+                        {ecart > 0 ? '+' : '−'}{formatBudget(Math.abs(ecart))} vs adapté
+                      </p>
+                    )}
                   </td>
                   <td className="border-t border-gray-100 dark:border-neutral-800 py-1.5 px-1.5">
                     {readOnly ? <p className="text-sm text-gray-600 dark:text-neutral-300 pt-1.5">{b.line?.commentaire}</p> : (

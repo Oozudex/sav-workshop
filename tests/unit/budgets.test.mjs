@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  FILTRE_SANS_ACHETEUR, addTotals, evolution, formatPct, groupeRatio, groupeTotal, objectif, brandsBySegment, budgetName, buyerFilterTest, defaultBuyerFilter, filtreAcheteur, canEditUnivers, computeTotals, editableLines, segmentsCatalog, findN1Sheet, linesFromBudget, magasinMatcher, mergeSegments, n1Columns,
+  FILTRE_SANS_ACHETEUR, addTotals, budgetRank, fournisseurResolver, coefMarque, computeAdapte, fournisseurKey, noteMarque, withAdapte, evolution, formatPct, groupeRatio, groupeTotal, objectif, brandsBySegment, budgetName, buyerFilterTest, defaultBuyerFilter, filtreAcheteur, canEditUnivers, computeTotals, editableLines, segmentsCatalog, findN1Sheet, linesFromBudget, magasinMatcher, mergeSegments, n1Columns,
   parseBaseSheet, parseN1Sheet, planN1Import, previousSeason, segmentId, sortSegments,
 } from '../../src/lib/budgets.js'
 
@@ -225,21 +225,21 @@ describe('segments et totaux', () => {
       { segId: 's', n1: { cht: 30 }, saisie: { cht: 40, lf: 5 } },
       { segId: 's', n1: { cht: 20 }, saisie: { cht: 10 } },
     ])
-    assert.deepEqual(t.s.cht, { base: 100, groupe: 0, n1: 50, saisie: 50, engage: 0, qte: 0, qteN1: 0 })
-    assert.deepEqual(addTotals([t.s.cht, t.s.lf]), { base: 100, groupe: 0, n1: 50, saisie: 55, engage: 0, qte: 0, qteN1: 0 })
+    assert.deepEqual(t.s.cht, { base: 100, groupe: 0, adapte: 0, n1: 50, saisie: 50, engage: 0, qte: 0, qteN1: 0 })
+    assert.deepEqual(addTotals([t.s.cht, t.s.lf]), { base: 100, groupe: 0, adapte: 0, n1: 50, saisie: 55, engage: 0, qte: 0, qteN1: 0 })
   })
   it('additionne les quantités et la part engagée de la saisie', () => {
     const t = computeTotals([{ id: 's' }], {}, [
       { segId: 's', saisie: { cht: 40, lf: 5 }, quantite: { cht: 8 }, quantiteN1: { cht: 6 }, engage: true },
       { segId: 's', saisie: { cht: 10 }, quantite: { cht: 2 }, engage: false },
     ])
-    assert.deepEqual(t.s.cht, { base: 0, groupe: 0, n1: 0, saisie: 50, engage: 40, qte: 10, qteN1: 6 })
+    assert.deepEqual(t.s.cht, { base: 0, groupe: 0, adapte: 0, n1: 0, saisie: 50, engage: 40, qte: 10, qteN1: 6 })
     // Une marque engagée l'est pour tous les magasins
     assert.equal(t.s.lf.engage, 5)
   })
   it('répartit le budget groupe au prorata de la base, sans toucher à la base', () => {
     const t = computeTotals([{ id: 's' }, { id: 'u' }], { s: { cht: 300 }, u: { cht: 100, lf: 600 } }, [], 1.1)
-    assert.deepEqual(t.s.cht, { base: 300, groupe: 330, n1: 0, saisie: 0, engage: 0, qte: 0, qteN1: 0 })
+    assert.deepEqual(t.s.cht, { base: 300, groupe: 330, adapte: 0, n1: 0, saisie: 0, engage: 0, qte: 0, qteN1: 0 })
     assert.equal(Math.round(addTotals([t.s.cht, t.u.cht, t.u.lf]).groupe), 1100)
   })
 })
@@ -265,5 +265,83 @@ describe('budget groupe', () => {
     assert.equal(formatPct(-3), '−3 %')
     assert.equal(formatPct(2.46), '+2,5 %')
     assert.equal(formatPct(null), '—')
+  })
+})
+
+describe('notation des marques et budget adapté', () => {
+  const notes = n => ({ reassort: n, conditions: n, service: n })
+  const seg = { id: 'run', univers: 'RUNNING', nom: '' }
+  const totals = { run: { m: { base: 90000, groupe: 100000 } } }
+  const marque = (id, nom, n1) => ({ id, nom, segId: 'run', line: { n1: { m: n1 } } })
+  const run = (fiches, brands = [marque('nike', 'NIKE', 60), marque('asics', 'ASICS', 40)]) => computeAdapte({
+    segments: [seg], totals, brandsBySeg: new Map([['run', brands]]), magIds: ['m'],
+    fiche: k => fiches[k], reglages: null, hasGroupe: true,
+  })
+
+  it('calcule la note pondérée et le coefficient', () => {
+    assert.equal(noteMarque({ reassort: 8, conditions: 6, service: 10 }), 8)
+    assert.equal(noteMarque({ reassort: 8, conditions: 4 }, { reassort: 3, conditions: 1, service: 1 }), 7)
+    assert.equal(noteMarque({}), null)
+    assert.equal(coefMarque(10), 1.2)
+    assert.equal(coefMarque(0), 0.8)
+    assert.equal(coefMarque(null), 1)
+    assert.equal(fournisseurKey('Le Coq Sportif'), 'LE-COQ-SPORTIF')
+  })
+  it("reprend l'exemple validé : note, recalage puis demande", () => {
+    const r = run({ NIKE: { notes: notes(8), demande: 70000 }, ASICS: { notes: notes(4) } })
+    assert.equal(Math.round(r.byBrand.get('nike').m), 68727)
+    assert.equal(Math.round(r.byBrand.get('asics').m), 31273)
+    assert.equal(Math.round(r.cells.run.m), 100000)
+    assert.equal(Math.round(r.marques.get('NIKE').avant), 63636)
+  })
+  it('sans note ni demande : la part du N-1', () => {
+    const r = run({})
+    assert.equal(r.byBrand.get('nike').m, 60000)
+    assert.equal(r.byBrand.get('asics').m, 40000)
+  })
+  it("une marque nouvelle part de 0 et prend sa demande sur l'enveloppe, à hauteur de sa note", () => {
+    const r = run({ ON: { demande: 10000 } }, [marque('nike', 'NIKE', 60), marque('asics', 'ASICS', 40), marque('on', 'ON', 0)])
+    assert.equal(Math.round(r.byBrand.get('on').m), 5000)
+    assert.equal(Math.round(r.cells.run.m), 100000)
+  })
+  it("une marque retirée de la liste n'a pas de budget adapté", () => {
+    const r = run({}, [marque('nike', 'NIKE', 60), { ...marque('puma', 'PUMA', 40), orphan: true }])
+    assert.equal(r.byBrand.get('nike').m, 100000)
+    assert.equal(r.byBrand.get('puma'), undefined)
+  })
+  it('une demande déjà couverte ne change rien', () => {
+    const r = run({ NIKE: { demande: 50000 } })
+    assert.equal(r.byBrand.get('nike').m, 60000)
+  })
+  it('regroupe les déclinaisons sous leur fournisseur', () => {
+    const noms = ['ADIDAS', 'ADIDAS FEMME', 'ADIDAS OFFRE TERRAIN', 'ADIDAS OFFRE TERRAIN KIDS', 'NIKE Q3', 'NIKE Q4', 'ON', 'ONE WAY']
+    const f = fournisseurResolver(noms, { 'NIKE-Q4': 'NIKE', 'NIKE-Q3': 'nike', 'ADIDAS-FEMME': '' })
+    assert.equal(f('ADIDAS OFFRE TERRAIN KIDS').nom, 'ADIDAS')
+    assert.equal(f('ADIDAS').key, 'ADIDAS')
+    assert.equal(f('ADIDAS FEMME').nom, 'ADIDAS FEMME') // séparée à la main
+    assert.equal(f('NIKE Q3').key, 'NIKE')
+    assert.equal(f('NIKE Q4').nom, 'NIKE')
+    assert.equal(f('ONE WAY').nom, 'ONE WAY')
+    assert.equal(f('ADIDAS OFFRE TERRAIN').auto, 'ADIDAS')
+  })
+  it('les déclinaisons partagent la note et la demande du fournisseur', () => {
+    const brands = [marque('a', 'ADIDAS', 50), marque('af', 'ADIDAS FEMME', 10), marque('p', 'PUMA', 40)]
+    const r = computeAdapte({
+      segments: [seg], totals, brandsBySeg: new Map([['run', brands]]), magIds: ['m'], reglages: null, hasGroupe: true,
+      fiche: k => ({ ADIDAS: { notes: notes(10), demande: 80000 } })[k], fournisseur: fournisseurResolver(brands.map(b => b.nom)),
+    })
+    const adidas = r.marques.get('ADIDAS')
+    assert.equal(adidas.coef, 1.2)
+    assert.equal(r.marques.has('ADIDAS-FEMME'), false)
+    assert.equal(Math.round(adidas.total), Math.round(r.byBrand.get('a').m + r.byBrand.get('af').m))
+    assert.ok(adidas.total > adidas.avant)
+  })
+  it('range les budgets dans le temps', () => {
+    assert.ok(budgetRank({ saison: 'PE', annee: 2027 }) < budgetRank({ saison: 'AH', annee: 2027 }))
+    assert.ok(budgetRank({ saison: 'AH', annee: 2026 }) < budgetRank({ saison: 'PE', annee: 2027 }))
+  })
+  it('ajoute le budget adapté aux totaux', () => {
+    const t = withAdapte({ run: { m: { base: 1, groupe: 2 } } }, { run: { m: 3 } })
+    assert.deepEqual(t.run.m, { base: 1, groupe: 2, adapte: 3 })
   })
 })
