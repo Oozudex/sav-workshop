@@ -4,12 +4,13 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import BrandsTab from '../components/budgets/BrandsTab'
+import StatsTab from '../components/budgets/StatsTab'
 import ListEditor from '../components/budgets/ListEditor'
 import { BTN_PRIMARY, BTN_SECONDARY, EmptyState, Field, Modal, Notice } from '../components/admin/ui'
 import { SAISONS, budgetName, formatBudget, previousSeason, sumValues } from '../lib/budgets'
 import { createBudget, useBudgetMagasins, useBudgetUnivers, useBudgetUser, useBudgets } from '../lib/budgetsStore'
 
-const TABS = [['budgets', 'Budgets'], ['marques', 'Marques'], ['univers', 'Univers'], ['magasins', 'Magasins']]
+const TABS = [['budgets', 'Budgets'], ['stats', 'Statistiques'], ['marques', 'Marques'], ['univers', 'Univers'], ['magasins', 'Magasins']]
 
 function NewBudgetModal({ budgets, onClose }) {
   const navigate = useNavigate()
@@ -144,6 +145,7 @@ export default function Budgets() {
               ))}
             </div>
           ))}
+          {tab === 'stats' && <StatsTab />}
           {tab === 'marques' && <BrandsTab />}
           {tab === 'univers' && <ListEditor kind="univers" list={univers.list} loading={univers.loading} />}
           {tab === 'magasins' && <ListEditor kind="magasins" list={magasins.list} loading={magasins.loading} />}
