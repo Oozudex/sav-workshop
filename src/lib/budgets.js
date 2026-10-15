@@ -44,7 +44,7 @@ export const DEFAULT_MAGASINS = [
   { nom: 'CHECY', code: 'CHY 227/0', alias: [] },
   { nom: 'LAVAL', code: 'LVL2 551/0', alias: [] },
   { nom: 'ST JEAN DE LA RUELLE', code: 'SJDLR 4927/0', alias: ['SAINT JEAN DE LA RUELLE'] },
-  { nom: 'MONTVAL', code: 'VOUV 4515/0', alias: [] },
+  { nom: 'MONTVAL', code: 'VOUV 4515/0', alias: ['VOUVRAY'] },
 ]
 
 // ── Droits ──────────────────────────────────────────────────────────────────────

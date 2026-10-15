@@ -26,6 +26,8 @@ const Balises         = lazy(() => import('./pages/Balises'))
 const Obut            = lazy(() => import('./pages/Obut'))
 const Todo            = lazy(() => import('./pages/Todo'))
 const Budgets         = lazy(() => import('./pages/Budgets'))
+const StatsAchats     = lazy(() => import('./pages/StatsAchats'))
+const SortieDetail    = lazy(() => import('./pages/SortieDetail'))
 const BudgetDetail    = lazy(() => import('./pages/BudgetDetail'))
 const Espace          = lazy(() => import('./pages/Espace'))
 
@@ -134,6 +136,14 @@ export default function App() {
           <Route
             path="/budgets/:id"
             element={<RoleRoute roles={['acheteur', 'directeurgen']}><BudgetDetail /></RoleRoute>}
+          />
+          <Route
+            path="/stats-achats"
+            element={<RoleRoute roles={['acheteur', 'directeurgen']}><StatsAchats /></RoleRoute>}
+          />
+          <Route
+            path="/stats-achats/sorties/:id"
+            element={<RoleRoute roles={['acheteur', 'directeurgen']}><SortieDetail /></RoleRoute>}
           />
           <Route
             path="/balises"

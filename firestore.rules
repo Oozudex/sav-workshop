@@ -500,6 +500,17 @@ service cloud.firestore {
       allow delete: if isSignedIn() && (isGlobal() || (isDirMag() && inMyStore(resource.data)));
     }
 
+    /* ── Statistiques Achats : taux de sortie hebdomadaires ─────────────────── */
+    // Une semaine importée (fichier, totaux) et ses lignes compressées (parts). Acheteurs et direction
+    // créent et importent ; seule la direction supprime une semaine.
+    match /sorties_semaines/{id} {
+      allow read, create, update: if isSignedIn() && isGlobal();
+      allow delete: if isSignedIn() && isDirGen();
+      match /parts/{part} {
+        allow read, write: if isSignedIn() && isGlobal();
+      }
+    }
+
     /* ── Budgets acheteurs (AH / PE) ─────────────────────────────────────── */
     // Réservés aux acheteurs et à la direction : listes des univers et des magasins du budget,
     // budgets du groupe (base, segments) et leurs lignes par marque. Les lignes par marque

@@ -157,7 +157,7 @@ export default function BudgetDetail() {
   async function exportExcel() {
     setBusy(true)
     try {
-      const sheets = budgetWorkbook({ budget, segments, magasins, totals, brandsBySeg, adapte, fournisseur, fiche, hasGroupe, groupeMontant, sums, reglages })
+      const sheets = budgetWorkbook({ budget, segments, magasins, totals, brandsBySeg, adapte, fournisseur, fiche, hasGroupe, groupeMontant, reglages })
       await downloadWorkbook(sheets, exportFileName(budget))
       setNotice({ tone: 'ok', text: `Export téléchargé. L’an prochain, il se réimporte comme N-1 : onglet « BUDGET PAR MARQUES », colonne « ${reimportColumn(budget)} ».` })
     } catch (err) { setNotice({ text: `Export impossible : ${err.message}` }) }

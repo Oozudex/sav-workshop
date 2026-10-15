@@ -23,7 +23,7 @@ function sheet(name, table, { merges = [], formats = {}, firstRow = 1 } = {}) {
 }
 
 export function budgetWorkbook({
-  budget, segments, magasins, totals, brandsBySeg, adapte, fournisseur, fiche, hasGroupe, groupeMontant, sums, reglages,
+  budget, segments, magasins, totals, brandsBySeg, adapte, fournisseur, fiche, hasGroupe, groupeMontant, reglages,
   exportedAt = new Date(),
 }) {
   const code = seasonCode(budget.saison, budget.annee)

@@ -26,6 +26,7 @@ const PAGE_TITLES = {
   '/obut': 'Commandes OBUT',
   '/todo': 'Todo list',
   '/budgets': 'Budgets',
+  '/stats-achats': 'Statistiques Achats',
   '/espace/velo': 'Espace vélo',
   '/espace/chaussure': 'Espace chaussure',
 }
@@ -72,7 +73,8 @@ export default function Navbar() {
   const isHome = location.pathname === '/'
   const pageTitle = PAGE_TITLES[location.pathname]
     ?? (location.pathname.startsWith('/operations/') ? 'Opérations Commerciales'
-      : location.pathname.startsWith('/budgets/') ? 'Budgets' : undefined)
+      : location.pathname.startsWith('/budgets/') ? 'Budgets'
+        : location.pathname.startsWith('/stats-achats/') ? 'Statistiques Achats' : undefined)
 
   // Titre de l'onglet propre à chaque page (RGAA 8.6)
   useEffect(() => {

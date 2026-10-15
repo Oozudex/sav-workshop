@@ -467,6 +467,25 @@ describe('accès anonyme', () => {
   })
 })
 
+describe('statistiques achats : taux de sortie', () => {
+  it("acheteurs et direction importent les semaines, seule la direction en supprime", async () => {
+    for (const uid of ['acheteur', 'dirgen', 'admin']) {
+      const db = as(uid)
+      await assertSucceeds(setDoc(doc(db, 'sorties_semaines', `2026-S4${uid.length}`), { annee: 2026, semaine: 42 }))
+      await assertSucceeds(setDoc(doc(db, 'sorties_semaines', '2026-S42', 'parts', '0'), { i: 0, b: 'x' }))
+      await assertSucceeds(getDocs(collection(db, 'sorties_semaines', '2026-S42', 'parts')))
+    }
+    await assertSucceeds(deleteDoc(doc(as('acheteur'), 'sorties_semaines', '2026-S42', 'parts', '0')))
+    await assertFails(deleteDoc(doc(as('acheteur'), 'sorties_semaines', '2026-S42')))
+    await assertSucceeds(deleteDoc(doc(as('dirgen'), 'sorties_semaines', '2026-S42')))
+    for (const uid of ['veloA', 'dirmagA']) {
+      await assertFails(getDoc(doc(as(uid), 'sorties_semaines', '2026-S48')))
+      await assertFails(setDoc(doc(as(uid), 'sorties_semaines', 'x'), { annee: 2026 }))
+      await assertFails(getDocs(collection(as(uid), 'sorties_semaines', '2026-S48', 'parts')))
+    }
+  })
+})
+
 describe('budgets acheteurs', () => {
   const marque = (univers, extra = {}) => ({ univers, segId: 's', nom: 'NIKE', saisie: {}, ...extra })
 
