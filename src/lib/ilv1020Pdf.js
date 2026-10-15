@@ -38,9 +38,11 @@ const FONTS = {
 const IMAGES = {
   carte: '1020/carte-cadeau.png',
   prixPromo: '1020/prix-promo-blanc.png',   // logo « PRIX PROMO » des ILV, passé en blanc
+  bonsPlans: '1020/bons-plans-rouge.png',   // logo « BONS PLANS » des ILV, passé en rouge (lettres de BONS transparentes)
 }
 const BESOINS = {
   promo: { fonts: ['sBlack'], images: [] },
+  bons_plans: { fonts: ['sBlack'], images: ['bonsPlans'] },
   soldes: { fonts: ['mBold'], images: [] },
   carte_cadeau: { fonts: ['sBold', 'sMedium', 'sSemiBold'], images: ['carte'] },
   prix_promo: { fonts: [], images: ['prixPromo'] },
@@ -155,6 +157,12 @@ function drawPromo(ctx, { montant }) {
   grosTexte(ctx, textes1020('promo', montant).grand, { font: f.sBlack, cap: 32.4, cx: 129, baseline: 67, maxWidth: 118, reference: ['-20€', 94.5], color: C.rouge, gras: 1 })
 }
 
+// Comme « Promo », le logo « BONS PLANS » à la place de la pastille, centré sur la hauteur du montant
+function drawBonsPlans(ctx, { montant }) {
+  ctx.image(ctx.images.bonsPlans, [5, 33, 77, 69])
+  grosTexte(ctx, textes1020('bons_plans', montant).grand, { font: ctx.fonts.sBlack, cap: 32.4, cx: 138, baseline: 67, maxWidth: 104, reference: ['-20€', 94.5], color: C.rouge, gras: 1 })
+}
+
 function drawSoldes(ctx, { montant }) {
   const f = ctx.fonts
   for (const [y, base] of [[0, 8.9], [87.8, 96.6]]) {
@@ -215,7 +223,7 @@ function drawPresqueParfait(ctx) {
   })
 }
 
-const DRAW = { promo: drawPromo, soldes: drawSoldes, carte_cadeau: drawCarteCadeau, prix_promo: drawPrixPromo, presque_parfait: drawPresqueParfait }
+const DRAW = { promo: drawPromo, bons_plans: drawBonsPlans, soldes: drawSoldes, carte_cadeau: drawCarteCadeau, prix_promo: drawPrixPromo, presque_parfait: drawPresqueParfait }
 
 // Dégradé axial (fonction de raccord entre trois couleurs), enregistré une fois par page sous /Sh1
 function makeShading(doc) {

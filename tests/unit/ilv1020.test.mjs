@@ -18,6 +18,7 @@ describe('ILV 10×20 : montants', () => {
   it('textes des chevalets', () => {
     assert.deepEqual(textes1020('promo', 20), { grand: '-20€' })
     assert.deepEqual(textes1020('soldes', 200), { grand: '-200€' })
+    assert.deepEqual(textes1020('bons_plans', 30), { grand: '-30€' })
     assert.deepEqual(textes1020('carte_cadeau', 100), { grand: '100€ OFFERTS', petit: 'EN CARTE CADEAU*' })
     assert.deepEqual(textes1020('prix_promo'), {})
   })
@@ -40,6 +41,7 @@ describe('ILV 10×20 : liste à imprimer', () => {
   })
   it('libellés', () => {
     assert.equal(libelle1020({ modele: 'promo', montant: 20 }), 'Promo -20 €')
+    assert.equal(libelle1020({ modele: 'bons_plans', montant: 15 }), 'Bons plans -15 €')
     assert.equal(libelle1020({ modele: 'carte_cadeau', montant: 100 }), 'Carte cadeau 100 € offerts')
     assert.equal(libelle1020({ modele: 'prix_promo' }), 'Prix promo')
   })

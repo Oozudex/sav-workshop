@@ -4,6 +4,7 @@
 
 export const MODELES_1020 = [
   { id: 'promo', label: 'Promo', montant: true, exemple: 20 },
+  { id: 'bons_plans', label: 'Bons plans', montant: true, exemple: 20 },
   { id: 'soldes', label: 'Soldes', montant: true, exemple: 200 },
   { id: 'carte_cadeau', label: 'Carte cadeau offerte', montant: true, exemple: 100 },
   { id: 'prix_promo', label: 'Prix promo', montant: false },
@@ -32,7 +33,7 @@ export function erreurMontant(saisie) {
 
 /** Textes variables d'un chevalet : { grand, petit } (montant sans espace, comme sur les modèles) */
 export function textes1020(id, montant) {
-  if (id === 'promo' || id === 'soldes') return { grand: `-${montant}€` }
+  if (id === 'promo' || id === 'soldes' || id === 'bons_plans') return { grand: `-${montant}€` }
   if (id === 'carte_cadeau') return { grand: `${montant}€ OFFERTS`, petit: 'EN CARTE CADEAU*' }
   return {}
 }

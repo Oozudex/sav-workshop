@@ -33,6 +33,8 @@ Sans logo, l'ILV affiche le nom de la marque en toutes lettres à la place.
 Chevalets 20 × 10 cm de l'onglet « ILV 10×20 » des OP, dessinés par `src/lib/ilv1020Pdf.js`.
 
 - `carte-cadeau.png` : la carte cadeau Intersport (fond transparent), posée sur le bandeau « … € offerts ».
+- `bons-plans-rouge.png` : le logo « BONS PLANS » de `badges/`, passé en rouge ; les lettres de « BONS »
+  sont transparentes et prennent le blanc du papier (modèle « Bons plans », à la place de la pastille PROMO).
 - `prix-promo-blanc.png` : le logo « PRIX PROMO » de `badges/`, passé en blanc et agrandi ; les lettres
   de « PROMO » sont transparentes et prennent le rouge du fond.
 - `apercus/` : vignettes des modèles affichées dans l'onglet (face du bas de chaque chevalet, JPEG 480 × 240).
