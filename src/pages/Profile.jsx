@@ -2,6 +2,8 @@ import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../store/useAuth'
 import { useShallow } from 'zustand/react/shallow'
+import { multiFactor } from 'firebase/auth'
+import { doubleAuthRequise } from '../lib/doubleAuth'
 
 export default function Profile() {
     const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
@@ -39,11 +41,25 @@ export default function Profile() {
                             <Line label="Rôle" value={profile?.role || '—'} />
                             <Line label="Actif" value={profile?.isActive ? 'Oui' : 'Non'} />
                         </Card>
+
+                        <Card title="Sécurité">
+                            <Line label="Double authentification" value={doubleAuthTexte(user, profile)} />
+                        </Card>
                     </div>
                 </div>
             </main>
         </div>
     )
+}
+
+// « Activée le 15/10/2026 » (application d'authentification), sinon selon le rôle
+function doubleAuthTexte(user, profile) {
+    const facteur = user ? multiFactor(user).enrolledFactors[0] : null
+    if (facteur) {
+        const date = facteur.enrollmentTime ? new Date(facteur.enrollmentTime).toLocaleDateString('fr-FR') : null
+        return date ? `Activée le ${date}` : 'Activée'
+    }
+    return doubleAuthRequise(profile) ? 'À activer' : 'Non requise pour ce compte'
 }
 
 function Card({ title, children }) {

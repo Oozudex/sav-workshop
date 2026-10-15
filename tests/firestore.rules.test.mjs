@@ -31,9 +31,12 @@ const USERS = {
   inactifA:   { role: 'velo', magasinId: 'A', isActive: false },
 }
 
-// Connexion il y a une minute (auth_time en secondes), sauf si précisé
+// Connexion il y a une minute (auth_time en secondes), sauf si précisé, avec le code de l'application
+// (double authentification des acheteurs et de la direction)
 const nowSec = () => Math.floor(Date.now() / 1000)
-const as = (uid, authTime = nowSec() - 60) => env.authenticatedContext(uid, { auth_time: authTime }).firestore()
+const as = (uid, authTime = nowSec() - 60) => env.authenticatedContext(uid, {
+  auth_time: authTime, firebase: { sign_in_provider: 'password', sign_in_second_factor: 'totp' },
+}).firestore()
 
 before(async () => {
   env = await initializeTestEnvironment({
@@ -395,6 +398,39 @@ describe('collections supprimées', () => {
   it("purchase_requests et notifications ne sont plus accessibles", async () => {
     await assertFails(getDocs(collection(as('veloA'), 'notifications')))
     await assertFails(setDoc(doc(as('veloA'), 'purchase_requests', 'x'), { a: 1 }))
+  })
+})
+
+describe('double authentification', () => {
+  // Connexion par mot de passe, avec ou sans le code de l'application (second facteur)
+  const par = (uid, secondFacteur) => env.authenticatedContext(uid, {
+    auth_time: nowSec() - 60,
+    firebase: { sign_in_provider: 'password', ...(secondFacteur ? { sign_in_second_factor: secondFacteur } : {}) },
+  }).firestore()
+
+  it("acheteur, direction et administrateur sans le code : seulement leur propre fiche", async () => {
+    for (const uid of ['acheteur', 'dirgen', 'admin']) {
+      const db = par(uid)
+      await assertSucceeds(getDoc(doc(db, 'users', uid)))
+      await assertFails(getDoc(doc(db, 'users', 'veloA')))
+      await assertFails(getDoc(doc(db, 'magasins', 'A')))
+      await assertFails(getDocs(collection(db, 'tickets')))
+      await assertFails(getDocs(collection(db, 'op_commerciales')))
+      await assertFails(setDoc(doc(db, 'users', 'x'), { role: 'velo', magasinId: 'A' }))
+    }
+  })
+  it("avec le code de l'application, ils retrouvent tous leurs droits", async () => {
+    for (const uid of ['acheteur', 'dirgen', 'admin']) {
+      const db = par(uid, 'totp')
+      await assertSucceeds(getDocs(collection(db, 'tickets')))
+      await assertSucceeds(getDoc(doc(db, 'magasins', 'A')))
+    }
+    await assertSucceeds(setDoc(doc(par('admin', 'totp'), 'users', 'x'), { role: 'directeurgen' }))
+  })
+  it("les comptes des magasins n'en ont pas besoin", async () => {
+    await assertSucceeds(getDoc(doc(par('veloA'), 'magasins', 'A')))
+    await assertSucceeds(getDocs(query(collection(par('veloA'), 'tickets'), where('magasinId', '==', 'A'))))
+    await assertSucceeds(getDoc(doc(par('dirmagA'), 'magasins', 'A')))
   })
 })
 

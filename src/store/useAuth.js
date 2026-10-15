@@ -4,6 +4,7 @@ import { auth } from '../lib/firebase'
 import { doc, getDoc, onSnapshot } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { nextParisMidnight, sessionExpired } from '../lib/session'
+import { sessionDoubleAuth } from '../lib/doubleAuth'
 
 // Un administrateur voit et fait tout ce que fait le directeur général : l'app le traite comme
 // « directeurgen », avec isAdmin en plus pour la gestion des comptes de direction.
@@ -22,6 +23,8 @@ export const useAuth = create((set) => ({
   user: null,
   profile: null,
   loading: true,
+  // Session ouverte avec le code de l'application (double authentification), cf. lib/doubleAuth.js
+  doubleAuth: false,
   // Sessions : déconnexion chaque nuit à 0 h (heure de Paris) et dès que la session est coupée
   // côté serveur (users/{uid}.sessionsRevokedAt : minuit, mot de passe du rayon changé)
   init() {
@@ -35,9 +38,11 @@ export const useAuth = create((set) => ({
 
     const unsub = onAuthStateChanged(auth, async (user) => {
       stop()
-      if (!user) { set({ user: null, profile: null, loading: false }); return }
+      if (!user) { set({ user: null, profile: null, loading: false, doubleAuth: false }); return }
 
-      const authTime = new Date((await user.getIdTokenResult()).authTime)
+      const token = await user.getIdTokenResult()
+      const authTime = new Date(token.authTime)
+      set({ doubleAuth: sessionDoubleAuth(token.claims) })
       if (sessionExpired(authTime)) { await forceLogout('minuit'); return }
 
       // Onglet resté ouvert : déconnexion à minuit, ou au retour sur l'onglet si l'ordinateur était en veille

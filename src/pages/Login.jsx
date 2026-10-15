@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { getAuth, sendPasswordResetEmail } from 'firebase/auth'
+import { getAuth, getMultiFactorResolver, sendPasswordResetEmail, TotpMultiFactorGenerator } from 'firebase/auth'
+import { auth } from '../lib/firebase'
+import { NOM_APPLI_AUTH, codeComplet, messageErreurDoubleAuth } from '../lib/doubleAuth'
+import { CodeInput } from '../components/DoubleAuthScreen'
 import { LOGOUT_REASON_KEY, useAuth } from '../store/useAuth'
 import { useShallow } from 'zustand/react/shallow'
 import BrandScreen, { BLEU, BRAND_BUTTON, BRAND_FIELD, BrandMessage, PasswordInput, ROUGE } from '../components/BrandScreen'
@@ -23,6 +26,9 @@ export default function Login() {
     try { sessionStorage.removeItem(LOGOUT_REASON_KEY) } catch { /* stockage indisponible */ }
   }, [])
   const [loading, setLoading] = useState(false)
+  // Double authentification : 2e étape après le mot de passe (code de l'application)
+  const [resolver, setResolver] = useState(null)
+  const [code, setCode] = useState('')
   const nav = useNavigate()
   const loc = useLocation()
   const { user, login } = useAuth(useShallow(s => ({ user: s.user, login: s.login })))
@@ -33,8 +39,30 @@ export default function Login() {
     setLoading(true)
     try {
       await login(email.trim(), pwd)
-    } catch {
-      setErr('Email ou mot de passe invalide.')
+    } catch (error) {
+      if (error?.code === 'auth/multi-factor-auth-required') {
+        const r = getMultiFactorResolver(auth, error)
+        if (r.hints.some(h => h.factorId === TotpMultiFactorGenerator.FACTOR_ID)) { setResolver(r); setCode(''); setPwd('') }
+        else setErr('Méthode de double authentification non prise en charge. Contacte l’administrateur.')
+      } else setErr('Email ou mot de passe invalide.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function onCode(e) {
+    e.preventDefault()
+    setErr(''); setInfo('')
+    if (!codeComplet(code)) return setErr('Tape les 6 chiffres affichés dans l’application.')
+    const hint = resolver.hints.find(h => h.factorId === TotpMultiFactorGenerator.FACTOR_ID)
+    setLoading(true)
+    try {
+      await resolver.resolveSignIn(TotpMultiFactorGenerator.assertionForSignIn(hint.uid, code))
+    } catch (error) {
+      setErr(messageErreurDoubleAuth(error?.code))
+      setCode('')
+      // Délai dépassé : on repart du mot de passe
+      if (['auth/totp-challenge-timeout', 'auth/code-expired', 'auth/invalid-multi-factor-session', 'auth/missing-multi-factor-session'].includes(error?.code)) setResolver(null)
     } finally {
       setLoading(false)
     }
@@ -56,6 +84,26 @@ export default function Login() {
     const to = loc.state?.from?.pathname || '/'
     nav(to, { replace: true })
   }, [user, nav, loc.state])
+
+  if (resolver) {
+    return (
+      <BrandScreen title="Code de vérification" subtitle={`Ouvre ton application d’authentification et tape le code à 6 chiffres de « ${NOM_APPLI_AUTH} ».`}>
+        <BrandMessage error={err} info={info} />
+        <form onSubmit={onCode} className="space-y-3.5">
+          <CodeInput value={code} onChange={setCode} />
+          <button type="submit" disabled={loading} className={BRAND_BUTTON} style={{ background: ROUGE }}>
+            {loading ? 'Vérification…' : 'Valider'}
+          </button>
+        </form>
+        <div className="mt-4 flex items-center justify-between gap-3 text-xs text-gray-500">
+          <span>Téléphone perdu ? Contacte l’administrateur.</span>
+          <button onClick={() => { setResolver(null); setErr('') }} className="font-semibold hover:underline shrink-0" style={{ color: BLEU }}>
+            ← Retour
+          </button>
+        </div>
+      </BrandScreen>
+    )
+  }
 
   return (
     <BrandScreen title="Connexion" subtitle="Connecte-toi avec ton email professionnel.">

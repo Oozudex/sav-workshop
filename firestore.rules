@@ -8,7 +8,7 @@ service cloud.firestore {
     // du rayon change). auth_time = date de la connexion, en secondes (une seconde de tolérance).
     // Il faut aussi un profil actif dans l'outil : un compte créé hors de l'outil (inscription directe
     // avec la clé publique du site) ou désactivé n'a aucun droit.
-    function isSignedIn() { return request.auth != null && sessionValid() && isMember(); }
+    function isSignedIn() { return request.auth != null && sessionValid() && isMember() && doubleAuthOk(); }
 
     function isMember() {
       return exists(/databases/$(database)/documents/users/$(request.auth.uid)) && isActive();
@@ -32,7 +32,25 @@ service cloud.firestore {
     // Un compte avec isActive == false n'a plus aucun droit
     function isActive() { return userDoc().get('isActive', true) != false; }
 
-    function role()      { return isActive() ? userDoc().get('role', null) : null; }
+    // Double authentification obligatoire pour les acheteurs, la direction et les administrateurs :
+    // une session ouverte sans le code de l'application (second facteur) n'a aucun droit, sauf lire
+    // sa propre fiche (isOwnSession) pour que l'appli lui fasse configurer l'application.
+    // Émulateurs locaux (projet sav-workshop) dispensés : en prod, Firestore n'accepte que les jetons
+    // émis pour le projet groupe-nivault.
+    function rolesDoubleAuth() { return ['acheteur', 'directeurgen', 'admin']; }
+    function sessionDoubleAuth() {
+      return request.auth.token.firebase.get('sign_in_second_factor', null) != null ||
+        request.auth.token.get('aud', null) == 'sav-workshop';
+    }
+    function doubleAuthOk() { return doubleAuthOkPour(userDoc().get('role', null)); }
+    function doubleAuthOkPour(r) { return !(r in rolesDoubleAuth()) || sessionDoubleAuth(); }
+
+    // Fiche lue une seule fois : role() est appelée de nombreuses fois par requête
+    function role()      { return roleDe(userDoc()); }
+    function roleDe(u) {
+      let r = u.get('role', null);
+      return u.get('isActive', true) != false && doubleAuthOkPour(r) ? r : null;
+    }
     function magasinId() { return isActive() ? userDoc().get('magasinId', null) : null; }
 
     function rayonRoles() { return ['velo', 'chaussure', 'textile', 'randonnee', 'caisse']; }

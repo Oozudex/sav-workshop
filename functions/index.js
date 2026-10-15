@@ -6,6 +6,8 @@
 // La coupure est immédiate grâce aux règles Firestore (users/{uid}.sessionsRevokedAt) ; la révocation
 // des jetons empêche en plus de rouvrir une session sans se reconnecter.
 // - lireEtiquette : recherche des OP par photo, le texte de l'étiquette est lu par Cloud Vision.
+// - reinitialiserDoubleAuth : un administrateur retire l'application d'authentification d'un compte
+//   (téléphone perdu) ; la personne en configure une nouvelle à sa prochaine connexion.
 import { applicationDefault, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
@@ -13,7 +15,7 @@ import { setGlobalOptions } from 'firebase-functions/v2'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { logger } from 'firebase-functions'
-import { canManageStaff, newPassword } from './lib.js'
+import { canManageStaff, newPassword, peutReinitialiserDoubleAuth } from './lib.js'
 
 initializeApp()
 setGlobalOptions({ region: 'europe-west1', maxInstances: 2 })
@@ -74,7 +76,7 @@ export const retirerCollaborateur = onCall({ enforceAppCheck: APP_CHECK_OBLIGATO
   }
 
   const caller = (await db.doc(`users/${uid}`).get()).data()
-  if (!canManageStaff(caller, magasinId)) throw new HttpsError('permission-denied', 'Tu n’as pas les droits pour retirer ce collaborateur.')
+  if (!canManageStaff(caller, magasinId, request.auth.token)) throw new HttpsError('permission-denied', 'Tu n’as pas les droits pour retirer ce collaborateur.')
 
   const rayonRef = db.doc(`magasins/${magasinId}/rayons/${rayonId}`)
   const staffRef = rayonRef.collection('staff').doc(staffId)
@@ -100,6 +102,31 @@ export const retirerCollaborateur = onCall({ enforceAppCheck: APP_CHECK_OBLIGATO
   }
   logger.info('Collaborateur retiré', { magasinId, rayonId, par: uid, motDePasseChange: !!compte })
   return { rayon: rayon.get('nom') || null, compte }
+})
+
+/* ── Double authentification : téléphone perdu ───────────────────────────── */
+// Retire les seconds facteurs du compte et coupe ses sessions : à la connexion suivante (mot de passe
+// seul), l'application lui fait configurer une nouvelle application d'authentification.
+export const reinitialiserDoubleAuth = onCall({ enforceAppCheck: APP_CHECK_OBLIGATOIRE }, async request => {
+  const uid = request.auth?.uid
+  if (!uid) throw new HttpsError('unauthenticated', 'Connexion requise.')
+  const cibleUid = request.data?.uid
+  if (typeof cibleUid !== 'string' || !cibleUid || cibleUid.includes('/')) throw new HttpsError('invalid-argument', 'Compte introuvable.')
+
+  const [caller, cible] = await Promise.all([db.doc(`users/${uid}`).get(), db.doc(`users/${cibleUid}`).get()])
+  if (!peutReinitialiserDoubleAuth(caller.data(), request.auth.token, cible.data())) {
+    throw new HttpsError('permission-denied', 'Seul un administrateur réinitialise la double authentification d’un acheteur ou de la direction.')
+  }
+  try {
+    await auth.updateUser(cibleUid, { multiFactor: { enrolledFactors: null } })
+  } catch (err) {
+    logger.error('Double authentification non réinitialisée', { cibleUid, code: err.code })
+    throw new HttpsError(err.code === 'auth/user-not-found' ? 'not-found' : 'internal',
+      err.code === 'auth/user-not-found' ? 'Ce compte n’a pas d’accès de connexion.' : 'Réinitialisation impossible. Réessaie.')
+  }
+  await revokeSessions(cibleUid)
+  logger.info('Double authentification réinitialisée', { cibleUid, par: uid })
+  return { nom: cible.get('displayName') || null }
 })
 
 /* ── Recherche par photo : lecture du texte d'une étiquette (Cloud Vision, serveur européen) ── */

@@ -6,6 +6,8 @@ import { useTheme } from './store/useTheme'
 import Login from './pages/Login'
 import AlertsWatcher from './components/AlertsWatcher'
 import ChangePasswordScreen from './components/ChangePasswordScreen'
+import DoubleAuthScreen from './components/DoubleAuthScreen'
+import { doubleAuthRequise } from './lib/doubleAuth'
 
 // Pages chargées à la demande : chaque route devient un fichier JS séparé
 const Home            = lazy(() => import('./pages/Home'))
@@ -65,12 +67,15 @@ export default function App() {
   const initTheme = useTheme(s => s.init)
   // Mot de passe donné par le directeur : le rayon doit d'abord choisir le sien
   const mustChangePassword = useAuth(s => !!s.user && !!s.profile?.motDePasseTemporaire)
+  // Acheteurs, direction, administrateurs : double authentification avant tout le reste
+  const mustDoubleAuth = useAuth(s => !!s.user && !s.doubleAuth && doubleAuthRequise(s.profile))
   useEffect(() => {
     const unsub = initAuth()
     initTheme()
     return unsub
   }, [initAuth, initTheme])
 
+  if (mustDoubleAuth) return <DoubleAuthScreen />
   if (mustChangePassword) return <ChangePasswordScreen />
 
   return (

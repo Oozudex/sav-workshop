@@ -52,7 +52,7 @@ describe('retrait d\'un collaborateur', () => {
   it('droits : directeur de son magasin, direction et acheteurs', () => {
     assert.equal(canManageStaff({ role: 'directeurmag', magasinId: 'A' }, 'A'), true)
     assert.equal(canManageStaff({ role: 'directeurmag', magasinId: 'A' }, 'B'), false)
-    assert.equal(canManageStaff({ role: 'directeurgen' }, 'B'), true)
+    assert.equal(canManageStaff({ role: 'directeurgen' }, 'B', { firebase: { sign_in_second_factor: 'totp' } }), true)
     assert.equal(canManageStaff({ role: 'velo', magasinId: 'A' }, 'A'), false)
     assert.equal(canManageStaff({ role: 'directeurmag', magasinId: 'A', isActive: false }, 'A'), false)
     assert.equal(canManageStaff(undefined, 'A'), false)

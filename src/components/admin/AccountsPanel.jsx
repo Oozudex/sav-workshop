@@ -1,7 +1,8 @@
 // Administration → Comptes : direction (administrateurs), acheteurs, directeurs de magasin
 import { useEffect, useMemo, useState } from 'react'
 import { collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
-import { db } from '../../lib/firebase'
+import { httpsCallable } from 'firebase/functions'
+import { db, functions } from '../../lib/firebase'
 import { ACHETEUR_SERVICES, DIRECTION_ROLES } from '../../lib/constants'
 import { EMAIL_RE, accountError, afterCreateMessage, createAuthAccount } from '../../lib/accounts'
 import { useBudgetUnivers } from '../../lib/budgetsStore'
@@ -224,7 +225,7 @@ function ServicesPicker({ value, onChange }) {
 }
 
 /* ── Ligne d'un compte ─────────────────────────────────────────────────── */
-function AccountRow({ account, dark, tags, isMe, onEdit, onDelete }) {
+function AccountRow({ account, dark, tags, isMe, onEdit, onDelete, onResetDoubleAuth }) {
   return (
     <li className="flex items-center gap-3 px-4 py-3">
       <Avatar name={account.displayName} dark={dark} />
@@ -238,6 +239,9 @@ function AccountRow({ account, dark, tags, isMe, onEdit, onDelete }) {
       </div>
       <div className="flex items-center gap-0.5 shrink-0">
         <ResendButton email={account.email} />
+        {onResetDoubleAuth && (
+          <IconButton icon="shield" label={`Réinitialiser la double authentification de ${account.displayName}`} onClick={onResetDoubleAuth} />
+        )}
         <IconButton icon="edit" label={`Modifier ${account.displayName}`} onClick={onEdit} />
         {onDelete && <IconButton icon="delete" danger label={`Supprimer ${account.displayName}`} onClick={onDelete} />}
       </div>
@@ -284,6 +288,19 @@ export default function AccountsPanel({ me, isAdmin, magasins }) {
     } catch (err) { setNotice({ tone: 'error', text: accountError(err) }) }
   }
 
+  // Téléphone perdu : l'application d'authentification est retirée (Cloud Function, administrateurs)
+  async function resetDoubleAuth(account) {
+    if (!confirm(`Réinitialiser la double authentification de ${account.displayName} ?\n\n`
+      + 'Ses sessions sont fermées. À sa prochaine connexion, il configurera une nouvelle application d’authentification.')) return
+    try {
+      await httpsCallable(functions, 'reinitialiserDoubleAuth')({ uid: account.id })
+      setNotice({ tone: 'ok', text: `Double authentification de ${account.displayName} réinitialisée.` })
+    } catch (err) {
+      setNotice({ tone: 'error', text: err?.message || 'Réinitialisation impossible. Réessaie.' })
+    }
+  }
+  const resetPour = a => (isAdmin ? () => resetDoubleAuth(a) : null)
+
   const add = kind => (
     <button onClick={() => { setNotice(null); setModal({ kind }) }} className={BTN_PRIMARY}>+ Ajouter</button>
   )
@@ -295,7 +312,7 @@ export default function AccountsPanel({ me, isAdmin, magasins }) {
         <AccountRow key={a.id} account={a} dark={a.role === 'admin'} isMe={a.id === me}
           tags={<Tag dark={a.role === 'admin'}>{DIRECTION_LABELS[a.role]}</Tag>}
           onEdit={() => setModal({ kind: 'direction', account: a })}
-          onDelete={a.id === me ? null : () => remove(a, DIRECTION_LABELS[a.role])} />
+          onDelete={a.id === me ? null : () => remove(a, DIRECTION_LABELS[a.role])} onResetDoubleAuth={resetPour(a)} />
       ),
       empty: 'Aucun compte de direction.',
     },
@@ -309,7 +326,7 @@ export default function AccountsPanel({ me, isAdmin, magasins }) {
             {(a.rayons || []).filter(serviceLabel).map(r => <Tag key={r}>{serviceLabel(r)}</Tag>)}
           </>}
           onEdit={() => setModal({ kind: 'acheteur', account: a })}
-          onDelete={() => remove(a, 'acheteur')} />
+          onDelete={() => remove(a, 'acheteur')} onResetDoubleAuth={resetPour(a)} />
       ),
       empty: 'Aucun acheteur.',
     },
