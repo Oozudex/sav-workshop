@@ -56,10 +56,6 @@ export function canEditUnivers(user, univers) {
   return user?.role === 'acheteur' && (user.univers || []).includes(univers)
 }
 
-export function editableLines(lines, user) {
-  return lines.filter(l => canEditUnivers(user, l.univers))
-}
-
 // ── Filtre par acheteur ─────────────────────────────────────────────────────────
 // '' : tout ; 'a:<uid>' : les univers attribués à cet acheteur ; FILTRE_SANS_ACHETEUR : les univers
 // que personne n'a en charge.

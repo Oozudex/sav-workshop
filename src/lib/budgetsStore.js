@@ -11,7 +11,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { db } from './firebase'
 import { useAuth } from '../store/useAuth'
 import {
-  DEFAULT_MAGASINS, DEFAULT_UNIVERS, budgetName, cleanMarque, editableLines, linesFromBudget, mergeSegments,
+  DEFAULT_MAGASINS, DEFAULT_UNIVERS, budgetName, cleanMarque, linesFromBudget, mergeSegments,
   planN1Import, previousSeason,
 } from './budgets'
 
@@ -187,9 +187,9 @@ const N1_FIELDS = ['univers', 'segId', 'segment', 'nom', 'n1', 'commentaireN1']
 const CARRY_FIELDS = [...N1_FIELDS, 'quantiteN1']
 
 // N-1 par marque (fichier Excel) : rattache chaque ligne à la marque de la liste (ajoutée si absente),
-// remplace son N-1 sans toucher à la saisie, ajoute les segments manquants. Un acheteur : ses univers.
-export async function applyN1(budget, brands, allLines, source, user) {
-  const lines = editableLines(allLines, user)
+// remplace son N-1 sans toucher à la saisie, ajoute les segments manquants. Tout le fichier, quel que soit
+// l'acheteur qui importe (les règles lui permettent d'écrire le N-1 des autres univers, pas leur saisie).
+export async function applyN1(budget, brands, lines, source, user) {
   const plan = planN1Import(lines, brands, budget.segments)
   if (!lines.length) return plan
   const now = serverTimestamp()
@@ -213,7 +213,7 @@ export async function applyN1(budget, brands, allLines, source, user) {
 // N-1 repris du budget précédent : sa saisie et ses quantités deviennent le N-1, marque par marque (même id)
 export async function carryOverN1(budget, prev, user) {
   const snap = await getDocs(collection(db, 'budgets', prev.id, 'marques'))
-  const lines = editableLines(linesFromBudget(snap.docs.map(d => ({ id: d.id, ...d.data() }))), user)
+  const lines = linesFromBudget(snap.docs.map(d => ({ id: d.id, ...d.data() })))
   if (!lines.length) return { count: 0 }
   const known = new Set(budget.segments.map(s => s.id))
   const newSegments = []

@@ -2,6 +2,7 @@
 // le N-1 et le budget à remplir. Le commentaire d'une marque est commun à tous les magasins.
 // readOnly : univers non attribué à l'acheteur.
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { IconButton } from '../admin/ui'
 import { formatBudget, formatQte, hasValue, normLabel, objectif, toAmount } from '../../lib/budgets'
 import { addBrand, deleteLine, setCommentaire, setEngage, setQuantite, setSaisie } from '../../lib/budgetsStore'
@@ -90,7 +91,7 @@ export function SaisieCell({ budgetId, brand, mag, user, readOnly, run, adapte }
         onSave={v => run(setQuantite(budgetId, brand, mag.id, v, user))} />
     </>}
     <p className={`mt-0.5 text-right text-[10px] tabular-nums ${TONE.n1.head}`}>N-1 {n1 || '—'}</p>
-    {adapte != null && <p className={`text-right text-[10px] tabular-nums ${TONE.adapte.text}`}>Adapté {formatBudget(adapte)}</p>}
+    {adapte != null && !brand.orphan && <p className={`text-right text-[10px] tabular-nums ${TONE.adapte.text}`}>Adapté {formatBudget(adapte)}</p>}
   </>
 }
 
@@ -122,20 +123,34 @@ export function Reste({ objectif, saisie, short = false }) {
   return <span className={`font-semibold tabular-nums ${cls}`}>{text}</span>
 }
 
-export function OrphanTag() {
-  return (
-    <span title="Marque retirée de la liste : ses montants restent dans ce budget"
-      className="ml-1.5 h-4 px-1 inline-flex items-center rounded text-[9px] font-semibold uppercase bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
-      retirée
-    </span>
-  )
+// Bulle d'explication : s'ouvre au survol, au focus ou au clic (mobile), affichée par-dessus le tableau
+// (portail : pas coupée par le défilement horizontal)
+function Tip({ text, children, className, label }) {
+  const [pos, setPos] = useState(null)
+  const show = e => {
+    const r = e.currentTarget.getBoundingClientRect()
+    setPos({ left: Math.min(r.left, window.innerWidth - 272), top: r.bottom + 6 })
+  }
+  return <>
+    <button type="button" aria-label={label} aria-expanded={!!pos} className={className}
+      onMouseEnter={show} onMouseLeave={() => setPos(null)} onFocus={show} onBlur={() => setPos(null)}
+      onClick={e => (pos ? setPos(null) : show(e))}>
+      {children}
+    </button>
+    {pos && createPortal(
+      <span role="tooltip" style={{ left: Math.max(pos.left, 8), top: pos.top }}
+        className="fixed z-50 w-64 rounded-lg px-3 py-2 text-xs font-normal normal-case leading-snug shadow-lg bg-gray-900 text-white dark:bg-neutral-700">
+        {text}
+      </span>, document.body)}
+  </>
 }
 
-export function N1Comment({ text }) {
-  if (!text) return null
+export function OrphanTag() {
   return (
-    <span title={`Commentaire N-1 : ${text}`} aria-label={`Commentaire N-1 : ${text}`}
-      className="ml-1 inline-grid place-items-center h-4 w-4 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-300 cursor-help">i</span>
+    <Tip label="Marque retirée : explication" text="Marque retirée de la liste (onglet Marques) mais qui a encore des montants dans ce budget (N-1 ou saisie). Elle reste affichée pour ne rien perdre ; elle n’a pas de budget adapté. La corbeille au bout de la ligne la supprime de ce budget."
+      className="ml-1.5 h-4 px-1 inline-flex items-center rounded text-[9px] font-semibold uppercase bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 cursor-help">
+      retirée
+    </Tip>
   )
 }
 
@@ -227,10 +242,9 @@ export default function SegmentSaisie({ budgetId, seg, magasin, cell, hasGroupe,
                   <td className={`py-1.5 px-2 text-right text-sm tabular-nums whitespace-nowrap ${TONE.n1.text}`}>
                     {hasValue(line?.n1, id) ? formatBudget(line.n1[id]) : '—'}
                     {hasValue(line?.quantiteN1, id) && <span className="block text-[11px]">{formatQte(line.quantiteN1[id])}</span>}
-                    <N1Comment text={line?.commentaireN1} />
                   </td>
                   <td className={`py-1.5 px-2 text-right text-sm tabular-nums whitespace-nowrap ${TONE.adapte.text}`}>
-                    {formatBudget(adapte?.byBrand.get(b.id)?.[id])}
+                    {b.orphan ? '—' : formatBudget(adapte?.byBrand.get(b.id)?.[id])}
                   </td>
                   {readOnly ? <>
                     <td className={`py-1.5 px-2 w-32 text-right text-sm tabular-nums ${textTone}`}>

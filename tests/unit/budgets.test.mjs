@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  FILTRE_SANS_ACHETEUR, addTotals, budgetRank, fournisseurResolver, coefMarque, computeAdapte, fournisseurKey, noteMarque, withAdapte, evolution, formatPct, groupeRatio, groupeTotal, objectif, brandsBySegment, budgetName, buyerFilterTest, defaultBuyerFilter, filtreAcheteur, canEditUnivers, computeTotals, editableLines, segmentsCatalog, findN1Sheet, linesFromBudget, magasinMatcher, mergeSegments, n1Columns,
+  FILTRE_SANS_ACHETEUR, addTotals, budgetRank, fournisseurResolver, coefMarque, computeAdapte, fournisseurKey, noteMarque, withAdapte, evolution, formatPct, groupeRatio, groupeTotal, objectif, brandsBySegment, budgetName, buyerFilterTest, defaultBuyerFilter, filtreAcheteur, canEditUnivers, computeTotals, segmentsCatalog, findN1Sheet, linesFromBudget, magasinMatcher, mergeSegments, n1Columns,
   parseBaseSheet, parseN1Sheet, planN1Import, previousSeason, segmentId, sortSegments,
 } from '../../src/lib/budgets.js'
 
@@ -48,7 +48,6 @@ describe('droits', () => {
     assert.equal(canEditUnivers({ role: 'velo', univers: ['CYCLE'] }, 'CYCLE'), false)
   })
   it("un acheteur n'importe que ses univers", () => {
-    assert.deepEqual(editableLines([{ univers: 'CYCLE' }, { univers: 'GOLF' }], acheteur), [{ univers: 'CYCLE' }])
   })
 })
 

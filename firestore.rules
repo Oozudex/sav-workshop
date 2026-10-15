@@ -490,6 +490,10 @@ service cloud.firestore {
     function canEditBudgetUnivers(u) {
       return isDirGen() || (isAcheteur() && u in userDoc().get('univers', []));
     }
+    // Champs d'une ligne écrits par l'import ou la reprise du N-1
+    function n1Fields() {
+      return ['univers', 'segId', 'segment', 'nom', 'n1', 'commentaireN1', 'quantiteN1'];
+    }
 
     match /budget_univers/{id} {
       allow read, write: if isSignedIn() && isGlobal();
@@ -501,10 +505,11 @@ service cloud.firestore {
     match /budget_reglages/{id} {
       allow read, write: if isSignedIn() && isGlobal();
     }
-    // Liste des marques par univers et segment : même droits que les lignes par marque
+    // Liste des marques par univers et segment : même droits que les lignes par marque, sauf l'ajout
+    // (l'import du N-1 par un acheteur ajoute les marques de tous les univers)
     match /budget_marques/{id} {
       allow read: if isSignedIn() && isGlobal();
-      allow create: if isSignedIn() && canEditBudgetUnivers(request.resource.data.univers);
+      allow create: if isSignedIn() && isGlobal();
       allow update: if isSignedIn() && canEditBudgetUnivers(resource.data.univers) &&
         request.resource.data.univers == resource.data.univers;
       allow delete: if isSignedIn() && canEditBudgetUnivers(resource.data.univers);
@@ -526,11 +531,15 @@ service cloud.firestore {
         allow delete: if isSignedIn() && isDirGen();
       }
 
+      // Import du N-1 par un acheteur : il écrit le N-1 de tous les univers (champs N-1 seulement),
+      // la saisie reste réservée aux univers qui lui sont attribués
       match /marques/{marqueId} {
         allow read: if isSignedIn() && isGlobal();
-        allow create: if isSignedIn() && canEditBudgetUnivers(request.resource.data.univers);
-        allow update: if isSignedIn() && canEditBudgetUnivers(resource.data.univers) &&
-          request.resource.data.univers == resource.data.univers;
+        allow create: if isSignedIn() && (canEditBudgetUnivers(request.resource.data.univers) ||
+          (isAcheteur() && request.resource.data.keys().hasOnly(n1Fields())));
+        allow update: if isSignedIn() && request.resource.data.univers == resource.data.univers &&
+          (canEditBudgetUnivers(resource.data.univers) ||
+           (isAcheteur() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(n1Fields())));
         allow delete: if isSignedIn() && canEditBudgetUnivers(resource.data.univers);
       }
     }

@@ -485,7 +485,9 @@ describe('budgets acheteurs', () => {
     await assertSucceeds(updateDoc(doc(db, 'budget_marques', 'n'), { nom: 'SHIMANO' }))
     await assertFails(updateDoc(doc(db, 'budget_marques', 'n'), { univers: 'GOLF' }))
     await assertSucceeds(deleteDoc(doc(db, 'budget_marques', 'n')))
-    await assertFails(setDoc(doc(db, 'budget_marques', 'x'), marque('GOLF')))
+    // L'import du N-1 ajoute les marques de tous les univers
+    await assertSucceeds(setDoc(doc(db, 'budget_marques', 'x'), { univers: 'GOLF', segId: 's', nom: 'PING' }))
+    await assertFails(setDoc(doc(as('veloA'), 'budget_marques', 'y'), { univers: 'GOLF', segId: 's', nom: 'PING' }))
     await assertFails(updateDoc(doc(db, 'budget_marques', 'golf'), { nom: 'PING' }))
     await assertFails(deleteDoc(doc(db, 'budget_marques', 'golf')))
     await assertSucceeds(updateDoc(doc(as('dirgen'), 'budget_marques', 'golf'), { nom: 'PING' }))
@@ -493,6 +495,16 @@ describe('budgets acheteurs', () => {
   })
   it("un acheteur ne peut pas s'attribuer d'univers", async () => {
     await assertFails(updateDoc(doc(as('acheteurCycle'), 'users', 'acheteurCycle'), { univers: ['CYCLE', 'GOLF'] }))
+  })
+  it("un acheteur importe le N-1 de tous les univers, sans toucher à leur saisie", async () => {
+    const db = as('acheteurCycle')
+    const n1 = { univers: 'GOLF', segId: 's', segment: '', nom: 'PING', n1: { a: 10 }, commentaireN1: '', quantiteN1: {} }
+    await assertSucceeds(setDoc(doc(db, 'budgets', 'b', 'marques', 'ping'), n1))
+    await assertSucceeds(setDoc(doc(db, 'budgets', 'b', 'marques', 'golf'), { n1: { a: 5 }, commentaireN1: 'ok' }, { merge: true }))
+    await assertFails(updateDoc(doc(db, 'budgets', 'b', 'marques', 'golf'), { 'saisie.a': 10 }))
+    await assertFails(updateDoc(doc(db, 'budgets', 'b', 'marques', 'golf'), { n1: { a: 1 }, engage: true }))
+    await assertFails(setDoc(doc(db, 'budgets', 'b', 'marques', 'x'), { ...n1, saisie: { a: 1 } }))
+    await assertFails(setDoc(doc(as('veloA'), 'budgets', 'b', 'marques', 'y'), n1))
   })
   it("seule la direction fixe le budget groupe", async () => {
     const groupe = { mode: 'pct', pct: -3 }

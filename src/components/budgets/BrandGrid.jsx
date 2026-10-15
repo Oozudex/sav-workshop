@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { IconButton } from '../admin/ui'
 import { emptyCell, formatBudget, formatQte, objectif, sumValues } from '../../lib/budgets'
 import { deleteLine, setCommentaire } from '../../lib/budgetsStore'
-import { AddBrandForm, BrandEngage, BrandNote, N1Comment, OrphanTag, Reste, SaisieCell, TextInput, brandInfo } from './SegmentSaisie'
+import { AddBrandForm, BrandEngage, BrandNote, OrphanTag, Reste, SaisieCell, TextInput, brandInfo } from './SegmentSaisie'
 import { TONE } from './tones'
 
 const TH = 'py-1.5 px-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-neutral-400'
@@ -93,7 +93,7 @@ export default function BrandGrid({ budgetId, seg, magasins, totals, hasGroupe, 
               return (
                 <tr key={b.id} className="align-top">
                   <th scope="row" className={`${STICKY} border-t border-gray-100 dark:border-neutral-800 py-1.5 pr-2 text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap`}>
-                    {b.nom}{b.orphan && <OrphanTag />}<N1Comment text={b.line?.commentaireN1} />
+                    {b.nom}{b.orphan && <OrphanTag />}
                     <BrandNote info={brandInfo(adapte, b)} brand={b} />
                     <div className="mt-2"><BrandEngage budgetId={budgetId} brand={b} user={user} readOnly={readOnly} run={run} /></div>
                   </th>
@@ -106,7 +106,7 @@ export default function BrandGrid({ budgetId, seg, magasins, totals, hasGroupe, 
                     <p className="h-8 leading-8 text-sm font-semibold tabular-nums text-gray-900 dark:text-white">{formatBudget(saisieTotal)}</p>
                     {(qte > 0 || !readOnly) && <p className="h-7 leading-7 mt-1 text-xs tabular-nums text-gray-700 dark:text-neutral-300">{qte > 0 ? formatQte(qte) : ''}</p>}
                     <p className={`mt-0.5 text-[10px] tabular-nums ${TONE.n1.head}`}>N-1 {formatBudget(n1Total)}{qteN1 > 0 ? ` · ${formatQte(qteN1)}` : ''}</p>
-                    <p className={`text-[10px] tabular-nums ${TONE.adapte.text}`}>Adapté {formatBudget(adapteTotal)}</p>
+                    {!b.orphan && <p className={`text-[10px] tabular-nums ${TONE.adapte.text}`}>Adapté {formatBudget(adapteTotal)}</p>}
                     {saisieTotal > 0 && Math.round(ecart) !== 0 && (
                       <p className={`text-[10px] tabular-nums ${ecart > 0 ? TONE.depassement.text : 'text-gray-500 dark:text-neutral-400'}`}>
                         {ecart > 0 ? '+' : '−'}{formatBudget(Math.abs(ecart))} vs adapté

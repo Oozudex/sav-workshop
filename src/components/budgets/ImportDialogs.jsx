@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react'
 import { BTN_PRIMARY, BTN_SECONDARY, Field, Modal, Notice } from '../admin/ui'
 import { readWorkbook } from '../../lib/excel'
 import {
-  editableLines, findN1Sheet, formatBudget, magasinMatcher, n1Columns, parseBaseSheet, parseN1Sheet, planN1Import, previousSeason,
+  findN1Sheet, formatBudget, magasinMatcher, n1Columns, parseBaseSheet, parseN1Sheet, planN1Import, previousSeason,
   seasonCode, sumValues,
 } from '../../lib/budgets'
 import { applyN1, saveBase } from '../../lib/budgetsStore'
@@ -132,9 +132,9 @@ export function ImportN1Dialog({ budget, brands, univers, magasins, user, onClos
 
   const parsed = useMemo(() => (rows && column
     ? parseN1Sheet(rows, { univers: univers.map(u => u.nom), matchMagasin, column }) : null), [rows, column, univers, matchMagasin])
-  const lines = useMemo(() => (parsed?.lines ? editableLines(parsed.lines, user) : null), [parsed, user])
+  // Tout le fichier est importé, quel que soit l'acheteur (le N-1 de tous les univers)
+  const lines = parsed?.lines || null
   const plan = useMemo(() => (lines ? planN1Import(lines, brands, budget.segments) : null), [lines, brands, budget.segments])
-  const ignored = parsed?.lines ? parsed.lines.length - lines.length : 0
 
   async function save() {
     setBusy(true)
@@ -184,9 +184,6 @@ export function ImportN1Dialog({ budget, brands, univers, magasins, user, onClos
             <Stat label="Nouvelles marques" value={plan.missing.length} />
             <Stat label="Total N-1" value={formatBudget(total)} />
           </div>
-          {ignored > 0 && (
-            <Notice notice={{ tone: 'ok', text: `${ignored} ligne(s) d’autres univers ignorées : seuls tes univers attitrés sont importés.` }} />
-          )}
           <Warning title="Segments absents de la base, ajoutés avec un budget de base à 0 :"
             items={plan.newSegments.map(s => `${s.univers} › ${s.nom || 'sans segment'}`)} />
           <Warning title="Magasins non reconnus (colonnes ignorées) : ajoute ce nom dans l’onglet Magasins." items={parsed.unknownMagasins} />
