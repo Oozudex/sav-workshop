@@ -3,9 +3,9 @@
 // En haut le budget de base et le budget groupe, en bas le total saisi et le reste par magasin.
 import { useState } from 'react'
 import { IconButton } from '../admin/ui'
-import { formatBudget, hasValue, objectif, sumValues } from '../../lib/budgets'
-import { deleteLine, setCommentaire, setSaisie } from '../../lib/budgetsStore'
-import { AddBrandForm, AmountInput, N1Comment, OrphanTag, Reste, TextInput } from './SegmentSaisie'
+import { emptyCell, formatBudget, formatQte, objectif, sumValues } from '../../lib/budgets'
+import { deleteLine, setCommentaire } from '../../lib/budgetsStore'
+import { AddBrandForm, BrandEngage, N1Comment, OrphanTag, Reste, SaisieCell, TextInput } from './SegmentSaisie'
 import { TONE } from './tones'
 
 const TH = 'py-1.5 px-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-neutral-400'
@@ -14,7 +14,7 @@ const STICKY = 'sticky left-0 z-10 bg-white dark:bg-neutral-900'
 export default function BrandGrid({ budgetId, seg, magasins, totals, hasGroupe, brands, user, readOnly = false }) {
   const [error, setError] = useState('')
   const run = p => p.catch(err => setError(err.message))
-  const cell = magId => totals?.[magId] || { base: 0, groupe: 0, n1: 0, saisie: 0 }
+  const cell = magId => totals?.[magId] || emptyCell()
   const sum = key => magasins.reduce((t, m) => t + cell(m.id)[key], 0)
   const total = { base: sum('base'), groupe: sum('groupe') }
   const refRow = (key, value) => (
@@ -22,6 +22,16 @@ export default function BrandGrid({ budgetId, seg, magasins, totals, hasGroupe, 
       <th scope="row" className={`${STICKY} ${TONE[key].sticky} py-1.5 pr-2 text-xs font-semibold ${TONE[key].text}`}>{TONE[key].label}</th>
       {magasins.map(m => <td key={m.id} className={`py-1.5 px-1.5 text-right text-xs font-semibold tabular-nums ${TONE[key].text}`}>{formatBudget(value(m.id))}</td>)}
       <td className={`py-1.5 px-1.5 text-right text-xs font-bold tabular-nums ${TONE[key].text}`}>{formatBudget(total[key])}</td>
+      <td colSpan={readOnly ? 1 : 2} />
+    </tr>
+  )
+
+  // Ligne de détail sous le total saisi (zéro affiché « — »)
+  const footRow = (label, tone, value, totalValue, format) => (
+    <tr className={`text-xs ${tone ? TONE[tone].text : 'text-gray-700 dark:text-neutral-300'}`}>
+      <th scope="row" className={`${STICKY} py-1 pr-2 text-left font-medium`}>{label}</th>
+      {magasins.map(m => <td key={m.id} className="py-1 px-1.5 text-right tabular-nums">{Math.round(value(m.id)) ? format(value(m.id)) : '—'}</td>)}
+      <td className="py-1 px-1.5 text-right tabular-nums font-semibold">{Math.round(totalValue) ? format(totalValue) : '—'}</td>
       <td colSpan={readOnly ? 1 : 2} />
     </tr>
   )
@@ -39,6 +49,9 @@ export default function BrandGrid({ budgetId, seg, magasins, totals, hasGroupe, 
         {hasGroupe && <span className={TONE.groupe.text}>Groupe <strong className="tabular-nums">{formatBudget(total.groupe)}</strong></span>}
         <span className={TONE.n1.text}>N-1 <strong className="tabular-nums">{formatBudget(sum('n1'))}</strong></span>
         <span>Saisi <strong className="tabular-nums">{formatBudget(sum('saisie'))}</strong></span>
+        <span className={TONE.engage.text}>Engagé <strong className="tabular-nums">{formatBudget(sum('engage'))}</strong></span>
+        <span className={TONE.previsionnel.text}>Prévisionnel <strong className="tabular-nums">{formatBudget(sum('saisie') - sum('engage'))}</strong></span>
+        {(sum('qte') > 0 || sum('qteN1') > 0) && <span>Qté <strong className="tabular-nums">{formatQte(sum('qte'))}</strong> <span className={TONE.n1.text}>(N-1 {formatQte(sum('qteN1'))})</span></span>}
         <Reste objectif={objectif(total, hasGroupe)} saisie={sum('saisie')} />
         {readOnly && (
           <span className="ml-auto h-5 px-1.5 inline-flex items-center rounded text-[10px] font-semibold bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
@@ -53,7 +66,7 @@ export default function BrandGrid({ budgetId, seg, magasins, totals, hasGroupe, 
           <thead>
             <tr>
               <th scope="col" className={`${TH} ${STICKY} pl-0 min-w-[9rem]`}>Marque</th>
-              {magasins.map(m => <th key={m.id} scope="col" className={`${TH} text-right min-w-[6.5rem]`} title={m.nom}>{m.nom}</th>)}
+              {magasins.map(m => <th key={m.id} scope="col" className={`${TH} text-right min-w-[7.5rem]`} title={m.nom}>{m.nom}</th>)}
               <th scope="col" className={`${TH} text-right min-w-[6.5rem]`}>Total</th>
               <th scope="col" className={`${TH} min-w-[12rem]`}>Commentaire</th>
               {!readOnly && <th scope="col" className={TH}><span className="sr-only">Actions</span></th>}
@@ -65,29 +78,22 @@ export default function BrandGrid({ budgetId, seg, magasins, totals, hasGroupe, 
             {brands.map(b => {
               const n1Total = sumValues(b.line?.n1)
               const saisieTotal = sumValues(b.line?.saisie)
+              const qte = sumValues(b.line?.quantite), qteN1 = sumValues(b.line?.quantiteN1)
               return (
                 <tr key={b.id} className="align-top">
                   <th scope="row" className={`${STICKY} border-t border-gray-100 dark:border-neutral-800 py-1.5 pr-2 text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap`}>
                     {b.nom}{b.orphan && <OrphanTag />}<N1Comment text={b.line?.commentaireN1} />
+                    <div className="mt-2"><BrandEngage budgetId={budgetId} brand={b} user={user} readOnly={readOnly} run={run} /></div>
                   </th>
                   {magasins.map(m => (
                     <td key={m.id} className="border-t border-gray-100 dark:border-neutral-800 py-1.5 px-1.5">
-                      {readOnly ? (
-                        <p className="h-8 leading-8 text-right text-sm tabular-nums text-gray-900 dark:text-white">
-                          {hasValue(b.line?.saisie, m.id) ? formatBudget(b.line.saisie[m.id]) : '—'}
-                        </p>
-                      ) : (
-                        <AmountInput value={b.line?.saisie?.[m.id]} label={`Budget ${b.nom} – ${m.nom}`}
-                          onSave={v => run(setSaisie(budgetId, b, m.id, v, user))} />
-                      )}
-                      <p className={`mt-0.5 text-right text-[10px] tabular-nums ${TONE.n1.head}`}>
-                        N-1 {hasValue(b.line?.n1, m.id) ? formatBudget(b.line.n1[m.id]) : '—'}
-                      </p>
+                      <SaisieCell budgetId={budgetId} brand={b} mag={m} user={user} readOnly={readOnly} run={run} />
                     </td>
                   ))}
                   <td className="border-t border-gray-100 dark:border-neutral-800 py-1.5 px-1.5 text-right">
                     <p className="h-8 leading-8 text-sm font-semibold tabular-nums text-gray-900 dark:text-white">{formatBudget(saisieTotal)}</p>
-                    <p className={`mt-0.5 text-[10px] tabular-nums ${TONE.n1.head}`}>N-1 {formatBudget(n1Total)}</p>
+                    {(qte > 0 || !readOnly) && <p className="h-7 leading-7 mt-1 text-xs tabular-nums text-gray-700 dark:text-neutral-300">{qte > 0 ? formatQte(qte) : ''}</p>}
+                    <p className={`mt-0.5 text-[10px] tabular-nums ${TONE.n1.head}`}>N-1 {formatBudget(n1Total)}{qteN1 > 0 ? ` · ${formatQte(qteN1)}` : ''}</p>
                   </td>
                   <td className="border-t border-gray-100 dark:border-neutral-800 py-1.5 px-1.5">
                     {readOnly ? <p className="text-sm text-gray-600 dark:text-neutral-300 pt-1.5">{b.line?.commentaire}</p> : (
@@ -116,6 +122,9 @@ export default function BrandGrid({ budgetId, seg, magasins, totals, hasGroupe, 
               <td className="border-t border-gray-200 dark:border-neutral-700 py-1.5 px-1.5 text-right tabular-nums">{formatBudget(sum('saisie'))}</td>
               <td colSpan={readOnly ? 1 : 2} className="border-t border-gray-200 dark:border-neutral-700" />
             </tr>
+            {footRow('dont engagé', 'engage', id => cell(id).engage, sum('engage'), formatBudget)}
+            {footRow('dont prévisionnel', 'previsionnel', id => cell(id).saisie - cell(id).engage, sum('saisie') - sum('engage'), formatBudget)}
+            {(sum('qte') > 0 || sum('qteN1') > 0) && footRow('Quantité', null, id => cell(id).qte, sum('qte'), formatQte)}
             <tr className="text-xs">
               <th scope="row" className={`${STICKY} py-1.5 pr-2 text-left font-semibold text-gray-700 dark:text-neutral-200`}>Reste</th>
               {magasins.map(m => <td key={m.id} className="py-1.5 px-1.5 text-right"><Reste objectif={objectif(cell(m.id), hasGroupe)} saisie={cell(m.id).saisie} short /></td>)}

@@ -302,11 +302,11 @@ export function parseN1Sheet(rows, { univers, matchMagasin, column }) {
 // Liste commune des marques (budget_marques : univers, segment, segId, nom). Dans un budget, la ligne
 // d'une marque (N-1, saisie, commentaire) porte l'id de la marque : budgets/{id}/marques/{idMarque}.
 
-// Lignes N-1 tirées d'un budget précédent (sa saisie devient le N-1), même id de marque
+// Lignes N-1 tirées d'un budget précédent (sa saisie et ses quantités deviennent le N-1), même id de marque
 export function linesFromBudget(lines) {
   return lines.map(l => ({
     id: l.id, segId: l.segId, univers: l.univers, segment: l.segment || '', nom: l.nom || '',
-    n1: { ...(l.saisie || {}) }, commentaire: l.commentaire || '',
+    n1: { ...(l.saisie || {}) }, quantiteN1: { ...(l.quantite || {}) }, commentaire: l.commentaire || '',
   }))
 }
 
@@ -328,8 +328,8 @@ export function planN1Import(lines, brands, segments = []) {
   return { matched, missing, newSegments }
 }
 
-const hasAmounts = l => Object.values(l?.n1 || {}).some(v => typeof v === 'number')
-  || Object.values(l?.saisie || {}).some(v => typeof v === 'number')
+const hasAmounts = l => ['n1', 'saisie', 'quantite', 'quantiteN1']
+  .some(k => Object.values(l?.[k] || {}).some(v => typeof v === 'number'))
 
 // Marques de chaque segment d'un budget : celles de la liste, plus les lignes du budget dont la marque
 // a été retirée de la liste mais qui ont encore des montants (orphan). { segId: [{ id, nom, line, … }] }
@@ -383,11 +383,15 @@ export function sortSegments(segments, universOrder) {
     || (pos.get(a.id) - pos.get(b.id)))
 }
 
-// Totaux par segment et magasin : { [segId]: { [magId]: { base, groupe, n1, saisie } } }
+// Totaux par segment et magasin : { [segId]: { [magId]: cellule } }. Cellule : base, groupe, n1, saisie,
+// engage (saisie des marques déjà commandées : line.engage, pour tous les magasins), qte et qteN1 (quantités).
 // ratio : coefficient du budget groupe appliqué au budget de base (null : budget groupe non fixé)
+const EMPTY_CELL = { base: 0, groupe: 0, n1: 0, saisie: 0, engage: 0, qte: 0, qteN1: 0 }
+export const emptyCell = () => ({ ...EMPTY_CELL })
+
 export function computeTotals(segments, base, marques, ratio = null) {
   const t = {}
-  const cell = (segId, magId) => ((t[segId] ??= {})[magId] ??= { base: 0, groupe: 0, n1: 0, saisie: 0 })
+  const cell = (segId, magId) => ((t[segId] ??= {})[magId] ??= emptyCell())
   for (const s of segments) {
     for (const [magId, v] of Object.entries(base?.[s.id] || {})) {
       const c = cell(s.id, magId)
@@ -397,16 +401,27 @@ export function computeTotals(segments, base, marques, ratio = null) {
   }
   for (const m of marques) {
     for (const [magId, v] of Object.entries(m.n1 || {})) if (typeof v === 'number') cell(m.segId, magId).n1 += v
-    for (const [magId, v] of Object.entries(m.saisie || {})) if (typeof v === 'number') cell(m.segId, magId).saisie += v
+    for (const [magId, v] of Object.entries(m.saisie || {})) {
+      if (typeof v !== 'number') continue
+      cell(m.segId, magId).saisie += v
+      if (m.engage === true) cell(m.segId, magId).engage += v
+    }
+    for (const [magId, v] of Object.entries(m.quantite || {})) if (typeof v === 'number') cell(m.segId, magId).qte += v
+    for (const [magId, v] of Object.entries(m.quantiteN1 || {})) if (typeof v === 'number') cell(m.segId, magId).qteN1 += v
   }
   return t
 }
 
-// Addition de cellules de totaux { base, groupe, n1, saisie }
+// Addition de cellules de totaux
 export function addTotals(cells) {
-  const r = { base: 0, groupe: 0, n1: 0, saisie: 0 }
-  for (const c of cells) if (c) { r.base += c.base; r.groupe += c.groupe || 0; r.n1 += c.n1; r.saisie += c.saisie }
+  const r = emptyCell()
+  for (const c of cells) if (c) for (const k of Object.keys(EMPTY_CELL)) r[k] += c[k] || 0
   return r
+}
+
+// 1234 → « 1 234 p. » (quantités)
+export function formatQte(n) {
+  return `${(Math.round((n || 0) * 100) / 100).toLocaleString('fr-FR')} p.`
 }
 
 // ── Budget groupe ───────────────────────────────────────────────────────────────

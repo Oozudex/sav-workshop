@@ -170,8 +170,8 @@ describe('planN1Import', () => {
   })
 
   it('reprend la saisie du budget précédent comme N-1, sur la même marque', () => {
-    const l = linesFromBudget([{ id: 'm1', segId: 's', univers: 'U', segment: 'S', nom: 'NIKE', saisie: { cht: 10 }, commentaire: 'ok' }])
-    assert.deepEqual(l, [{ id: 'm1', segId: 's', univers: 'U', segment: 'S', nom: 'NIKE', n1: { cht: 10 }, commentaire: 'ok' }])
+    const l = linesFromBudget([{ id: 'm1', segId: 's', univers: 'U', segment: 'S', nom: 'NIKE', saisie: { cht: 10 }, quantite: { cht: 4 }, commentaire: 'ok' }])
+    assert.deepEqual(l, [{ id: 'm1', segId: 's', univers: 'U', segment: 'S', nom: 'NIKE', n1: { cht: 10 }, quantiteN1: { cht: 4 }, commentaire: 'ok' }])
   })
 })
 
@@ -225,12 +225,21 @@ describe('segments et totaux', () => {
       { segId: 's', n1: { cht: 30 }, saisie: { cht: 40, lf: 5 } },
       { segId: 's', n1: { cht: 20 }, saisie: { cht: 10 } },
     ])
-    assert.deepEqual(t.s.cht, { base: 100, groupe: 0, n1: 50, saisie: 50 })
-    assert.deepEqual(addTotals([t.s.cht, t.s.lf]), { base: 100, groupe: 0, n1: 50, saisie: 55 })
+    assert.deepEqual(t.s.cht, { base: 100, groupe: 0, n1: 50, saisie: 50, engage: 0, qte: 0, qteN1: 0 })
+    assert.deepEqual(addTotals([t.s.cht, t.s.lf]), { base: 100, groupe: 0, n1: 50, saisie: 55, engage: 0, qte: 0, qteN1: 0 })
+  })
+  it('additionne les quantités et la part engagée de la saisie', () => {
+    const t = computeTotals([{ id: 's' }], {}, [
+      { segId: 's', saisie: { cht: 40, lf: 5 }, quantite: { cht: 8 }, quantiteN1: { cht: 6 }, engage: true },
+      { segId: 's', saisie: { cht: 10 }, quantite: { cht: 2 }, engage: false },
+    ])
+    assert.deepEqual(t.s.cht, { base: 0, groupe: 0, n1: 0, saisie: 50, engage: 40, qte: 10, qteN1: 6 })
+    // Une marque engagée l'est pour tous les magasins
+    assert.equal(t.s.lf.engage, 5)
   })
   it('répartit le budget groupe au prorata de la base, sans toucher à la base', () => {
     const t = computeTotals([{ id: 's' }, { id: 'u' }], { s: { cht: 300 }, u: { cht: 100, lf: 600 } }, [], 1.1)
-    assert.deepEqual(t.s.cht, { base: 300, groupe: 330, n1: 0, saisie: 0 })
+    assert.deepEqual(t.s.cht, { base: 300, groupe: 330, n1: 0, saisie: 0, engage: 0, qte: 0, qteN1: 0 })
     assert.equal(Math.round(addTotals([t.s.cht, t.u.cht, t.u.lf]).groupe), 1100)
   })
 })

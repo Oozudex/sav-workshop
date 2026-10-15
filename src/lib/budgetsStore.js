@@ -151,6 +151,8 @@ export function saveBase(budget, parsed, fileName, user) {
 const lineRef = (budgetId, id) => doc(db, 'budgets', budgetId, 'marques', id)
 const lineIdentity = x => ({ univers: x.univers, segId: x.segId, segment: x.segment || '', nom: x.nom })
 const N1_FIELDS = ['univers', 'segId', 'segment', 'nom', 'n1', 'commentaireN1']
+// Reprise du budget précédent : les quantités saisies deviennent aussi le N-1
+const CARRY_FIELDS = [...N1_FIELDS, 'quantiteN1']
 
 // N-1 par marque (fichier Excel) : rattache chaque ligne à la marque de la liste (ajoutée si absente),
 // remplace son N-1 sans toucher à la saisie, ajoute les segments manquants. Un acheteur : ses univers.
@@ -176,7 +178,7 @@ export async function applyN1(budget, brands, allLines, source, user) {
   return plan
 }
 
-// N-1 repris du budget précédent : sa saisie devient le N-1, marque par marque (même id)
+// N-1 repris du budget précédent : sa saisie et ses quantités deviennent le N-1, marque par marque (même id)
 export async function carryOverN1(budget, prev, user) {
   const snap = await getDocs(collection(db, 'budgets', prev.id, 'marques'))
   const lines = editableLines(linesFromBudget(snap.docs.map(d => ({ id: d.id, ...d.data() }))), user)
@@ -189,7 +191,7 @@ export async function carryOverN1(budget, prev, user) {
     newSegments.push({ id: l.segId, univers: l.univers, nom: l.segment })
   }
   await runBatches(lines.map(l => b => b.set(lineRef(budget.id, l.id),
-    { ...lineIdentity(l), n1: l.n1, commentaireN1: l.commentaire }, { mergeFields: N1_FIELDS })))
+    { ...lineIdentity(l), n1: l.n1, quantiteN1: l.quantiteN1, commentaireN1: l.commentaire }, { mergeFields: CARRY_FIELDS })))
   await updateDoc(doc(db, 'budgets', budget.id), {
     ...(newSegments.length ? { segments: [...budget.segments, ...newSegments] } : {}),
     n1Import: { at: serverTimestamp(), by: author(user), source: prev.nom },
@@ -223,6 +225,22 @@ export function deleteBrand(id) {
 export function setSaisie(budgetId, brand, magId, value, user) {
   return setDoc(lineRef(budgetId, brand.id), {
     ...lineIdentity(brand), saisie: { [magId]: value == null ? deleteField() : value },
+    updatedAt: serverTimestamp(), updatedBy: author(user),
+  }, { merge: true })
+}
+
+// Quantité d'une marque pour un magasin (null : effacée)
+export function setQuantite(budgetId, brand, magId, value, user) {
+  return setDoc(lineRef(budgetId, brand.id), {
+    ...lineIdentity(brand), quantite: { [magId]: value == null ? deleteField() : value },
+    updatedAt: serverTimestamp(), updatedBy: author(user),
+  }, { merge: true })
+}
+
+// Marque engagée (commande passée chez le fournisseur, pour tous les magasins) ou prévisionnelle
+export function setEngage(budgetId, brand, engage, user) {
+  return setDoc(lineRef(budgetId, brand.id), {
+    ...lineIdentity(brand), engage: !!engage,
     updatedAt: serverTimestamp(), updatedBy: author(user),
   }, { merge: true })
 }

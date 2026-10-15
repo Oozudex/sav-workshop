@@ -7,12 +7,12 @@ import BrandGrid from '../components/budgets/BrandGrid'
 import BuyerFilter from '../components/budgets/BuyerFilter'
 import GroupeCards from '../components/budgets/GroupeCards'
 import SegmentSaisie from '../components/budgets/SegmentSaisie'
-import { Legend, TONE } from '../components/budgets/tones'
+import { Legend, SplitBar, TONE } from '../components/budgets/tones'
 import { ImportBaseDialog, ImportN1Dialog } from '../components/budgets/ImportDialogs'
 import { BTN_PRIMARY, BTN_SECONDARY, EmptyState, Notice } from '../components/admin/ui'
 import {
   FILTRE_SANS_ACHETEUR, SAISONS, addTotals, brandsBySegment, buyerFilterTest, canEditUnivers, computeTotals, defaultBuyerFilter,
-  formatBudget, groupeRatio, groupeTotal, objectif, previousSeason, sortSegments,
+  formatBudget, formatQte, groupeRatio, groupeTotal, objectif, previousSeason, sortSegments,
 } from '../lib/budgets'
 import {
   carryOverN1, deleteBudget, useAcheteurs, useBrands, useBudget, useBudgetLines, useBudgetMagasins, useBudgetUnivers, useBudgetUser,
@@ -63,18 +63,21 @@ function TreeRow({ level, label, hint, cell, hasGroupe, open, onToggle }) {
       <span className={`text-right text-sm tabular-nums ${TONE.base.text}`}>{formatBudget(cell.base)}</span>
       <span className={`text-right text-sm tabular-nums ${TONE.groupe.text}`}>{hasGroupe ? formatBudget(cell.groupe) : '—'}</span>
       <span className={`text-right text-sm tabular-nums ${TONE.n1.text}`}>{formatBudget(cell.n1)}</span>
-      <span className={`text-right text-sm tabular-nums ${TONE.saisie.text}`}>{formatBudget(cell.saisie)}</span>
+      <span className={`text-right text-sm tabular-nums ${TONE.saisie.text}`}>
+        {formatBudget(cell.saisie)}<SplitBar saisie={cell.saisie} engage={cell.engage} className="ml-auto mt-0.5 w-16" />
+      </span>
       <span className="text-right text-sm"><Reste cell={cell} hasGroupe={hasGroupe} /></span>
     </div>
   )
 }
 
-function Kpi({ label, value, tone, hint }) {
+function Kpi({ label, value, tone, hint, children }) {
   return (
     <div className={`rounded-2xl border border-t-4 ${TONE[tone].bar} px-4 py-3 bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800`}>
       <p className="text-[11px] font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wide">{label}</p>
       <p className={`text-xl font-bold tabular-nums ${TONE[tone].text}`}>{value}</p>
       {hint && <p className="text-[11px] text-gray-500 dark:text-neutral-400">{hint}</p>}
+      {children}
     </div>
   )
 }
@@ -212,14 +215,23 @@ export default function BudgetDetail() {
       ) : <>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <Kpi label="Budget de base" value={formatBudget(total.base)} tone="base" />
-          <Kpi label="N-1" value={formatBudget(total.n1)} tone="n1" />
-          <Kpi label="Saisi" value={formatBudget(total.saisie)} tone="saisie" />
+          <Kpi label="N-1" value={formatBudget(total.n1)} tone="n1" hint={total.qteN1 > 0 ? formatQte(total.qteN1) : ''} />
+          <Kpi label="Saisi" value={formatBudget(total.saisie)} tone="saisie" hint={total.qte > 0 ? formatQte(total.qte) : ''}>
+            {total.saisie > 0 && <>
+              <SplitBar saisie={total.saisie} engage={total.engage} className="mt-1.5" />
+              <p className="mt-1 text-[11px] tabular-nums">
+                <span className={TONE.engage.text}>Engagé {formatBudget(total.engage)}</span>
+                <span className="text-gray-400"> · </span>
+                <span className={TONE.previsionnel.text}>Prév. {formatBudget(total.saisie - total.engage)}</span>
+              </p>
+            </>}
+          </Kpi>
           <Kpi label={reste < 0 ? 'Dépassement' : 'Reste à répartir'} value={formatBudget(Math.abs(reste))}
             tone={reste < 0 ? 'depassement' : Math.round(reste) === 0 ? 'ok' : 'saisie'}
             hint={hasGroupe ? 'sur le budget groupe' : 'sur le budget de base'} />
         </div>
         <GroupeCards budget={budget} n1Total={sums.n1} baseTotal={sums.base} canEdit={isDirection} user={user} />
-        <Legend keys={['n1', 'base', 'groupe', 'ok', 'depassement']} />
+        <Legend keys={['n1', 'base', 'groupe', 'engage', 'previsionnel', 'ok', 'depassement']} />
 
         <div className="flex flex-wrap items-center gap-2">
           <div role="radiogroup" aria-label="Affichage" className="inline-flex p-1 rounded-xl bg-gray-100 dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800">
