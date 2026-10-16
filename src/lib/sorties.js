@@ -155,14 +155,16 @@ const KEYS = MEASURES.map(m => m.key)
 export const emptySums = () => [0, 0, 0, 0, 0]
 
 // Indicateurs d'une ligne : CA HT = CANet / 1,20 ; marge % = MtMrg / CA HT ;
-// taux de sortie = (QtVte + QtStkFin) / QtStkFin (formule du groupe ; pas de stock : null)
+// taux de sortie = QtVte / (QtVte + QtStkFin) : part de ce qu'on avait (vendu + restant) qui est sortie
+// (rien vendu ni en stock : null)
 export function indicateurs(s) {
   const [caNet, mtMrg, qtRecep, qtVte, qtStkFin] = s
   const caHt = caNet / 1.2
+  const dispo = qtVte + qtStkFin
   return {
     caNet, mtMrg, qtRecep, qtVte, qtStkFin, caHt,
     marge: caHt ? mtMrg / caHt : null,
-    taux: qtStkFin ? (qtVte + qtStkFin) / qtStkFin : null,
+    taux: dispo > 0 ? qtVte / dispo : null,
   }
 }
 

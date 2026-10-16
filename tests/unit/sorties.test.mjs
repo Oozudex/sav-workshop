@@ -72,12 +72,13 @@ describe('taux de sortie : tableau croisé', () => {
     row('SARAN', 'RUNNING', 'ASICS', 'R1', 'NOIR', 500, 50, 3, 3, 1),
   ])
 
-  it('calcule CA HT, marge % et taux de sortie (formule du groupe)', () => {
+  it('calcule CA HT, marge % et taux de sortie (vendu ÷ vendu + stock)', () => {
     const i = indicateurs([1200, 200, 10, 4, 6])
     assert.equal(i.caHt, 1000)
     assert.equal(i.marge, 0.2)
-    assert.equal(Math.round(i.taux * 1000) / 1000, 1.667) // (4 + 6) / 6
-    assert.equal(indicateurs([600, 60, 5, 5, 0]).taux, null)
+    assert.equal(i.taux, 0.4) // 4 / (4 + 6)
+    assert.equal(indicateurs([600, 60, 5, 5, 0]).taux, 1) // tout vendu
+    assert.equal(indicateurs([0, 0, 5, 0, 0]).taux, null)
   })
   it('regroupe sur plusieurs niveaux et rapproche N et N-1', () => {
     const p = pivot({ n, n1, levels: ['magasin', 'univers'] })

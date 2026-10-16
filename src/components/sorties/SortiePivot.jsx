@@ -253,7 +253,7 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
         <li className={`font-semibold ${TONE.depassement.text}`}>En baisse par rapport à N-1</li>
       </ul>
       <p className="text-[11px] text-gray-500 dark:text-neutral-400">
-        Marge % = MtMrg ÷ (CANet ÷ 1,20). Taux de sortie = (QtVte + QtStkFin) ÷ QtStkFin. Sur une ligne regroupée, les montants et quantités
+        Marge % = MtMrg ÷ (CANet ÷ 1,20). Taux de sortie = QtVte ÷ (QtVte + QtStkFin). Sur une ligne regroupée, les montants et quantités
         sont additionnés puis les % recalculés. Vert et rouge sur CANet, MtMrg, Marge %, QtVte et taux de sortie (une hausse y est une bonne nouvelle) ;
         QtRecep et QtStkFin restent neutres. Clique sur un en-tête de colonne pour trier.
       </p>
