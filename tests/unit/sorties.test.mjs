@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   autoMapping, chunkBytes, datasetTotals, dimValues, findHeaderRow, gunzipJson, gzipJson, indicateurs, isoWeek, joinBytes,
-  classement, matchSemaine, missingMeasures, parseSortie, pivot, possibleValues, resumeSortie, saisonDe, semainesEntre, semaineId, semaineN1, semaineNom,
+  classement, matchSemaine, missingMeasures, parseSortie, pivot, pivotExport, possibleValues, resumeSortie, saisonDe, semainesEntre, semaineId, semaineN1, semaineNom,
 } from '../../src/lib/sorties.js'
 
 const HEADER = ['Magasin', 'Univers', 'Segment', 'Famille', 'Sous-famille', 'Marque', 'Fournisseur', 'Modèle', 'Référence', 'Couleur',
@@ -144,6 +144,30 @@ describe('taux de sortie : tableau croisé', () => {
     const p = pivot({ n: r, n1: null, levels: [], filters: { magasin: new Set(['LAVAL']) } })
     assert.deepEqual(p.total.n, [1500, 250, 11, 5, 6])
     assert.deepEqual([...possibleValues([r], { magasin: new Set(['CHECY']) }, ['magasin', 'univers', 'segment']).univers], ['RUNNING'])
+  })
+  it('exporte le tableau à plat avec les sous-totaux et le total', () => {
+    const levels = ['magasin', 'univers']
+    const filters = { univers: new Set(['RUNNING', 'CYCLE']) }
+    const p = pivot({ n, n1, levels, filters })
+    const byLabel = path => p.children(path).sort((a, b) => a.label.localeCompare(b.label))
+    const x = pivotExport({ total: p.total, children: byLabel, levels, titre: 'TAUX DE SORTIE S42 2026', filters, labelN: 'S42 2026', labelN1: 'S42 2025' })
+    assert.equal(x.firstRow, 5)
+    assert.deepEqual(x.table[1], ['Filtres : Univers : RUNNING, CYCLE'])
+    assert.deepEqual(x.table[4].slice(0, 3), ['Magasin', 'Univers', 'CANet'])
+    assert.equal(x.table[3][2], 'N · S42 2026')
+    assert.equal(x.table[3][9], 'N-1 · S42 2025')
+    const rows = x.table.slice(5).map(r => r.slice(0, 3))
+    assert.deepEqual(rows, [
+      ['CHECY', 'RUNNING', 600], ['Total CHECY', '', 600],
+      ['LAVAL', 'CYCLE', 2400], ['LAVAL', 'RUNNING', 1200], ['Total LAVAL', '', 3600],
+      ['SARAN', 'RUNNING', 0], ['Total SARAN', '', 0],
+      ['Total (filtré)', '', 4200],
+    ])
+    const laval = x.table.find(r => r[0] === 'Total LAVAL')
+    assert.equal(laval[8], 5 / 12) // taux N : 5 vendus / (5 + 7)
+    assert.equal(laval[9], 1000) // CANet N-1
+    assert.equal(x.formats[2], '#,##0 "€"')
+    assert.equal(x.formats[8], '0.0%')
   })
   it('sans niveau : seulement le total', () => {
     const p = pivot({ n, n1: null, levels: [] })

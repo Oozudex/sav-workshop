@@ -2,7 +2,8 @@
 // choisi (Magasin › Univers › Marque…), filtres sur les valeurs de chaque axe, 15 colonnes : le libellé,
 // puis CANet, MtMrg, Marge %, QtRecep, QtVte, QtStkFin et taux de sortie pour N (à gauche) et pour N-1 (à droite).
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
-import { DIMS, INDICATEURS, classement, dimLabel, dimValues, formatIndicateur as fmt, indicateurs, pivot, possibleValues } from '../../lib/sorties'
+import { downloadWorkbook } from '../../lib/excel'
+import { DIMS, INDICATEURS, classement, dimLabel, dimValues, formatIndicateur as fmt, indicateurs, pivot, pivotExport, possibleValues } from '../../lib/sorties'
 import { RANG_CLS, RangNuancier, rangStyle, rangTexte } from './rang'
 import SortieInfo from './SortieInfo'
 
@@ -140,6 +141,7 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
   const [open, setOpen] = useState(() => new Set())
   const [more, setMore] = useState({})
   const [sort, setSort] = useState({ key: 'caNet', period: 'n', dir: -1 })
+  const [exporting, setExporting] = useState(false)
 
   const values = useMemo(() => Object.fromEntries(DIMS.map(d => [d.key, dimValues([n, n1], d.key)])), [n, n1])
   const possible = useMemo(() => possibleValues([n, n1], filters), [n, n1, filters])
@@ -159,6 +161,16 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
     return (typeof x === 'string' ? x.localeCompare(y, 'fr', { numeric: true }) : x - y) * sort.dir
   })
   const sortBy = (key, period) => setSort(s => (s.key === key && s.period === period ? { ...s, dir: -s.dir } : { key, period, dir: key === 'label' ? 1 : -1 }))
+  // Export Excel : tout le détail à plat (niveaux et filtres choisis, tri de l'écran)
+  async function exportExcel() {
+    setExporting(true)
+    try {
+      const titre = `TAUX DE SORTIE ${labelN}`
+      const x = pivotExport({ total: p.total, children, levels, titre, filters, labelN, labelN1 })
+      const niveaux = levels.length ? ` - ${levels.map(dimLabel).join(', ')}` : ''
+      await downloadWorkbook([{ name: 'Taux de sortie', ...x }], `${titre}${niveaux}`)
+    } finally { setExporting(false) }
+  }
   const arrow = (key, period) => (sort.key === key && sort.period === period ? (sort.dir < 0 ? ' ↓' : ' ↑') : '')
 
   function renderRows(path) {
@@ -226,6 +238,10 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
               {available.map(d => <option key={d.key} value={d.key}>{d.label}</option>)}
             </select>
           )}
+          <button type="button" onClick={exportExcel} disabled={exporting} title="Tout le détail des lignes choisies, avec les filtres, en N et N-1"
+            className={`${CHIP} ml-auto border-gray-200 text-gray-700 bg-white hover:bg-gray-50 dark:border-neutral-700 dark:text-neutral-200 dark:bg-neutral-900 dark:hover:bg-neutral-800 disabled:opacity-50`}>
+            {exporting ? 'Export…' : 'Exporter (Excel)'}
+          </button>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold text-gray-700 dark:text-neutral-200 w-20">Filtres</span>

@@ -328,3 +328,54 @@ export function pivot({ n, n1, levels, filters = {} }) {
     children: path => (kids.get(path) || []).map(withSums),
   }
 }
+
+// ── Export Excel ────────────────────────────────────────────────────────────────
+
+const XLS_FMT = { eur: '#,##0 "€"', pct: '0.0%', qte: '#,##0' }
+// Montants et quantités au centime (sommes de flottants), pourcentages tels quels
+const arrondi = (v, f) => (v == null ? '' : f === 'pct' ? v : Math.round(v * 100) / 100)
+
+// « Univers : RUNNING, CYCLE · Segment : LOISIR » (toutes les valeurs, pour le fichier)
+export function filtresTexte(filters) {
+  const actifs = DIMS.filter(d => filters[d.key]?.size)
+  return actifs.length ? actifs.map(d => `${d.label} : ${[...filters[d.key]].join(', ')}`).join(' · ') : 'aucun'
+}
+
+// Tableau croisé à plat pour Excel : une colonne par niveau (libellés répétés pour pouvoir trier et
+// refiltrer), chaque regroupement suivi de sa ligne « Total LAVAL » (dans sa colonne, comme un TCD Excel
+// en mode tabulaire), puis le total général ; 7 colonnes N
+// puis 7 colonnes N-1 (nombres bruts, formatés par Excel). children(path) : lignes triées comme à l'écran.
+export function pivotExport({ total, children, levels, titre, filters = {}, labelN, labelN1 }) {
+  const L = Math.max(1, levels.length)
+  const K = INDICATEURS.length
+  const vals = s => { const v = indicateurs(s); return INDICATEURS.map(c => arrondi(v[c.key], c.fmt)) }
+  const line = (labels, r) => [...labels, ...Array(L - labels.length).fill(''), ...vals(r.n), ...vals(r.n1)]
+  const rows = []
+  const walk = (path, labels) => {
+    for (const r of children(path)) {
+      const l = [...labels, r.label]
+      if (r.depth < levels.length - 1) {
+        walk(r.path, l)
+        rows.push(line([...labels, `Total ${r.label}`], r))
+      } else rows.push(line(l, r))
+    }
+  }
+  if (levels.length) walk('', [])
+  rows.push(line([Object.keys(filters).some(k => filters[k]?.size) ? 'Total (filtré)' : 'Total'], total))
+  const head = [
+    [titre],
+    [`Filtres : ${filtresTexte(filters)}`],
+    [],
+    [...Array(L).fill(''), `N · ${labelN}`, ...Array(K - 1).fill(''), `N-1 · ${labelN1}`, ...Array(K - 1).fill('')],
+    [...(levels.length ? levels.map(dimLabel) : ['']), ...INDICATEURS.map(c => c.label), ...INDICATEURS.map(c => c.label)],
+  ]
+  const formats = {}
+  INDICATEURS.forEach((c, k) => { formats[L + k] = XLS_FMT[c.fmt]; formats[L + K + k] = XLS_FMT[c.fmt] })
+  return {
+    table: [...head, ...rows],
+    merges: [{ s: { r: 3, c: L }, e: { r: 3, c: L + K - 1 } }, { s: { r: 3, c: L + K }, e: { r: 3, c: L + 2 * K - 1 } }],
+    formats,
+    firstRow: head.length,
+    widthFrom: head.length - 1,
+  }
+}

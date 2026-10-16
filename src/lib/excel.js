@@ -31,15 +31,16 @@ export async function readSheetWithFills(file) {
 
 // Crée un classeur (une feuille par entrée { name, table }) et le télécharge.
 // table : tableau de lignes, la première étant les en-têtes. Facultatif : merges (cellules fusionnées),
-// formats ({ colonne: format Excel } appliqué aux nombres à partir de la ligne firstRow).
+// formats ({ colonne: format Excel } appliqué aux nombres à partir de la ligne firstRow), widthFrom
+// (largeur des colonnes calculée à partir de cette ligne, pour ne pas compter un titre au-dessus).
 export async function downloadWorkbook(sheets, fileName) {
   const { utils, writeFile } = await import('xlsx')
   const wb = utils.book_new()
-  for (const { name, table, merges, formats, firstRow = 1 } of sheets) {
+  for (const { name, table, merges, formats, firstRow = 1, widthFrom = 0 } of sheets) {
     const ws = utils.aoa_to_sheet(table)
     const width = Math.max(...table.map(r => r.length))
     ws['!cols'] = Array.from({ length: width }, (_, j) => ({
-      wch: Math.min(60, Math.max(10, ...table.map(r => String(r[j] ?? '').length + 2))),
+      wch: Math.min(60, Math.max(10, ...table.slice(widthFrom).map(r => String(r[j] ?? '').length + 2))),
     }))
     if (merges?.length) ws['!merges'] = merges
     for (const [col, z] of Object.entries(formats || {})) {
