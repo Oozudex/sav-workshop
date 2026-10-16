@@ -30,11 +30,12 @@ export const RAYON_TYPE_LABELS = {
 }
 
 // Autres services d'un acheteur : chacun donne accès aux outils d'un type de rayon
-// (cartes de l'accueil, calendrier, infos et todo de ce rayon). Enregistrés dans users/{uid}.rayons.
+// (cartes de l'accueil, infos de ce rayon). Enregistrés dans users/{uid}.rayons. Calendrier et todo :
+// les acheteurs ont les leurs, personnels.
 export const ACHETEUR_SERVICES = [
   { rayon: 'velo', label: 'Cycle', hint: 'SAV, commandes, transferts, OBUT' },
   { rayon: 'chaussure', label: 'Flocage', hint: 'Commandes de flocage' },
-  { rayon: 'caisse', label: 'Caisse', hint: 'Infos, todo et calendrier caisse' },
+  { rayon: 'caisse', label: 'Caisse', hint: 'Infos de la caisse' },
 ]
 
 // ── Rôles ─────────────────────────────────────────────────────────────────────

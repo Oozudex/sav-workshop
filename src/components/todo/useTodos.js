@@ -1,5 +1,7 @@
 // Todo list d'un rayon d'un magasin : tâches en direct, tâches automatiques (OP, atelier, récurrentes)
 // créées une seule fois, mot du soir, et actions (ajouter, cocher, assigner, supprimer).
+// perso : liste personnelle d'un acheteur ou de la direction (users/{uid}/todos_perso), avec ses
+// tâches récurrentes, sans tâches automatiques des magasins ni mot du soir.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   addDoc, arrayUnion, collection, deleteDoc, doc, getDocs, onSnapshot, query, runTransaction, serverTimestamp,
@@ -9,7 +11,7 @@ import { db } from '../../lib/firebase'
 import { useAuth } from '../../store/useAuth'
 import { currentStatusSince } from '../../lib/ticketStats'
 import {
-  HISTORIQUE_JOURS, MOT_COLLECTION, RECURRENCE_COLLECTION, TODO_COLLECTION, addDays, atelierTodoSpecs, autoObsolete,
+  HISTORIQUE_JOURS, MOT_COLLECTION, RECURRENCE_COLLECTION, RECURRENCE_PERSO_COLLECTION, TODO_COLLECTION, TODO_PERSO_COLLECTION, addDays, atelierTodoSpecs, autoObsolete,
   baliseTodoSpecs, opTodoSpecs, recurrenceSpecs, toMs, transfertTodoSpecs, ymd,
 } from '../../lib/todos'
 import { TRANSFER_ACTIVE_STATUSES } from '../../lib/transferts'
@@ -17,8 +19,9 @@ import { BALISE_TRANSFERT_COLLECTION, DEMANDE_ACTIVES } from '../../lib/balises'
 
 export const motDocId = (magasinId, rayon) => `${magasinId}_${rayon}`
 
-export function useTodos(magasinId, rayon) {
+export function useTodos(magasinId, rayon, { perso = false } = {}) {
   const user = useAuth(s => s.user)
+  const uid = user?.uid
   const today = ymd(new Date())
   const [todos, setTodos] = useState(null)
   const [recurrences, setRecurrences] = useState(null)
@@ -28,12 +31,29 @@ export function useTodos(magasinId, rayon) {
   const [transferts, setTransferts] = useState(null)
   const [balises, setBalises] = useState(null)
   const [error, setError] = useState(false)
-  const ready = !!magasinId && !!rayon
+  const ready = perso ? !!uid : !!magasinId && !!rayon
+  const magasin = ready && !perso // liste d'un rayon : tâches automatiques et mot du soir
+
+  // Emplacement des documents : liste du rayon, ou liste personnelle du compte
+  const todosCol = perso ? (uid ? collection(db, 'users', uid, TODO_PERSO_COLLECTION) : null) : collection(db, TODO_COLLECTION)
+  const recurrencesCol = perso ? (uid ? collection(db, 'users', uid, RECURRENCE_PERSO_COLLECTION) : null) : collection(db, RECURRENCE_COLLECTION)
+  const todoRef = id => doc(todosCol, id)
+  const recurrenceRef = id => doc(recurrencesCol, id)
+  // Champs qui rangent un document dans la liste du rayon
+  const portee = perso ? {} : { magasinId, rayon }
 
   useEffect(() => {
     setTodos(null); setRecurrences(null); setMot(undefined)
     if (!ready) return
     const fail = () => setError(true)
+    if (perso) {
+      const unsubs = [
+        onSnapshot(collection(db, 'users', uid, TODO_PERSO_COLLECTION), s => setTodos(s.docs.map(d => ({ id: d.id, ...d.data() }))), fail),
+        onSnapshot(collection(db, 'users', uid, RECURRENCE_PERSO_COLLECTION), s => setRecurrences(s.docs.map(d => ({ id: d.id, ...d.data() }))), fail),
+      ]
+      setMot(null)
+      return () => unsubs.forEach(u => u())
+    }
     const scope = c => query(collection(db, c), where('magasinId', '==', magasinId), where('rayon', '==', rayon))
     const unsubs = [
       onSnapshot(scope(TODO_COLLECTION), s => setTodos(s.docs.map(d => ({ id: d.id, ...d.data() }))), fail),
@@ -41,39 +61,39 @@ export function useTodos(magasinId, rayon) {
       onSnapshot(doc(db, MOT_COLLECTION, motDocId(magasinId, rayon)), s => setMot(s.exists() ? s.data() : null), fail),
     ]
     return () => unsubs.forEach(u => u())
-  }, [ready, magasinId, rayon])
+  }, [ready, perso, uid, magasinId, rayon])
 
   // OP en cours ou à venir (et terminées depuis peu) : tâches de mise en place et de fin
   useEffect(() => {
-    if (!ready) return
+    if (!magasin) { setOps([]); return }
     return onSnapshot(query(collection(db, 'op_commerciales'), where('dateFin', '>=', addDays(today, -7))),
       s => setOps(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setOps([]))
-  }, [ready, today])
+  }, [magasin, today])
 
   // Atelier (rayon vélo) : vélos prêts à rendre, pour la relance des clients
   useEffect(() => {
-    if (!ready || rayon !== 'velo') { setTickets([]); return }
+    if (!magasin || rayon !== 'velo') { setTickets([]); return }
     getDocs(query(collection(db, 'tickets'), where('magasinId', '==', magasinId), where('status', '==', 'Ready')))
       .then(s => setTickets(s.docs.map(d => {
         const t = { id: d.id, ...d.data() }
         return { id: t.id, ticketNumber: t.ticketNumber, status: t.status, readySince: currentStatusSince(t) }
       })))
       .catch(() => setTickets([]))
-  }, [ready, magasinId, rayon])
+  }, [magasin, magasinId, rayon])
 
   // Transferts de vélos (rayon vélo) : ce que le magasin doit faire
   useEffect(() => {
-    if (!ready || rayon !== 'velo') { setTransferts([]); return }
+    if (!magasin || rayon !== 'velo') { setTransferts([]); return }
     return onSnapshot(query(collection(db, 'transferts'), where('status', 'in', TRANSFER_ACTIVE_STATUSES)),
       s => setTransferts(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setTransferts([]))
-  }, [ready, rayon])
+  }, [magasin, rayon])
 
   // Demandes de balises de diagnostic (rayon vélo) : ce que le magasin doit faire
   useEffect(() => {
-    if (!ready || rayon !== 'velo') { setBalises([]); return }
+    if (!magasin || rayon !== 'velo') { setBalises([]); return }
     return onSnapshot(query(collection(db, BALISE_TRANSFERT_COLLECTION), where('status', 'in', DEMANDE_ACTIVES)),
       s => setBalises(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setBalises([]))
-  }, [ready, rayon])
+  }, [magasin, rayon])
 
   // Tâches automatiques attendues aujourd'hui
   const specs = useMemo(() => (ops && tickets && transferts && balises && recurrences ? [
@@ -99,42 +119,43 @@ export function useTodos(magasinId, rayon) {
     syncing.current = true
     Promise.all([
       ...aCreer.map(s => runTransaction(db, async tx => {
-        const ref = doc(db, TODO_COLLECTION, s.id)
+        const ref = todoRef(s.id)
         if ((await tx.get(ref)).exists()) return // déjà créée par un collègue
         tx.set(ref, {
-          magasinId, rayon, titre: s.titre, assigneA: s.assigneA || null, echeance: s.echeance || null, auto: s.auto,
+          ...portee, titre: s.titre, assigneA: s.assigneA || null, echeance: s.echeance || null, auto: s.auto,
           fait: false, faitPar: null, faitAt: null, createdAt: serverTimestamp(), createdBy: 'auto',
         })
       })),
-      ...[...aRetirer, ...vieilles].map(t => deleteDoc(doc(db, TODO_COLLECTION, t.id))),
+      ...[...aRetirer, ...vieilles].map(t => deleteDoc(todoRef(t.id))),
     ]).catch(() => {}).finally(() => { syncing.current = false })
-  }, [specs, todos, magasinId, rayon])
+  }, [specs, todos, magasinId, rayon, perso, uid]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Actions ──
   const actions = useMemo(() => ({
-    add: (titre, assigneA = null) => addDoc(collection(db, TODO_COLLECTION), {
-      magasinId, rayon, titre: titre.trim(), assigneA: assigneA || null, echeance: null, auto: null,
-      fait: false, faitPar: null, faitAt: null, createdAt: serverTimestamp(), createdBy: user?.uid || null,
+    // echeance : date facultative ('YYYY-MM-DD')
+    add: (titre, { assigneA = null, echeance = null } = {}) => addDoc(todosCol, {
+      ...portee, titre: titre.trim(), assigneA: assigneA || null, echeance: echeance || null, auto: null,
+      fait: false, faitPar: null, faitAt: null, createdAt: serverTimestamp(), createdBy: uid || null,
     }),
     // faitPar : qui l'a fait (choisi en cochant), sinon la personne assignée
-    toggle: (t, faitPar = null) => updateDoc(doc(db, TODO_COLLECTION, t.id), t.fait
+    toggle: (t, faitPar = null) => updateDoc(todoRef(t.id), t.fait
       ? { fait: false, faitPar: null, faitAt: null }
       : { fait: true, faitPar: faitPar || t.assigneA || null, faitAt: serverTimestamp() }),
-    assign: (t, nom) => updateDoc(doc(db, TODO_COLLECTION, t.id), { assigneA: nom || null }),
-    rename: (t, titre) => updateDoc(doc(db, TODO_COLLECTION, t.id), { titre: titre.trim() }),
-    remove: t => deleteDoc(doc(db, TODO_COLLECTION, t.id)),
-    addRecurrence: ({ titre, jours, assigneA }) => addDoc(collection(db, RECURRENCE_COLLECTION), {
-      magasinId, rayon, titre: titre.trim(), jours, assigneA: assigneA || null, actif: true,
-      createdAt: serverTimestamp(), createdBy: user?.uid || null,
+    assign: (t, nom) => updateDoc(todoRef(t.id), { assigneA: nom || null }),
+    rename: (t, titre) => updateDoc(todoRef(t.id), { titre: titre.trim() }),
+    remove: t => deleteDoc(todoRef(t.id)),
+    addRecurrence: ({ titre, jours, assigneA }) => addDoc(recurrencesCol, {
+      ...portee, titre: titre.trim(), jours, assigneA: assigneA || null, actif: true,
+      createdAt: serverTimestamp(), createdBy: uid || null,
     }),
-    toggleRecurrence: r => updateDoc(doc(db, RECURRENCE_COLLECTION, r.id), { actif: r.actif === false }),
-    removeRecurrence: r => deleteDoc(doc(db, RECURRENCE_COLLECTION, r.id)),
+    toggleRecurrence: r => updateDoc(recurrenceRef(r.id), { actif: r.actif === false }),
+    removeRecurrence: r => deleteDoc(recurrenceRef(r.id)),
     saveMot: texte => setDoc(doc(db, MOT_COLLECTION, motDocId(magasinId, rayon)), {
-      magasinId, rayon, texte: texte.trim(), at: serverTimestamp(), vuPar: [], createdBy: user?.uid || null,
+      magasinId, rayon, texte: texte.trim(), at: serverTimestamp(), vuPar: [], createdBy: uid || null,
     }),
     // Lu par un collègue : le mot disparaît (vuPar non vide)
-    motVu: () => updateDoc(doc(db, MOT_COLLECTION, motDocId(magasinId, rayon)), { vuPar: arrayUnion(user?.uid || 'lu') }),
-  }), [magasinId, rayon, user?.uid])
+    motVu: () => updateDoc(doc(db, MOT_COLLECTION, motDocId(magasinId, rayon)), { vuPar: arrayUnion(uid || 'lu') }),
+  }), [magasinId, rayon, perso, uid]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     todos: todos || [], recurrences: recurrences || [], mot: mot ?? null, today,

@@ -298,9 +298,11 @@ service cloud.firestore {
     }
 
     /* ── Todo list, tâches récurrentes et mot du soir (par rayon d'un magasin) ── */
-    // Un rayon gère sa liste ; le directeur toutes celles de son magasin ; acheteurs et direction toutes.
+    // Un rayon gère sa liste ; le directeur toutes celles de son magasin ; les administrateurs toutes.
+    // Acheteurs et direction ont leur propre liste (users/{uid}/todos_perso) et ne voient pas celles
+    // des magasins.
     function canTodo(data) {
-      return isGlobal() || (isLocalUser() && data.get('magasinId', null) == magasinId() &&
+      return isAdmin() || (isLocalUser() && data.get('magasinId', null) == magasinId() &&
         (isDirMag() || role() == data.get('rayon', null)));
     }
     match /todos/{todoId} {
@@ -323,6 +325,15 @@ service cloud.firestore {
       allow delete: if isSignedIn() && canTodo(resource.data);
     }
 
+    /* ── Todo list personnelle (acheteurs, direction) ─────────────────── */
+    // Visible de son seul propriétaire ; supprimée avec le compte (Cloud Function nettoyageNocturne).
+    match /users/{uid}/todos_perso/{todoId} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+    }
+    match /users/{uid}/recurrences_perso/{recId} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+    }
+
     /* ── Historique d'impression des ILV (par compte) ───────────────────── */
     // Chaque compte ne voit que ses envois ; seule la date d'impression peut changer ensuite.
     match /ilv_impressions/{impressionId} {
@@ -336,26 +347,72 @@ service cloud.firestore {
     }
 
     /* ── Calendrier ─────────────────────────────────────────────────────── */
+    // Un calendrier par rayon de magasin (rayonType) : le rayon ne voit que le sien, le directeur tout
+    // son magasin. Acheteurs et direction : calendrier personnel (magasinId null), sans accès à ceux des
+    // magasins ; leurs réunions peuvent inviter des rayons (cibles : « magasin » et « magasin_rayon »),
+    // qui les voient en lecture seule (invitation : true). Les administrateurs voient et gèrent aussi tous
+    // les calendriers des magasins, comme leur directeur, et voient les invitations.
+    // Rôle et magasin du compte lus une seule fois par requête (limite de 1 000 expressions évaluées).
+    function estGlobal(r) { return r == 'acheteur' || r in directionRoles(); }
+    // Calendrier d'un magasin que le compte gère : le sien pour le directeur, tous pour l'administrateur
+    function gereMagasin(r, mag, d) {
+      return (r == 'directeurmag' && mag != null && d.get('magasinId', null) == mag) ||
+        (r == 'admin' && d.get('magasinId', null) is string);
+    }
+    function calendrierDuRayon(r, mag, d) {
+      return gereMagasin(r, mag, d) ||
+        (r in rayonRoles() && mag != null && d.get('magasinId', null) == mag && d.get('rayonType', null) == r);
+    }
+    function lireEvenement(d) {
+      let r = role();
+      let mag = magasinId();
+      return d.get('createdBy', null) == request.auth.uid || calendrierDuRayon(r, mag, d) ||
+        // Invitations : le directeur pour son magasin, le rayon pour le sien, l'administrateur toutes
+        (r == 'directeurmag' && mag != null && mag in d.get('cibles', [])) ||
+        (r in rayonRoles() && mag != null && (mag + '_' + r) in d.get('cibles', [])) ||
+        (r == 'admin' && d.get('invitation', false) == true) ||
+        // Réimport du planning Tamigo depuis la page RH (remplace les créneaux des mêmes jours)
+        (estGlobal(r) && d.get('type', null) == 'planning_shift');
+    }
+    function creerEvenement(d) {
+      let r = role();
+      let mag = magasinId();
+      return d.get('createdBy', null) == request.auth.uid && (
+        // Calendrier personnel : RDV perso et réunions, avec invitations éventuelles
+        (estGlobal(r) && d.get('magasinId', null) == null && d.get('type', null) in ['rdv_perso', 'teams'] &&
+          d.get('cibles', []) is list && d.get('cibles', []).size() <= 1000) ||
+        (estGlobal(r) && d.get('type', null) == 'planning_shift' && d.get('magasinId', null) is string &&
+          d.get('rayonType', null) in rayonRoles() && !('cibles' in d)) ||
+        // Calendriers des magasins : jamais d'invitation
+        (!('cibles' in d) && calendrierDuRayon(r, mag, d))
+      );
+    }
+    function modifierEvenement(avant, apres) {
+      let r = role();
+      let mag = magasinId();
+      let auteur = avant.get('createdBy', null) == request.auth.uid;
+      // Sans changer de calendrier (le directeur et l'administrateur peuvent changer le rayon d'un RDV)
+      let memeCalendrier = apres.get('magasinId', null) == avant.get('magasinId', null) &&
+        apres.get('cibles', null) == avant.get('cibles', null) &&
+        (r in ['directeurmag', 'admin'] || apres.get('rayonType', null) == avant.get('rayonType', null));
+      return (estGlobal(r) && auteur && apres.get('createdBy', null) == request.auth.uid &&
+          avant.get('magasinId', null) == null && apres.get('magasinId', null) == null) ||
+        ((auteur || gereMagasin(r, mag, avant)) && memeCalendrier) ||
+        // Pointage d'un RDV client (venu / absent, reprogrammation) par le rayon ou le directeur
+        (calendrierDuRayon(r, mag, avant) && avant.get('type', null) == 'rdv_client' &&
+          apres.diff(avant).affectedKeys().hasOnly(['presence', 'presenceAt', 'presenceBy', 'rescheduledTo', 'updatedAt']));
+    }
+    function supprimerEvenement(d) {
+      let r = role();
+      let mag = magasinId();
+      return d.get('createdBy', null) == request.auth.uid || gereMagasin(r, mag, d) ||
+        (d.get('type', null) == 'planning_shift' && (estGlobal(r) || calendrierDuRayon(r, mag, d)));
+    }
     match /calendar_events/{eventId} {
-      allow read: if isSignedIn() && (
-        isGlobal() || (isLocalUser() && inMyStore(resource.data)) || isCreator(resource.data)
-      );
-      allow create: if isSignedIn() && isCreator(request.resource.data) && (
-        isGlobal() ||
-        (isLocalUser() && inMyStoreNew())
-      );
-      allow update: if isSignedIn() && (
-        isGlobal() ||
-        ((isDirMag() && inMyStore(resource.data)) || isCreator(resource.data)) &&
-          request.resource.data.get('magasinId', null) == resource.data.get('magasinId', null) ||
-        // Pointage d'un RDV client (venu / absent, reprogrammation) par tout compte du magasin
-        (isLocalUser() && inMyStore(resource.data) && resource.data.get('type', null) == 'rdv_client' &&
-          request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['presence', 'presenceAt', 'presenceBy', 'rescheduledTo', 'updatedAt']))
-      );
-      allow delete: if isSignedIn() && (
-        isGlobal() || (isDirMag() && inMyStore(resource.data)) || isCreator(resource.data)
-      );
+      allow read:   if isSignedIn() && lireEvenement(resource.data);
+      allow create: if isSignedIn() && creerEvenement(request.resource.data);
+      allow update: if isSignedIn() && modifierEvenement(resource.data, request.resource.data);
+      allow delete: if isSignedIn() && supprimerEvenement(resource.data);
     }
 
     /* ── Flocage ─────────────────────────────────────────────────────────── */

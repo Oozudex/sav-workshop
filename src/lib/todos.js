@@ -1,12 +1,21 @@
 // Todo list des rayons : tâches ajoutées par l'équipe, tâches automatiques (OP, atelier),
-// tâches récurrentes et mot du soir. Fonctions pures (tests/unit/todos.test.mjs).
+// tâches récurrentes et mot du soir ; liste personnelle des acheteurs et de la direction.
+// Fonctions pures (tests/unit/todos.test.mjs).
 import { opRayons } from './opSearch.js'
+import { GLOBAL_ROLES } from './constants.js'
 import { transferNextStep, transferSides } from './transferts.js'
 import { etapeDemande } from './balises.js'
 
 export const TODO_COLLECTION = 'todos'
 export const RECURRENCE_COLLECTION = 'todo_recurrences'
 export const MOT_COLLECTION = 'mots_du_soir'
+// Liste personnelle : sous-collections de users/{uid}
+export const TODO_PERSO_COLLECTION = 'todos_perso'
+export const RECURRENCE_PERSO_COLLECTION = 'recurrences_perso'
+
+// Acheteurs, direction générale et administrateurs : liste personnelle (ils travaillent seuls) ;
+// l'administrateur peut aussi regarder les listes des équipes (equipes)
+export const todoPerso = (profile, { equipes = false } = {}) => GLOBAL_ROLES.includes(profile?.role) && !(equipes && profile?.isAdmin)
 
 // Délais
 export const RELANCE_PRET_JOURS = 7         // vélo prêt à rendre depuis 7 jours : relancer le client

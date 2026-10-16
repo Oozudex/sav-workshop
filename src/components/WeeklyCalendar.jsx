@@ -7,13 +7,16 @@ import {
   collection, onSnapshot, query, where, orderBy,
   addDoc, updateDoc, deleteDoc, doc, serverTimestamp,
 } from 'firebase/firestore'
-import { GLOBAL_ROLES, RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
+import { RAYON_TYPES, RAYON_TYPE_LABELS } from '../lib/constants'
 import { safeUrl } from '../lib/security'
-import { isOpVisibleFor } from '../lib/opSearch'
+import { isOpVisibleFor, opRayons } from '../lib/opSearch'
 import {
-  absencesFor, canMarkPresence, formatPhone, opWeekBars, phoneDigits, rdvClientErrors, rdvToCheck, reschedulePrefill, ticketPrefill,
+  absencesFor, canMarkPresence, ciblesInvitation, cleRayon, dansRayon, evenementPerso, formatPhone, fusionEvenements,
+  modeCalendrier, opWeekBars, phoneDigits, rdvClientErrors, rdvToCheck, reschedulePrefill, ticketPrefill,
 } from '../lib/calendarEvents'
 import CalendarSettings from './CalendarSettings'
+import VueEquipesToggle from './VueEquipesToggle'
+import { useVueEquipes } from '../lib/useVueEquipes'
 import Portal from './Portal'
 import Dialog from './Dialog'
 import RequiredHint from './RequiredHint'
@@ -175,18 +178,14 @@ function PresenceBlock({ event, onPresence, onReschedule }) {
   )
 }
 
-function EventModal({ event, prefill, defaultDate, onClose, onSave, onDelete, onTransform, onPresence, onReschedule, absentRdvs = [], canEdit, isGlobal, profile }) {
+// mode : 'perso' (réunions avec invitations), 'magasin' (le directeur choisit le rayon du RDV client)
+// ou 'rayon' (RDV client du rayon du compte)
+function EventModal({ event, prefill, defaultDate, onClose, onSave, onDelete, onTransform, onPresence, onReschedule, absentRdvs = [], canEdit, mode, creatableTypes, rayonsChoix = [], defaultRayon = '' }) {
   const isNew = !event?.id
   const today = toDateStr(new Date())
   const showPresence = !isNew && onPresence && canMarkPresence(event, today)
   const isTicket = event?.type === 'ticket_rendu'
-
-  const creatableTypes = useMemo(() => {
-    const types = ['rdv_client']
-    if (isGlobal) types.push('op_commerciale', 'teams', 'rdv_perso')
-    else if (profile?.role === 'directeurmag') types.push('rdv_perso')
-    return types
-  }, [isGlobal, profile])
+  const isPersonal = mode === 'perso'
 
   const [form, setForm] = useState({
     title: event?.title || '',
@@ -201,7 +200,7 @@ function EventModal({ event, prefill, defaultDate, onClose, onSave, onDelete, on
     description: event?.description || prefill?.description || '',
     rescheduledFrom: event?.rescheduledFrom || prefill?.rescheduledFrom || null,
     teamsLink: event?.teamsLink || '',
-    rayonType: event?.rayonType || prefill?.rayonType || (RAYON_TYPES.includes(profile?.role) ? profile.role : ''),
+    rayonType: event?.rayonType || prefill?.rayonType || defaultRayon,
     teamsRayons: event?.teamsRayons || [],
     teamsMagasins: event?.teamsMagasins || [],
   })
@@ -213,16 +212,19 @@ function EventModal({ event, prefill, defaultDate, onClose, onSave, onDelete, on
   const errors = {
     ...(isRdvClient ? rdvClientErrors(form) : (form.title.trim() ? {} : { title: 'Le titre est obligatoire.' })),
     ...(form.date ? {} : { date: prefill ? 'Choisissez la nouvelle date du RDV.' : 'Choisissez une date.' }),
+    // Directeur : chaque RDV client va dans le calendrier d'un rayon
+    ...(isRdvClient && mode === 'magasin' && !form.rayonType ? { rayonType: 'Choisissez le rayon du RDV.' } : {}),
   }
   // Absences récentes du même numéro (RDV manqués)
   const absences = isRdvClient ? absencesFor(absentRdvs, form.customerPhone, event?.id) : []
   const shown = tried ? errors : {}
 
+  // Réunion du calendrier personnel : magasins à inviter
   useEffect(() => {
-    if (form.type !== 'teams') return
+    if (!isPersonal || form.type !== 'teams') return
     const q = query(collection(db, 'magasins'), orderBy('nom', 'asc'))
     return onSnapshot(q, snap => setMagasins(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
-  }, [form.type])
+  }, [isPersonal, form.type])
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })) }
 
@@ -279,6 +281,9 @@ function EventModal({ event, prefill, defaultDate, onClose, onSave, onDelete, on
           <div className="p-5 space-y-3">
             {showPresence && <PresenceBlock event={event} onPresence={onPresence} onReschedule={onReschedule} />}
             {event.rescheduledFrom && <p className="text-[11px] text-gray-500 dark:text-neutral-400">Reprogrammé : le client n’était pas venu au RDV du {fmtDateLong(event.rescheduledFrom)}.</p>}
+            {event.cibles?.length > 0 && !isPersonal && (
+              <p className="text-[11px] text-gray-500 dark:text-neutral-400">Invitation{event.organisateur ? ` de ${event.organisateur}` : ''}.</p>
+            )}
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div><span className="text-gray-500 dark:text-neutral-400">Date</span><p className="font-medium text-gray-900 dark:text-white mt-0.5">{fmtDateLong(event.date)}{event.startTime && ` · ${event.startTime}${event.endTime ? ` – ${event.endTime}` : ''}`}</p></div>
               {event.rayonType && <div><span className="text-gray-500 dark:text-neutral-400">Rayon</span><p className="font-medium text-gray-900 dark:text-white mt-0.5">{RAYON_TYPE_LABELS[event.rayonType] || event.rayonType}</p></div>}
@@ -378,59 +383,41 @@ function EventModal({ event, prefill, defaultDate, onClose, onSave, onDelete, on
               </Field>
             </div>
 
-            {/* Rayon (op_commerciale uniquement, si global) */}
-            {form.type === 'op_commerciale' && isGlobal && (
-              <Field label="Rayon concerné">
-                <select className="Input" value={form.rayonType} onChange={e => set('rayonType', e.target.value)}>
-                  <option value="">Tous les rayons</option>
-                  {RAYON_TYPES.map(t => <option key={t} value={t}>{RAYON_TYPE_LABELS[t]}</option>)}
+            {/* Rayon du RDV client (directeur : un calendrier par rayon) */}
+            {isRdvClient && mode === 'magasin' && (
+              <Field label="Rayon" required error={shown.rayonType}>
+                <select className={`Input ${shown.rayonType ? INVALID : ''}`} value={form.rayonType} onChange={e => set('rayonType', e.target.value)}>
+                  <option value="">Choisir…</option>
+                  {rayonsChoix.map(t => <option key={t} value={t}>{RAYON_TYPE_LABELS[t] || t}</option>)}
+                  {form.rayonType && !rayonsChoix.includes(form.rayonType) && <option value={form.rayonType}>{RAYON_TYPE_LABELS[form.rayonType] || form.rayonType}</option>}
                 </select>
               </Field>
             )}
 
-            {/* Lien Teams + ciblage rayon/magasin */}
+            {/* Lien Teams + invitations (calendrier personnel) */}
             {form.type === 'teams' && (
               <div className="space-y-3">
                 <Field label="Lien Teams">
                   <input type="url" className="Input" placeholder="https://teams.microsoft.com/…" value={form.teamsLink} onChange={e => set('teamsLink', e.target.value)} />
                 </Field>
-                <div className="space-y-1.5">
-                  <span className={LABEL}>Rayons concernés</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    <button type="button"
-                      onClick={() => set('teamsRayons', [])}
-                      className={['h-7 px-2.5 rounded-lg text-[11px] font-semibold border transition-colors',
-                        form.teamsRayons.length === 0 ? 'bg-gray-900 text-white dark:bg-white dark:text-black border-transparent' : 'text-gray-500 border-gray-200 dark:border-neutral-700 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800',
-                      ].join(' ')}>
-                      Tous
-                    </button>
-                    {RAYON_TYPES.map(r => {
-                      const active = form.teamsRayons.includes(r)
-                      return (
-                        <button key={r} type="button"
-                          onClick={() => set('teamsRayons', active ? form.teamsRayons.filter(x => x !== r) : [...form.teamsRayons, r])}
-                          className={['h-7 px-2.5 rounded-lg text-[11px] font-semibold border transition-colors',
-                            active ? 'bg-gray-900 text-white dark:bg-white dark:text-black border-transparent' : 'text-gray-500 border-gray-200 dark:border-neutral-700 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800',
-                          ].join(' ')}>
-                          {RAYON_TYPE_LABELS[r]}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-                {magasins.length > 0 && (
+                {isPersonal && magasins.length > 0 && (
                   <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className={LABEL}>Magasins concernés</span>
-                      <span className="text-[11px] text-gray-500 dark:text-neutral-400">
-                        {form.teamsMagasins.length === 0 ? 'Tous' : `${form.teamsMagasins.length} sélectionné${form.teamsMagasins.length > 1 ? 's' : ''}`}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={LABEL}>Magasins invités</span>
+                      <span className="flex items-center gap-2 text-[11px]">
+                        <button type="button" onClick={() => set('teamsMagasins', magasins.map(m => m.id))}
+                          className="font-semibold text-gray-600 hover:underline dark:text-neutral-300">Tous</button>
+                        {form.teamsMagasins.length > 0 && (
+                          <button type="button" onClick={() => set('teamsMagasins', [])}
+                            className="font-semibold text-gray-600 hover:underline dark:text-neutral-300">Aucun</button>
+                        )}
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-1.5">
                       {magasins.map(m => {
                         const active = form.teamsMagasins.includes(m.id)
                         return (
-                          <button key={m.id} type="button"
+                          <button key={m.id} type="button" aria-pressed={active}
                             onClick={() => set('teamsMagasins', active ? form.teamsMagasins.filter(x => x !== m.id) : [...form.teamsMagasins, m.id])}
                             className={['flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs transition-colors text-left',
                               active ? 'border-gray-900 bg-gray-50 dark:border-white dark:bg-neutral-800 font-semibold text-gray-900 dark:text-white' : 'border-gray-200 dark:border-neutral-700 text-gray-500 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800',
@@ -441,6 +428,37 @@ function EventModal({ event, prefill, defaultDate, onClose, onSave, onDelete, on
                               {active && <svg aria-hidden="true" className="h-2 w-2 text-white dark:text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
                             </span>
                             {m.nom}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <p className="text-[11px] text-gray-500 dark:text-neutral-400">
+                      {form.teamsMagasins.length === 0
+                        ? 'Aucun magasin : la réunion reste dans ton calendrier.'
+                        : 'La réunion apparaît dans le calendrier des rayons invités et chez le directeur du magasin.'}
+                    </p>
+                  </div>
+                )}
+                {isPersonal && form.teamsMagasins.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className={LABEL}>Rayons invités</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button type="button" aria-pressed={form.teamsRayons.length === 0}
+                        onClick={() => set('teamsRayons', [])}
+                        className={['h-7 px-2.5 rounded-lg text-[11px] font-semibold border transition-colors',
+                          form.teamsRayons.length === 0 ? 'bg-gray-900 text-white dark:bg-white dark:text-black border-transparent' : 'text-gray-500 border-gray-200 dark:border-neutral-700 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800',
+                        ].join(' ')}>
+                        Tous
+                      </button>
+                      {RAYON_TYPES.map(r => {
+                        const active = form.teamsRayons.includes(r)
+                        return (
+                          <button key={r} type="button" aria-pressed={active}
+                            onClick={() => set('teamsRayons', active ? form.teamsRayons.filter(x => x !== r) : [...form.teamsRayons, r])}
+                            className={['h-7 px-2.5 rounded-lg text-[11px] font-semibold border transition-colors',
+                              active ? 'bg-gray-900 text-white dark:bg-white dark:text-black border-transparent' : 'text-gray-500 border-gray-200 dark:border-neutral-700 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800',
+                            ].join(' ')}>
+                            {RAYON_TYPE_LABELS[r]}
                           </button>
                         )
                       })}
@@ -594,66 +612,84 @@ function LegendItem({ active, onClick, dot, label }) {
 export default function WeeklyCalendar({ magasinId }) {
   const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
   const navigate = useNavigate()
-  const isGlobal = GLOBAL_ROLES.includes(profile?.role)
-  const isRayonRole = RAYON_TYPES.includes(profile?.role)
-  const isChaussure = profile?.role === 'chaussure'
+  // Un calendrier par rayon (le directeur voit tout son magasin) ; acheteurs et direction : calendrier
+  // personnel ; l'administrateur peut aussi regarder les calendriers des équipes du magasin choisi
+  const vueEquipes = useVueEquipes(profile, 'calendrierVue')
+  const mode = modeCalendrier(profile, { equipes: vueEquipes.equipes })
+  const isPersonal = mode === 'perso'
+  const isRayonRole = mode === 'rayon'
+  const rayonFixe = isRayonRole ? profile.role : null
+  const voitAtelier = mode === 'magasin' || rayonFixe === 'velo'
+  const voitFlocage = mode === 'magasin' || rayonFixe === 'chaussure'
 
   const [refDate, setRefDate] = useState(new Date())
-  const [calendarView, setCalendarView] = useState('store') // 'store' | 'personal'
   const [events, setEvents] = useState([])
   const [tickets, setTickets] = useState([])
   const [ops, setOps] = useState([])
   const [flocageEvents, setFlocageEvents] = useState([])
   const [activeFilters, setActiveFilters] = useState(new Set(Object.keys(EVENT_TYPES)))
+  const [rayonFiltre, setRayonFiltre] = useState(null) // directeur : rayon affiché (null : tous)
+  const [rayonsMagasin, setRayonsMagasin] = useState([]) // directeur : rayons du magasin
   const [modal, setModal] = useState(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [rayonSettings, setRayonSettings] = useState({}) // { [rayonType]: { quotas: {...} } }
   const [pendingForm, setPendingForm] = useState(null)
   const [quotaWarning, setQuotaWarning] = useState(null) // { rayonType, quota, count }
-  const [absentRdvs, setAbsentRdvs] = useState([]) // RDV client manqués du magasin (avertissement à la prise de RDV)
+  const [absentRdvs, setAbsentRdvs] = useState([]) // RDV client manqués (avertissement à la prise de RDV)
   const todayStr = toDateStr(new Date())
-
-  const isPersonal = isGlobal && calendarView === 'personal'
 
   const days = useMemo(() => getWeekDays(refDate), [refDate])
 
-  /* Chargement des événements de la semaine */
+  /* Événements de la semaine : calendrier personnel, ou calendrier du rayon (du magasin pour le directeur)
+     et réunions où il est invité */
   useEffect(() => {
-    const start = toDateStr(days[0])
-    const end = toDateStr(days[6])
-    let q
-    if (isPersonal) {
-      q = query(
-        collection(db, 'calendar_events'),
-        where('createdBy', '==', user.uid),
-        where('date', '>=', start),
-        where('date', '<=', end),
-      )
-    } else {
-      if (!magasinId) return
-      q = query(
-        collection(db, 'calendar_events'),
-        where('magasinId', '==', magasinId),
-        where('date', '>=', start),
-        where('date', '<=', end),
-      )
+    const col = collection(db, 'calendar_events')
+    const semaine = [where('date', '>=', toDateStr(days[0])), where('date', '<=', toDateStr(days[6]))]
+    let requetes = []
+    if (isPersonal) requetes = [query(col, where('createdBy', '==', user.uid), ...semaine)]
+    else if (magasinId && mode === 'magasin') {
+      requetes = [
+        query(col, where('magasinId', '==', magasinId), ...semaine),
+        // Administrateur : toutes les invitations de la semaine, triées ci-dessous par magasin
+        profile?.role === 'directeurmag'
+          ? query(col, where('cibles', 'array-contains', magasinId), ...semaine)
+          : query(col, where('invitation', '==', true), ...semaine),
+      ]
+    } else if (magasinId && rayonFixe) {
+      requetes = [
+        query(col, where('magasinId', '==', magasinId), where('rayonType', '==', rayonFixe), ...semaine),
+        query(col, where('cibles', 'array-contains', cleRayon(magasinId, rayonFixe)), ...semaine),
+      ]
     }
-    return onSnapshot(q, snap => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
-  }, [magasinId, isPersonal, user.uid, days[0].getTime()])
+    if (!requetes.length) { setEvents([]); return }
+    const parts = requetes.map(() => [])
+    const duMagasin = ev => !ev.cibles?.length || isPersonal || ev.cibles.includes(rayonFixe ? cleRayon(magasinId, rayonFixe) : magasinId)
+    const unsubs = requetes.map((q, i) => onSnapshot(q,
+      snap => { parts[i] = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(duMagasin); setEvents(fusionEvenements(...parts)) },
+      () => { parts[i] = []; setEvents(fusionEvenements(...parts)) }))
+    return () => unsubs.forEach(u => u())
+  }, [magasinId, mode, isPersonal, rayonFixe, profile?.role, user.uid, days[0].getTime()])
 
-  /* Chargement des OP (standard et animation) qui chevauchent la semaine : affichées en barres */
+  /* Directeur : rayons du magasin (filtre et rayon des RDV client) */
   useEffect(() => {
-    if (isPersonal) { setOps([]); return }
+    if (mode !== 'magasin' || !magasinId) { setRayonsMagasin([]); return }
+    return onSnapshot(collection(db, 'magasins', magasinId, 'rayons'),
+      s => setRayonsMagasin(RAYON_TYPES.filter(t => s.docs.some(d => d.get('type') === t))), () => setRayonsMagasin([]))
+  }, [mode, magasinId])
+
+  /* OP (standard et animation) qui chevauchent la semaine : affichées en barres. Calendrier personnel :
+     celles des rayons de l'acheteur, toutes pour la direction */
+  useEffect(() => {
     const end = toDateStr(days[6])
     const q = query(collection(db, 'op_commerciales'), where('dateFin', '>=', toDateStr(days[0])))
     return onSnapshot(q, snap => setOps(snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
-      .filter(op => op.dateDebut <= end && isOpVisibleFor(op, profile, magasinId)))) // même règle que la page OP
+      .filter(op => op.dateDebut <= end && isOpVisibleFor(op, profile, isPersonal ? null : magasinId)))) // même règle que la page OP
   }, [isPersonal, magasinId, profile, days[0].getTime()])
 
-  /* Chargement des tickets avec dueDate dans la semaine */
+  /* Vélos à rendre dans la semaine (rayon vélo et directeur) */
   useEffect(() => {
-    if (!magasinId || isPersonal || isChaussure) { setTickets([]); return }
+    if (!magasinId || isPersonal || !voitAtelier) { setTickets([]); return }
     const start = toDateStr(days[0])
     const end = toDateStr(days[6])
     const q = query(
@@ -677,12 +713,12 @@ export default function WeeklyCalendar({ magasinId }) {
             ticketId: d.id,
           }
         }))
-    })
-  }, [magasinId, isPersonal, isChaussure, days[0].getTime()])
+    }, () => setTickets([]))
+  }, [magasinId, isPersonal, voitAtelier, days[0].getTime()])
 
-  /* Chargement des flocages */
+  /* Flocages (rayon chaussure et directeur) */
   useEffect(() => {
-    if (!magasinId || isPersonal || !isChaussure) { setFlocageEvents([]); return }
+    if (!magasinId || isPersonal || !voitFlocage) { setFlocageEvents([]); return }
     const start = toDateStr(days[0])
     const end = toDateStr(days[6])
     const q = query(
@@ -707,15 +743,16 @@ export default function WeeklyCalendar({ magasinId }) {
           _opPin: true,
         }
       }))
-    })
-  }, [magasinId, isPersonal, isChaussure, days[0].getTime()])
+    }, () => setFlocageEvents([]))
+  }, [magasinId, isPersonal, voitFlocage, days[0].getTime()])
 
-  /* RDV client manqués du magasin (supprimés un mois après leur date par le nettoyage RGPD) */
+  /* RDV client manqués du rayon, ou du magasin pour le directeur (supprimés un mois après leur date) */
   useEffect(() => {
-    if (!magasinId || isPersonal) { setAbsentRdvs([]); return }
-    const q = query(collection(db, 'calendar_events'), where('magasinId', '==', magasinId), where('presence', '==', 'absent'))
-    return onSnapshot(q, snap => setAbsentRdvs(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => setAbsentRdvs([]))
-  }, [magasinId, isPersonal])
+    if (!magasinId || isPersonal || !mode) { setAbsentRdvs([]); return }
+    const filtres = [where('magasinId', '==', magasinId), ...(rayonFixe ? [where('rayonType', '==', rayonFixe)] : []), where('presence', '==', 'absent')]
+    return onSnapshot(query(collection(db, 'calendar_events'), ...filtres),
+      snap => setAbsentRdvs(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => setAbsentRdvs([]))
+  }, [magasinId, isPersonal, mode, rayonFixe])
 
   /* Chargement des paramètres rayon */
   useEffect(() => {
@@ -727,44 +764,25 @@ export default function WeeklyCalendar({ magasinId }) {
         snap.docs.forEach(d => { next[d.id] = d.data() })
         return next
       })
-    })
+    }, () => {})
   }, [magasinId, isPersonal])
 
-  /* Fusion events + tickets + OPs + flocages, filtrage par rôle */
+  /* Fusion events + tickets + flocages, filtres de la légende et du rayon (directeur) */
   const allEvents = useMemo(() => {
     const merged = [...events, ...tickets, ...flocageEvents]
     return merged.filter(ev => {
       if (!activeFilters.has(ev.type)) return false
-
-      // Planning shifts : filtrage par rayon
-      if (ev.type === 'planning_shift') {
-        if (profile?.role === 'directeurgen') return true
-        if (profile?.role === 'directeurmag') return true
-        if (profile?.role === 'acheteur') return (profile?.rayons || []).includes(ev.rayonType)
-        return ev.rayonType === profile?.role
-      }
-
-      if (isRayonRole) {
-        if (ev.type === 'rdv_client') return ev.rayonType === profile.role
-        if (ev.type === 'op_commerciale') return !ev.rayonType || ev.rayonType === profile.role
-        if (ev.type === 'rdv_perso') return ev.createdBy === user.uid
-        if (ev.type === 'teams') {
-          const rayonOk = !ev.teamsRayons || ev.teamsRayons.includes(profile.role)
-          const magasinOk = !ev.teamsMagasins || ev.teamsMagasins.includes(profile.magasinId)
-          return rayonOk && magasinOk
-        }
-        return true
-      }
-      if (ev.type === 'teams' && profile?.role === 'directeurmag') {
-        return !ev.teamsMagasins || ev.teamsMagasins.includes(profile.magasinId)
-      }
-      return true
+      if (isPersonal) return evenementPerso(ev)
+      return dansRayon(ev, rayonFiltre)
     })
-  }, [events, tickets, flocageEvents, activeFilters, isRayonRole, profile, user])
+  }, [events, tickets, flocageEvents, activeFilters, isPersonal, rayonFiltre])
 
   /* Barres des OP de la semaine (masquées avec le filtre « Op. commerciale ») */
-  const opBars = useMemo(() => (activeFilters.has('op_commerciale') ? opWeekBars(ops, toDateStr(days[0])) : []),
-    [ops, activeFilters, days])
+  const opBars = useMemo(() => {
+    if (!activeFilters.has('op_commerciale')) return []
+    const visibles = rayonFiltre ? ops.filter(op => !opRayons(op).length || opRayons(op).includes(rayonFiltre)) : ops
+    return opWeekBars(visibles, toDateStr(days[0]))
+  }, [ops, activeFilters, rayonFiltre, days])
 
   /* Events groupés par date (hors planning_shift, géré séparément) */
   const byDate = useMemo(() => {
@@ -817,19 +835,17 @@ export default function WeeklyCalendar({ magasinId }) {
 
   /* Types visibles pour les filtres */
   const visibleTypes = useMemo(() => {
-    if (isPersonal) return ['rdv_perso']
-    const perso = isGlobal || profile?.role === 'directeurmag' ? ['rdv_perso'] : []
-    if (isChaussure) return ['rdv_client', 'op_commerciale', 'teams', 'flocage', 'planning_shift']
-    return ['rdv_client', 'op_commerciale', 'teams', ...perso, 'ticket_rendu', 'planning_shift']
-  }, [isPersonal, isGlobal, isChaussure, profile])
+    if (isPersonal) return ['rdv_perso', 'teams', 'op_commerciale']
+    if (mode === 'magasin') return ['rdv_client', 'op_commerciale', 'teams', 'rdv_perso', 'ticket_rendu', 'flocage', 'planning_shift']
+    return ['rdv_client', 'op_commerciale', 'teams', ...(voitAtelier ? ['ticket_rendu'] : []), ...(voitFlocage ? ['flocage'] : []), 'planning_shift']
+  }, [isPersonal, mode, voitAtelier, voitFlocage])
 
   /* Types créables */
   const creatableTypes = useMemo(() => {
-    if (isPersonal) return ['rdv_perso']
-    if (isGlobal) return ['rdv_client', 'op_commerciale', 'teams', 'rdv_perso']
-    if (profile?.role === 'directeurmag') return ['rdv_client', 'rdv_perso']
-    return ['rdv_client']
-  }, [isGlobal, isPersonal, profile])
+    if (isPersonal) return ['rdv_perso', 'teams']
+    if (mode === 'magasin') return ['rdv_client', 'rdv_perso']
+    return mode ? ['rdv_client'] : []
+  }, [isPersonal, mode])
 
   function toggleFilter(type) {
     setActiveFilters(prev => {
@@ -842,8 +858,14 @@ export default function WeeklyCalendar({ magasinId }) {
   function prevWeek() { const d = new Date(refDate); d.setDate(d.getDate() - 7); setRefDate(d) }
   function nextWeek() { const d = new Date(refDate); d.setDate(d.getDate() + 7); setRefDate(d) }
 
+  // Rayon d'un RDV client : celui du compte, ou choisi par le directeur
+  const rayonDuRdv = form => (rayonFixe || form.rayonType || null)
+
   async function actualSave(form) {
     const isRdvClient = form.type === 'rdv_client'
+    const isTeams = form.type === 'teams'
+    // Réunion du calendrier personnel : magasins et rayons invités
+    const invites = isPersonal && isTeams ? form.teamsMagasins : []
     const data = {
       title: isRdvClient ? form.customerName.trim() : form.title.trim(),
       customerName: isRdvClient ? form.customerName.trim() : null,
@@ -853,20 +875,23 @@ export default function WeeklyCalendar({ magasinId }) {
       startTime: form.startTime || null,
       endTime: form.endTime || null,
       description: form.description.trim() || null,
-      teamsLink: form.teamsLink || null,
-      teamsRayons: form.type === 'teams' && form.teamsRayons?.length ? form.teamsRayons : null,
-      teamsMagasins: form.type === 'teams' && form.teamsMagasins?.length ? form.teamsMagasins : null,
-      rayonType: form.type === 'rdv_client'
-        ? (isRayonRole ? profile.role : (form.rayonType || null))
-        : (form.type === 'op_commerciale' ? (form.rayonType || null) : null),
+      teamsLink: isTeams ? form.teamsLink || null : null,
+      teamsMagasins: invites.length ? invites : null,
+      teamsRayons: invites.length && form.teamsRayons?.length ? form.teamsRayons : null,
+      ...(isPersonal ? {
+        cibles: ciblesInvitation(invites, form.teamsRayons || []),
+        invitation: invites.length > 0,
+        organisateur: invites.length ? (profile?.displayName || user.email || null) : null,
+      } : {}),
+      rayonType: isRdvClient ? rayonDuRdv(form) : (modal?.event?.rayonType ?? null),
       magasinId: isPersonal ? null : magasinId,
-      createdBy: user.uid,
     }
     if (modal?.event?.id) {
       await updateDoc(doc(db, 'calendar_events', modal.event.id), { ...data, updatedAt: serverTimestamp() })
     } else {
       await addDoc(collection(db, 'calendar_events'), {
         ...data,
+        createdBy: user.uid,
         ...(isRdvClient && form.rescheduledFrom ? { rescheduledFrom: form.rescheduledFrom } : {}),
         createdAt: serverTimestamp(),
       })
@@ -893,7 +918,7 @@ export default function WeeklyCalendar({ magasinId }) {
   async function handleSave(form) {
     // Vérification quota pour les nouveaux RDV client
     if (!modal?.event?.id && form.type === 'rdv_client') {
-      const rayonType = isRayonRole ? profile.role : (form.rayonType || null)
+      const rayonType = rayonDuRdv(form)
       if (rayonType) {
         const dayKey = getDayKey(form.date)
         const quota = rayonSettings[rayonType]?.quotas?.[dayKey]
@@ -943,9 +968,12 @@ export default function WeeklyCalendar({ magasinId }) {
   }
 
   function canEditEvent(ev) {
-    if (!ev || ev.type === 'ticket_rendu' || ev.type === 'planning_shift') return false
-    if (isGlobal) return true
-    if (profile?.role === 'directeurmag') return true
+    if (!ev || ['ticket_rendu', 'planning_shift', 'flocage'].includes(ev.type)) return false
+    // Calendrier personnel : ses événements (pas ceux créés autrefois dans un magasin)
+    if (isPersonal) return ev.createdBy === user.uid && !ev.magasinId
+    // Réunion où le magasin est invité : lecture seule
+    if (ev.cibles?.length) return false
+    if (mode === 'magasin') return true
     return ev.createdBy === user.uid
   }
 
@@ -996,7 +1024,20 @@ export default function WeeklyCalendar({ magasinId }) {
   // Fenêtre ouverte : version à jour de l'événement (pointage en direct)
   const modalEvent = modal?.event?.id ? (events.find(e => e.id === modal.event.id) || modal.event) : modal?.event
 
-  if (!magasinId) return null
+  const sansMagasin = !isPersonal && !magasinId
+  if (!mode || (sansMagasin && !vueEquipes.possible)) return null
+  if (sansMagasin) {
+    return (
+      <div className="h-full flex flex-col rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-hidden">
+        <div className="flex items-center gap-2 px-3 sm:px-5 py-3 border-b border-gray-100 dark:border-neutral-800">
+          <VueEquipesToggle vue={vueEquipes} label="Mon calendrier" />
+        </div>
+        <p className="flex-1 grid place-items-center p-6 text-center text-xs text-gray-500 dark:text-neutral-400">
+          Choisis un magasin dans la barre du haut pour voir le calendrier de ses équipes.
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="h-full flex flex-col rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-hidden">
@@ -1005,29 +1046,9 @@ export default function WeeklyCalendar({ magasinId }) {
       <div className="flex flex-wrap items-center justify-between gap-2 px-3 sm:px-5 py-3 border-b border-gray-100 dark:border-neutral-800">
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
 
-          {/* Sélecteur magasin / perso */}
-          {isGlobal && (
-            <div className="flex items-center h-7 rounded-lg border border-gray-200 dark:border-neutral-700 overflow-hidden shrink-0">
-              <button
-                onClick={() => setCalendarView('store')}
-                className={['h-full px-3 text-[11px] font-semibold transition-colors',
-                  calendarView === 'store'
-                    ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
-                    : 'text-gray-500 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800',
-                ].join(' ')}>
-                Magasin
-              </button>
-              <button
-                onClick={() => setCalendarView('personal')}
-                className={['h-full px-3 text-[11px] font-semibold transition-colors border-l border-gray-200 dark:border-neutral-700',
-                  calendarView === 'personal'
-                    ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
-                    : 'text-gray-500 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-800',
-                ].join(' ')}>
-                Personnel
-              </button>
-            </div>
-          )}
+          {vueEquipes.possible
+            ? <VueEquipesToggle vue={vueEquipes} label="Mon calendrier" />
+            : isPersonal && <h2 className="text-xs font-bold text-gray-900 dark:text-white shrink-0">Mon calendrier</h2>}
 
           <div className="flex items-center gap-1">
             <button onClick={prevWeek} aria-label="Semaine précédente" className="h-7 w-7 grid place-items-center rounded-lg text-gray-500 dark:text-neutral-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-neutral-200 dark:hover:bg-neutral-800 transition-colors">
@@ -1071,6 +1092,20 @@ export default function WeeklyCalendar({ magasinId }) {
           )}
         </div>
       </div>
+
+      {/* Directeur : un calendrier par rayon, tous affichés ou un seul */}
+      {mode === 'magasin' && rayonsMagasin.length > 1 && (
+        <div className="flex flex-wrap gap-1 px-3 sm:px-5 py-2 border-b border-gray-100 dark:border-neutral-800" role="group" aria-label="Rayon affiché">
+          {[null, ...rayonsMagasin].map(r => (
+            <button key={r || 'tous'} type="button" aria-pressed={rayonFiltre === r} onClick={() => setRayonFiltre(r)}
+              className={['h-7 px-2.5 rounded-lg text-[11px] font-semibold transition-colors',
+                rayonFiltre === r ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
+                  : 'text-gray-500 border border-gray-200 hover:bg-gray-50 dark:text-neutral-400 dark:border-neutral-700 dark:hover:bg-neutral-800'].join(' ')}>
+              {r ? RAYON_TYPE_LABELS[r] || r : 'Tous les rayons'}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Téléphone : OP de la semaine en barres, puis liste des jours */}
       {opBars.length > 0 && (
@@ -1239,8 +1274,10 @@ export default function WeeklyCalendar({ magasinId }) {
           onReschedule={reschedule}
           absentRdvs={absentRdvs}
           canEdit={modal.event ? canEditEvent(modal.event) : true}
-          isGlobal={isGlobal}
-          profile={profile}
+          mode={mode}
+          creatableTypes={creatableTypes}
+          rayonsChoix={rayonsMagasin.length ? rayonsMagasin : RAYON_TYPES}
+          defaultRayon={rayonFixe || rayonFiltre || (rayonsMagasin.length === 1 ? rayonsMagasin[0] : '')}
         />
       )}
 

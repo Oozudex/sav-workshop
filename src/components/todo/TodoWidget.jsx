@@ -1,14 +1,21 @@
-// Bloc « À faire » de l'accueil : la todo list du rayon, et le lien vers la page complète
+// Bloc « À faire » de l'accueil : la todo list du rayon (ou la liste personnelle des acheteurs et de
+// la direction), et le lien vers la page complète
 import { useNavigate } from 'react-router-dom'
 import TodoPanel from './TodoPanel'
 import RayonPills from './RayonPills'
 import { useTodos } from './useTodos'
 import { useTodoRayons } from './useTodoRayons'
+import { todoPerso } from '../../lib/todos'
+import { useVueEquipes } from '../../lib/useVueEquipes'
+import VueEquipesToggle from '../VueEquipesToggle'
 
 export default function TodoWidget({ profile, magasinId }) {
   const navigate = useNavigate()
-  const { rayons, rayon, choose } = useTodoRayons(profile, magasinId)
-  const data = useTodos(magasinId, rayon)
+  // Administrateur : sa liste, ou celles des équipes du magasin choisi
+  const vueEquipes = useVueEquipes(profile, 'todoVue')
+  const perso = todoPerso(profile, { equipes: vueEquipes.equipes })
+  const { rayons, rayon, choose } = useTodoRayons(profile, perso ? null : magasinId)
+  const data = useTodos(magasinId, rayon, { perso })
   const restantes = data.todos.filter(t => !t.fait).length
 
   return (
@@ -16,12 +23,15 @@ export default function TodoWidget({ profile, magasinId }) {
       <div className="px-4 pt-4 pb-3 space-y-2 border-b border-gray-100 dark:border-neutral-800">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-bold text-gray-900 dark:text-white">À faire</h2>
+          <VueEquipesToggle vue={vueEquipes} />
           {restantes > 0 && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">{restantes}</span>}
         </div>
-        <RayonPills rayons={rayons} rayon={rayon} onChoose={choose} />
+        {!perso && <RayonPills rayons={rayons} rayon={rayon} onChoose={choose} />}
       </div>
       <div className="flex-1 overflow-y-auto px-4 py-3">
-        {!magasinId ? (
+        {perso ? (
+          <TodoPanel data={data} perso compact />
+        ) : !magasinId ? (
           <p className="text-xs text-gray-500 dark:text-neutral-400 py-4">Choisis un magasin dans la barre du haut pour voir sa todo list.</p>
         ) : !rayon ? (
           <p className="text-xs text-gray-500 dark:text-neutral-400 py-4">Aucun rayon dans ce magasin.</p>

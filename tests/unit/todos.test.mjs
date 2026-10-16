@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   addDays, atelierTodoSpecs, autoObsolete, joursLabel, motRecent, opTodoSpecs, recurrenceSpecs,
-  sortTodos, todoAutoId, weekdayIndex, transfertTodoSpecs, classement, tigreDeLaSemaine, lundi,
+  sortTodos, todoAutoId, weekdayIndex, transfertTodoSpecs, classement, tigreDeLaSemaine, lundi, todoPerso,
 } from '../../src/lib/todos.js'
 
 describe('dates', () => {
@@ -126,5 +126,17 @@ describe('tigre de la semaine', () => {
   it('tigre(s) de la semaine dernière, ex aequo compris', () => {
     assert.deepEqual(tigreDeLaSemaine(todos, '2026-10-08'), { noms: ['Julie', 'Karim'], total: 2, debut: '2026-09-28', fin: '2026-10-04' })
     assert.equal(tigreDeLaSemaine(todos, '2026-10-20'), null)
+  })
+})
+
+describe('liste personnelle', () => {
+  it('acheteurs, direction et administrateurs ont leur propre liste', () => {
+    assert.equal(todoPerso({ role: 'acheteur' }), true)
+    assert.equal(todoPerso({ role: 'directeurgen', isAdmin: true }), true)
+    assert.equal(todoPerso({ role: 'directeurmag' }), false)
+    assert.equal(todoPerso({ role: 'velo' }), false)
+    assert.equal(todoPerso(null), false)
+    assert.equal(todoPerso({ role: 'directeurgen', isAdmin: true }, { equipes: true }), false)
+    assert.equal(todoPerso({ role: 'acheteur' }, { equipes: true }), true)
   })
 })

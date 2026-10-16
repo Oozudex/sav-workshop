@@ -8,6 +8,8 @@
 // - lireEtiquette : recherche des OP par photo, le texte de l'étiquette est lu par Cloud Vision.
 // - reinitialiserDoubleAuth : un administrateur retire l'application d'authentification d'un compte
 //   (téléphone perdu) ; la personne en configure une nouvelle à sa prochaine connexion.
+// - nettoyageNocturne : RDV client de plus d'un mois (RGPD), anciens événements rangés dans les
+//   calendriers des rayons, todo lists personnelles des comptes supprimés.
 import { applicationDefault, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
@@ -15,7 +17,7 @@ import { setGlobalOptions } from 'firebase-functions/v2'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { logger } from 'firebase-functions'
-import { canManageStaff, newPassword, peutReinitialiserDoubleAuth } from './lib.js'
+import { canManageStaff, limiteRdvClient, migrationEvenement, newPassword, peutReinitialiserDoubleAuth } from './lib.js'
 
 initializeApp()
 setGlobalOptions({ region: 'europe-west1', maxInstances: 2 })
@@ -63,6 +65,53 @@ export const deconnexionNocturne = onSchedule(
       anciens.docs.slice(i, i + 400).forEach(d => batch.delete(d.ref))
       await batch.commit()
     }
+  },
+)
+
+/* ── Nettoyage de la nuit (calendrier, todo lists personnelles) ───────────── */
+// Écritures par lots de 400 (limite Firestore : 500)
+async function ecrireParLots(operations) {
+  for (let i = 0; i < operations.length; i += 400) {
+    const batch = db.batch()
+    operations.slice(i, i + 400).forEach(op => op(batch))
+    await batch.commit()
+  }
+}
+
+export const nettoyageNocturne = onSchedule(
+  { schedule: '30 0 * * *', timeZone: 'Europe/Paris', retryCount: 3 },
+  async () => {
+    const events = db.collection('calendar_events')
+
+    // RDV client de plus d'un mois : supprimés (RGPD)
+    const anciens = await events.where('date', '<', limiteRdvClient()).get()
+    const rdvAnciens = anciens.docs.filter(d => d.get('type') === 'rdv_client')
+    await ecrireParLots(rdvAnciens.map(d => batch => batch.delete(d.ref)))
+
+    // Anciens événements des calendriers de magasin : rangés dans le calendrier d'un rayon
+    const [sansRayon, reunions] = await Promise.all([
+      events.where('type', '==', 'rdv_client').where('rayonType', '==', null).get(),
+      events.where('type', 'in', ['teams', 'op_commerciale']).get(),
+    ])
+    const aRanger = [...sansRayon.docs, ...reunions.docs]
+      .map(d => ({ ref: d.ref, champs: migrationEvenement(d.data()) }))
+      .filter(m => m.champs)
+    await ecrireParLots(aRanger.map(m => batch => batch.update(m.ref, m.champs)))
+
+    // Todo lists personnelles dont le compte a été supprimé
+    const [todos, recurrences] = await Promise.all([
+      db.collectionGroup('todos_perso').select().get(),
+      db.collectionGroup('recurrences_perso').select().get(),
+    ])
+    const proprietaires = [...new Set([...todos.docs, ...recurrences.docs].map(d => d.ref.parent.parent.id))]
+    const profils = proprietaires.length ? await db.getAll(...proprietaires.map(uid => db.doc(`users/${uid}`))) : []
+    const orphelins = profils.filter(p => !p.exists).map(p => p.id)
+    for (const uid of orphelins) {
+      await db.recursiveDelete(db.collection(`users/${uid}/todos_perso`))
+      await db.recursiveDelete(db.collection(`users/${uid}/recurrences_perso`))
+    }
+
+    logger.info('Nettoyage de la nuit', { rdvSupprimes: rdvAnciens.length, evenementsRanges: aRanger.length, todosSupprimees: orphelins.length })
   },
 )
 

@@ -1,4 +1,53 @@
-// RDV client du calendrier : champs obligatoires et passage en fiche atelier
+// Calendrier : calendriers des rayons et calendrier personnel, RDV client (champs obligatoires,
+// passage en fiche atelier, présence) et barres des OP. Fonctions pures (tests/unit/calendarEvents.test.mjs).
+import { GLOBAL_ROLES, RAYON_TYPES } from './constants.js'
+
+// ── Quel calendrier ──────────────────────────────────────────────────────────
+// 'perso' : acheteurs, direction générale et administrateurs (pas d'accès aux calendriers des magasins)
+// 'magasin' : directeur de magasin (tous les rayons de son magasin), ou administrateur qui regarde les
+// équipes du magasin choisi (equipes) · 'rayon' : compte d'un rayon
+export function modeCalendrier(profile, { equipes = false } = {}) {
+  if (equipes && profile?.isAdmin) return 'magasin'
+  if (GLOBAL_ROLES.includes(profile?.role)) return 'perso'
+  if (profile?.role === 'directeurmag') return 'magasin'
+  return RAYON_TYPES.includes(profile?.role) ? 'rayon' : null
+}
+
+// Clé d'invitation d'un rayon d'un magasin (cf. firestore.rules : cibles)
+export const cleRayon = (magasinId, rayon) => `${magasinId}_${rayon}`
+
+/**
+ * Invitations d'une réunion du calendrier personnel : chaque magasin invité (pour son directeur) et
+ * chacun de ses rayons invités (tous si aucun n'est choisi). [] : réunion personnelle.
+ */
+export function ciblesInvitation(magasinIds = [], rayons = []) {
+  const rs = rayons.length ? rayons : RAYON_TYPES
+  return [...new Set(magasinIds)].flatMap(m => [m, ...rs.map(r => cleRayon(m, r))])
+}
+
+// Rayons concernés par un événement d'un calendrier de magasin (null : tous), pour le filtre du directeur
+export function rayonsEvenement(ev) {
+  if (ev.type === 'ticket_rendu') return ['velo']
+  if (ev.type === 'flocage') return ['chaussure']
+  if (ev.cibles) return ev.teamsRayons?.length ? ev.teamsRayons : null
+  return ev.rayonType ? [ev.rayonType] : null
+}
+export function dansRayon(ev, rayon) {
+  const rayons = rayon ? rayonsEvenement(ev) : null
+  return !rayons || rayons.includes(rayon)
+}
+
+// Calendrier personnel : ses RDV perso et ses réunions, pas les événements créés autrefois dans un magasin
+export const evenementPerso = ev => ev.type === 'rdv_perso' || ev.type === 'teams'
+
+// Deux requêtes (calendrier du rayon et invitations) : un événement peut revenir dans les deux
+export function fusionEvenements(...listes) {
+  const parId = new Map()
+  for (const ev of listes.flat()) parId.set(ev.id, ev)
+  return [...parId.values()]
+}
+
+// ── RDV client ───────────────────────────────────────────────────────────────
 
 export const RDV_DESCRIPTION_MIN = 15
 

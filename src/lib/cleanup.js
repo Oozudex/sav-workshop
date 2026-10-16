@@ -15,10 +15,6 @@ const OBUT_PERSONAL_FIELDS = ['clientNom', 'clientPrenom', 'clientTel']
 // peuvent contenir des données personnelles dans leur texte
 const TICKET_HISTORY_KEPT = ['create', 'status']
 
-function toDateStr(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
 function daysAgo(days) {
   const d = new Date()
   d.setDate(d.getDate() - days)
@@ -54,12 +50,12 @@ function blankFields(fields) {
  * - anonymise les tickets SAV clôturés depuis plus de 14 jours (et supprime leurs commentaires)
  * - anonymise les commandes clients retirées ou annulées depuis plus de 14 jours (nom, téléphone, notes)
  * - anonymise les commandes OBUT remises ou annulées depuis plus de 14 jours (nom, prénom, téléphone)
- * - supprime les RDV Client du calendrier datant de plus de 1 mois
  * - supprime les infos importantes créées depuis plus de 48h
  *
  * Seul le directeur général a les droits nécessaires sur l'ensemble des magasins :
  * pour les autres rôles, les règles Firestore refuseraient ces requêtes.
- * Limité à 1 exécution par jour via localStorage.
+ * Limité à 1 exécution par jour via localStorage. Les RDV client de plus d'un mois sont supprimés
+ * par la Cloud Function nettoyageNocturne (la direction n'a plus accès aux calendriers des magasins).
  *
  * TODO : à terme, remplacer par une Cloud Function planifiée (onSchedule).
  */
@@ -115,20 +111,7 @@ export async function runCleanup(role) {
     ops.push({ ref: d.ref, data: { ...blankFields(OBUT_PERSONAL_FIELDS), anonymizedAt: serverTimestamp() } })
   })
 
-  // ── 3. RDV Client du calendrier datant de > 1 mois ──────────────────────
-  const oneMonthAgo = new Date()
-  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1)
-
-  // On filtre par date uniquement pour éviter un index composite,
-  // puis on vérifie le type côté client
-  const eventsSnap = await getDocs(
-    query(collection(db, 'calendar_events'), where('date', '<', toDateStr(oneMonthAgo)))
-  )
-  eventsSnap.forEach(d => {
-    if (d.data().type === 'rdv_client') ops.push({ ref: d.ref })
-  })
-
-  // ── 4. Infos importantes créées depuis > 48h ────────────────────────────
+  // ── 3. Infos importantes créées depuis > 48h ────────────────────────────
   const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000)
 
   const infosSnap = await getDocs(

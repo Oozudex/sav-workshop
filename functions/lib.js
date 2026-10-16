@@ -37,3 +37,31 @@ export function canManageStaff(caller, magasinId, token) {
   if (GLOBAL_ROLES.includes(caller.role)) return sessionDoubleAuthOk(caller, token)
   return caller.role === 'directeurmag' && !!magasinId && caller.magasinId === magasinId
 }
+
+/* ── Calendrier : un par rayon de magasin (cf. src/lib/calendarEvents.js) ── */
+const RAYONS = ['velo', 'chaussure', 'textile', 'randonnee', 'caisse']
+
+// Invitations d'une réunion : chaque magasin, et chacun de ses rayons invités (tous si aucun)
+export function ciblesInvitation(magasinIds = [], rayons = []) {
+  const rs = rayons?.length ? rayons : RAYONS
+  return [...new Set(magasinIds)].flatMap(m => [m, ...rs.map(r => `${m}_${r}`)])
+}
+
+/**
+ * Ancien événement d'un calendrier de magasin à ranger dans le calendrier d'un rayon : champs à
+ * modifier, ou null si rien à faire. Les RDV client sans rayon vont au rayon vélo (le calendrier ne
+ * servait qu'au cycle) ; les réunions et OP créées par la direction deviennent des invitations.
+ */
+export function migrationEvenement(ev) {
+  if (!ev?.magasinId || ev.cibles || ev.rayonType) return null
+  if (ev.type === 'rdv_client') return { rayonType: 'velo' }
+  if (ev.type === 'teams' || ev.type === 'op_commerciale') return { cibles: ciblesInvitation([ev.magasinId], ev.teamsRayons) }
+  return null
+}
+
+// Date 'YYYY-MM-DD' (heure de Paris) un mois avant maintenant : RDV client plus anciens supprimés (RGPD)
+export function limiteRdvClient(now = new Date()) {
+  const d = new Date(now)
+  d.setMonth(d.getMonth() - 1)
+  return d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Paris' })
+}

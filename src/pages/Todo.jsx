@@ -1,4 +1,5 @@
-// Page « Todo list » : la liste complète du rayon (avec l'historique de 30 jours) et les tâches récurrentes
+// Page « Todo list » : la liste complète du rayon (avec l'historique de 30 jours) et les tâches récurrentes ;
+// liste personnelle pour les acheteurs et la direction
 import { useState } from 'react'
 import Navbar from '../components/Navbar'
 import { useAuth } from '../store/useAuth'
@@ -6,14 +7,16 @@ import { useShallow } from 'zustand/react/shallow'
 import { useMagasin } from '../store/useMagasin'
 import { GLOBAL_ROLES, RAYON_TYPE_LABELS } from '../lib/constants'
 import { useStaff } from '../lib/useStaff'
-import { JOURS, joursLabel } from '../lib/todos'
+import { JOURS, joursLabel, todoPerso } from '../lib/todos'
 import TodoPanel from '../components/todo/TodoPanel'
 import RayonPills from '../components/todo/RayonPills'
 import { useTodos } from '../components/todo/useTodos'
 import { useTodoRayons } from '../components/todo/useTodoRayons'
+import { useVueEquipes } from '../lib/useVueEquipes'
+import VueEquipesToggle from '../components/VueEquipesToggle'
 
-function Recurrences({ data, magasinId, rayon }) {
-  const staff = useStaff(magasinId, rayon)
+function Recurrences({ data, magasinId, rayon, perso = false }) {
+  const staff = useStaff(magasinId, rayon) // liste personnelle : pas de magasin, pas d'équipe
   const [titre, setTitre] = useState('')
   const [jours, setJours] = useState([0])
   const [assigneA, setAssigneA] = useState('')
@@ -35,7 +38,7 @@ function Recurrences({ data, magasinId, rayon }) {
       </div>
 
       <form onSubmit={add} className="space-y-2">
-        <input value={titre} onChange={e => setTitre(e.target.value)} placeholder="Ex. Vérifier les vélos prêts à rendre" aria-label="Tâche récurrente" className="Input h-9 text-sm" />
+        <input value={titre} onChange={e => setTitre(e.target.value)} placeholder={perso ? 'Ex. Point hebdo avec les fournisseurs' : 'Ex. Vérifier les vélos prêts à rendre'} aria-label="Tâche récurrente" className="Input h-9 text-sm" />
         <div className="flex flex-wrap gap-1" role="group" aria-label="Jours">
           {JOURS.map((nom, j) => (
             <button key={nom} type="button" onClick={() => toggleJour(j)} aria-pressed={jours.includes(j)}
@@ -91,9 +94,12 @@ function Recurrences({ data, magasinId, rayon }) {
 export default function Todo() {
   const { profile } = useAuth(useShallow(s => ({ profile: s.profile })))
   const { selectedId } = useMagasin()
-  const magasinId = GLOBAL_ROLES.includes(profile?.role) ? selectedId : profile?.magasinId
+  // Administrateur : sa liste, ou celles des équipes du magasin choisi
+  const vueEquipes = useVueEquipes(profile, 'todoVue')
+  const perso = todoPerso(profile, { equipes: vueEquipes.equipes })
+  const magasinId = perso ? null : GLOBAL_ROLES.includes(profile?.role) ? selectedId : profile?.magasinId
   const { rayons, rayon, choose } = useTodoRayons(profile, magasinId)
-  const data = useTodos(magasinId, rayon)
+  const data = useTodos(magasinId, rayon, { perso })
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
@@ -102,15 +108,29 @@ export default function Todo() {
         <div className="max-w-5xl mx-auto space-y-5">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h1 className="text-lg font-bold text-gray-900 dark:text-white">Todo list{rayon ? ` · ${RAYON_TYPE_LABELS[rayon] || rayon}` : ''}</h1>
+              <h1 className="text-lg font-bold text-gray-900 dark:text-white">{perso ? 'Ma todo list' : `Todo list${rayon ? ` · ${RAYON_TYPE_LABELS[rayon] || rayon}` : ''}`}</h1>
               <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
-                Tâches de l’équipe, débuts et fins d’OP (le jour même), relances atelier et mot du soir.
+                {perso
+                  ? 'Ta liste personnelle : toi seul la vois. Ajoute une date si la tâche est pour un jour précis.'
+                  : 'Tâches de l’équipe, débuts et fins d’OP (le jour même), relances atelier et mot du soir.'}
               </p>
             </div>
-            <RayonPills rayons={rayons} rayon={rayon} onChoose={choose} />
+            <div className="flex flex-wrap items-center gap-2">
+              <VueEquipesToggle vue={vueEquipes} label="Ma liste" />
+              {!perso && <RayonPills rayons={rayons} rayon={rayon} onChoose={choose} />}
+            </div>
           </div>
 
-          {!magasinId ? (
+          {perso ? (
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 items-start">
+              <section className="lg:col-span-3 rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4 sm:p-5">
+                <TodoPanel data={data} perso />
+              </section>
+              <div className="lg:col-span-2">
+                <Recurrences data={data} perso />
+              </div>
+            </div>
+          ) : !magasinId ? (
             <p className="text-sm text-gray-500 dark:text-neutral-400 py-10 text-center">Choisis un magasin dans la barre du haut.</p>
           ) : !rayon ? (
             <p className="text-sm text-gray-500 dark:text-neutral-400 py-10 text-center">Aucun rayon dans ce magasin.</p>

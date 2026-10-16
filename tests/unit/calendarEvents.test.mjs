@@ -1,8 +1,10 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  absencesFor, canMarkPresence, formatPhone, opWeekBars, rdvClientErrors, rdvToCheck, reschedulePrefill, ticketPrefill,
+  absencesFor, canMarkPresence, ciblesInvitation, dansRayon, evenementPerso, formatPhone, fusionEvenements, modeCalendrier,
+  opWeekBars, rayonsEvenement, rdvClientErrors, rdvToCheck, reschedulePrefill, ticketPrefill,
 } from '../../src/lib/calendarEvents.js'
+import * as serveur from '../../functions/lib.js'
 
 const OK = { customerName: 'Marie Dubois', customerPhone: '06 12 34 56 78', description: 'Freins avant qui frottent et vitesses qui sautent' }
 
@@ -89,5 +91,67 @@ describe('OP du calendrier', () => {
   it('passage à l’heure d’hiver sans décalage', () => {
     const [b] = opWeekBars([op('a', '2026-10-25', '2026-10-27')], '2026-10-19')
     assert.deepEqual([b.col, b.span], [6, 1])
+  })
+})
+
+describe('un calendrier par rayon, un calendrier personnel pour la direction', () => {
+  it('choisit le calendrier selon le compte', () => {
+    assert.equal(modeCalendrier({ role: 'acheteur' }), 'perso')
+    assert.equal(modeCalendrier({ role: 'directeurgen', isAdmin: true }), 'perso')
+    assert.equal(modeCalendrier({ role: 'directeurmag' }), 'magasin')
+    assert.equal(modeCalendrier({ role: 'chaussure' }), 'rayon')
+    assert.equal(modeCalendrier(null), null)
+    // L'administrateur peut aussi regarder les calendriers des équipes
+    assert.equal(modeCalendrier({ role: 'directeurgen', isAdmin: true }, { equipes: true }), 'magasin')
+    assert.equal(modeCalendrier({ role: 'directeurgen' }, { equipes: true }), 'perso')
+    assert.equal(modeCalendrier({ role: 'acheteur' }, { equipes: true }), 'perso')
+  })
+
+  it('invitations d’une réunion : le magasin (directeur) et ses rayons', () => {
+    assert.deepEqual(ciblesInvitation(['A'], ['velo', 'caisse']), ['A', 'A_velo', 'A_caisse'])
+    assert.deepEqual(ciblesInvitation(['A', 'B', 'A'], ['velo']), ['A', 'A_velo', 'B', 'B_velo'])
+    assert.equal(ciblesInvitation(['A']).length, 6) // tous les rayons
+    assert.deepEqual(ciblesInvitation([]), [])
+    assert.deepEqual(serveur.ciblesInvitation(['A'], ['velo']), ciblesInvitation(['A'], ['velo']))
+    assert.deepEqual(serveur.ciblesInvitation(['A'], null), ciblesInvitation(['A']))
+  })
+
+  it('filtre du directeur : chaque événement appartient à un rayon (ou à tous)', () => {
+    assert.deepEqual(rayonsEvenement({ type: 'ticket_rendu' }), ['velo'])
+    assert.deepEqual(rayonsEvenement({ type: 'flocage' }), ['chaussure'])
+    assert.deepEqual(rayonsEvenement({ type: 'rdv_client', rayonType: 'textile' }), ['textile'])
+    assert.deepEqual(rayonsEvenement({ type: 'teams', cibles: ['A', 'A_velo'], teamsRayons: ['velo'] }), ['velo'])
+    assert.equal(rayonsEvenement({ type: 'teams', cibles: ['A'], teamsRayons: null }), null)
+    assert.equal(dansRayon({ type: 'rdv_perso' }, 'velo'), true)
+    assert.equal(dansRayon({ type: 'rdv_client', rayonType: 'textile' }, 'velo'), false)
+    assert.equal(dansRayon({ type: 'rdv_client', rayonType: 'textile' }, null), true)
+  })
+
+  it('calendrier personnel : RDV perso et réunions seulement', () => {
+    assert.equal(evenementPerso({ type: 'rdv_perso' }), true)
+    assert.equal(evenementPerso({ type: 'teams' }), true)
+    assert.equal(evenementPerso({ type: 'rdv_client', magasinId: 'A' }), false)
+  })
+
+  it('un événement présent dans les deux requêtes n’apparaît qu’une fois', () => {
+    const r = fusionEvenements([{ id: 'a' }, { id: 'b' }], [{ id: 'b', v: 2 }, { id: 'c' }])
+    assert.deepEqual(r.map(e => e.id), ['a', 'b', 'c'])
+  })
+})
+
+describe('nettoyage de la nuit (Cloud Function)', () => {
+  it('range les anciens événements des calendriers de magasin', () => {
+    assert.deepEqual(serveur.migrationEvenement({ type: 'rdv_client', magasinId: 'A', rayonType: null }), { rayonType: 'velo' })
+    assert.deepEqual(serveur.migrationEvenement({ type: 'teams', magasinId: 'A', teamsRayons: ['caisse'] }), { cibles: ['A', 'A_caisse'] })
+    assert.equal(serveur.migrationEvenement({ type: 'op_commerciale', magasinId: 'A' }).cibles.length, 6)
+    // Déjà rangés, ou hors calendrier de magasin
+    assert.equal(serveur.migrationEvenement({ type: 'rdv_client', magasinId: 'A', rayonType: 'textile' }), null)
+    assert.equal(serveur.migrationEvenement({ type: 'teams', magasinId: 'A', cibles: ['A'] }), null)
+    assert.equal(serveur.migrationEvenement({ type: 'teams', magasinId: null }), null)
+    assert.equal(serveur.migrationEvenement({ type: 'rdv_perso', magasinId: 'A' }), null)
+  })
+  it('RDV client supprimés un mois après leur date (heure de Paris)', () => {
+    assert.equal(serveur.limiteRdvClient(new Date('2026-10-16T08:00:00Z')), '2026-09-16')
+    assert.equal(serveur.limiteRdvClient(new Date('2026-10-15T22:30:00Z')), '2026-09-16') // déjà le 16 à Paris
   })
 })

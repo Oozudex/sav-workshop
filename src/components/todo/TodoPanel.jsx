@@ -1,5 +1,6 @@
 // Liste des tâches d'un rayon : mot du soir, ajout rapide, tâches à faire, tâches terminées.
 // compact : version de l'accueil (tâches terminées aujourd'hui seulement).
+// perso : liste personnelle (acheteurs, direction) : ni mot du soir, ni assignation, ni tigre de la semaine.
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStaff } from '../../lib/useStaff'
@@ -166,11 +167,12 @@ function MotDuSoir({ mot, onSave, onVu, compact }) {
 }
 
 /* ── Panneau complet ── */
-export default function TodoPanel({ data, magasinId, rayon, compact = false }) {
+export default function TodoPanel({ data, magasinId, rayon, compact = false, perso = false }) {
   const { todos, mot, today, loading, error } = data
-  const staff = useStaff(magasinId, rayon)
+  const staff = useStaff(perso ? null : magasinId, rayon)
   const [titre, setTitre] = useState('')
   const [assigneA, setAssigneA] = useState('')
+  const [echeance, setEcheance] = useState('')
   const [showDone, setShowDone] = useState(!compact)
   const [tigre, setTigre] = useState(false)
 
@@ -182,8 +184,8 @@ export default function TodoPanel({ data, magasinId, rayon, compact = false }) {
     e.preventDefault()
     if (!titre.trim()) return
     const value = titre
-    setTitre('')
-    await data.add(value, assigneA)
+    setTitre(''); setEcheance('')
+    await data.add(value, { assigneA, echeance })
   }
 
   // Tâche finie : confettis ; fin d'OP : pluie de promos ; relance atelier : des vélos partout ;
@@ -199,8 +201,8 @@ export default function TodoPanel({ data, magasinId, rayon, compact = false }) {
   }
 
   // Tigre de la semaine dernière, et classement de la semaine en cours (page complète)
-  const tigre7 = useMemo(() => tigreDeLaSemaine(todos, today), [todos, today])
-  const semaine = useMemo(() => (compact ? [] : classement(todos, lundi(today), today)), [todos, today, compact])
+  const tigre7 = useMemo(() => (perso ? null : tigreDeLaSemaine(todos, today)), [todos, today, perso])
+  const semaine = useMemo(() => (compact || perso ? [] : classement(todos, lundi(today), today)), [todos, today, compact, perso])
 
   function remove(t) {
     if (t.auto && !t.fait && !confirm(`« ${t.titre} » est une tâche automatique. La supprimer quand même ?`)) return
@@ -228,7 +230,7 @@ export default function TodoPanel({ data, magasinId, rayon, compact = false }) {
           {semaine.slice(0, 5).map((r, i) => `${['🥇', '🥈', '🥉'][i] || '·'} ${r.nom} (${r.total})`).join('  ')}
         </p>
       )}
-      <MotDuSoir mot={mot} onSave={data.saveMot} onVu={data.motVu} compact={compact} />
+      {!perso && <MotDuSoir mot={mot} onSave={data.saveMot} onVu={data.motVu} compact={compact} />}
 
       <form onSubmit={add} className="flex gap-2">
         <input value={titre} onChange={e => setTitre(e.target.value)} placeholder="Ajouter une tâche…" aria-label="Nouvelle tâche"
@@ -238,6 +240,10 @@ export default function TodoPanel({ data, magasinId, rayon, compact = false }) {
             <option value="">Pour qui ?</option>
             {staff.map(s => <option key={s.id} value={s.nom}>{s.nom}</option>)}
           </select>
+        )}
+        {!compact && perso && (
+          <input type="date" value={echeance} onChange={e => setEcheance(e.target.value)} aria-label="Pour le (facultatif)" title="Pour le (facultatif)"
+            className={`${selectCls} !h-9 w-36`} />
         )}
         <button type="submit" disabled={!titre.trim()} aria-label="Ajouter la tâche"
           className="h-9 px-3 rounded-xl text-sm font-semibold bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-40 dark:bg-white dark:text-black dark:hover:bg-gray-100">

@@ -67,7 +67,7 @@ beforeEach(async () => {
     await setDoc(doc(db, 'services', 'svc', 'credentials', 'B'), { login: 'b@x.fr', password: 'pwdB' })
     await setDoc(doc(db, 'counters', 'tickets'), { lastNumber: 10, year: 2026 })
     await setDoc(doc(db, 'calendar_events', 'evB'), { magasinId: 'B', date: '2026-01-01', createdBy: 'veloB' })
-    await setDoc(doc(db, 'calendar_events', 'rdvA'), { magasinId: 'A', type: 'rdv_client', date: '2026-01-01', createdBy: 'dirmagA', title: 'Client' })
+    await setDoc(doc(db, 'calendar_events', 'rdvA'), { magasinId: 'A', rayonType: 'velo', type: 'rdv_client', date: '2026-01-01', createdBy: 'dirmagA', title: 'Client' })
     await setDoc(doc(db, 'flocage_stock', 'B'), { grande_lettre_blanc: { A: 3 } })
   })
 })
@@ -239,6 +239,32 @@ describe('todo list', () => {
   it("une tâche automatique pas encore créée peut être lue (création unique)", async () => {
     await assertSucceeds(getDoc(doc(as('veloA'), 'todos', 'op_debut_x_A_velo')))
   })
+  it("acheteurs et direction ne voient pas les listes des magasins", async () => {
+    await env.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), 'todos', 't5'), { magasinId: 'A', rayon: 'velo', titre: 'X' }))
+    for (const uid of ['acheteur', 'dirgen']) {
+      await assertFails(getDoc(doc(as(uid), 'todos', 't5')))
+      await assertFails(getDocs(query(collection(as(uid), 'todos'), where('magasinId', '==', 'A'), where('rayon', '==', 'velo'))))
+      await assertFails(setDoc(doc(as(uid), 'todos', 't6'), { magasinId: 'A', rayon: 'velo', titre: 'X' }))
+    }
+  })
+  it("l'administrateur voit et gère les listes des équipes", async () => {
+    await env.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), 'todos', 't7'), { magasinId: 'B', rayon: 'velo', titre: 'X' }))
+    await assertSucceeds(getDoc(doc(as('admin'), 'todos', 't7')))
+    await assertSucceeds(getDocs(query(collection(as('admin'), 'todos'), where('magasinId', '==', 'B'), where('rayon', '==', 'velo'))))
+    await assertSucceeds(updateDoc(doc(as('admin'), 'todos', 't7'), { fait: true }))
+    await assertSucceeds(getDoc(doc(as('admin'), 'mots_du_soir', 'B_velo')))
+  })
+  it("liste personnelle : visible de son seul propriétaire", async () => {
+    const t = { titre: 'Préparer le salon', fait: false, echeance: '2026-11-02' }
+    await assertSucceeds(setDoc(doc(as('acheteur'), 'users', 'acheteur', 'todos_perso', 'p1'), t))
+    await assertSucceeds(getDocs(collection(as('acheteur'), 'users', 'acheteur', 'todos_perso')))
+    await assertSucceeds(updateDoc(doc(as('acheteur'), 'users', 'acheteur', 'todos_perso', 'p1'), { fait: true }))
+    await assertSucceeds(setDoc(doc(as('acheteur'), 'users', 'acheteur', 'recurrences_perso', 'r1'), { titre: 'Point fournisseurs', jours: [0] }))
+    await assertFails(getDocs(collection(as('dirgen'), 'users', 'acheteur', 'todos_perso')))
+    await assertFails(getDoc(doc(as('admin'), 'users', 'acheteur', 'todos_perso', 'p1')))
+    await assertFails(setDoc(doc(as('dirgen'), 'users', 'acheteur', 'todos_perso', 'p2'), t))
+    await assertFails(getDoc(doc(as('acheteur'), 'users', 'acheteur', 'mots_du_soir', 'x')))
+  })
   it("requête de la liste d'un rayon", async () => {
     await assertSucceeds(getDocs(query(collection(as('veloA'), 'todos'), where('magasinId', '==', 'A'), where('rayon', '==', 'velo'))))
     await assertFails(getDocs(query(collection(as('veloA'), 'todos'), where('magasinId', '==', 'A'))))
@@ -309,26 +335,104 @@ describe('counters', () => {
 })
 
 describe('calendar_events', () => {
-  it("un rayon pointe un RDV client de son magasin, sans rien modifier d'autre", async () => {
+  const semaine = [where('date', '>=', '2026-01-01'), where('date', '<=', '2026-01-07')]
+  const reunion = {
+    type: 'teams', magasinId: null, createdBy: 'acheteur', date: '2026-01-02', title: 'Point OP',
+    teamsMagasins: ['A'], teamsRayons: ['velo'], cibles: ['A', 'A_velo'], invitation: true,
+  }
+
+  it("un rayon pointe un RDV client de son rayon, sans rien modifier d'autre", async () => {
     await assertSucceeds(updateDoc(doc(as('veloA'), 'calendar_events', 'rdvA'), { presence: 'absent', presenceAt: serverTimestamp() }))
     await assertFails(updateDoc(doc(as('veloA'), 'calendar_events', 'rdvA'), { presence: 'venu', title: 'Autre' }))
     await assertFails(updateDoc(doc(as('veloB'), 'calendar_events', 'rdvA'), { presence: 'venu' }))
+    await assertFails(updateDoc(doc(as('chaussureA'), 'calendar_events', 'rdvA'), { presence: 'venu' }))
     await assertFails(updateDoc(doc(as('chaussureA'), 'calendar_events', 'evB'), { presence: 'venu' }))
   })
+  it("chaque rayon a son calendrier : le rayon chaussure ne voit pas celui du cycle", async () => {
+    await assertSucceeds(getDoc(doc(as('veloA'), 'calendar_events', 'rdvA')))
+    await assertFails(getDoc(doc(as('chaussureA'), 'calendar_events', 'rdvA')))
+    await assertSucceeds(getDocs(query(collection(as('veloA'), 'calendar_events'), where('magasinId', '==', 'A'), where('rayonType', '==', 'velo'), ...semaine)))
+    await assertSucceeds(getDocs(query(collection(as('chaussureA'), 'calendar_events'), where('magasinId', '==', 'A'), where('rayonType', '==', 'chaussure'), ...semaine)))
+    await assertFails(getDocs(query(collection(as('chaussureA'), 'calendar_events'), where('magasinId', '==', 'A'), where('rayonType', '==', 'velo'))))
+    await assertFails(getDocs(query(collection(as('veloA'), 'calendar_events'), where('magasinId', '==', 'A'))))
+    await assertSucceeds(getDocs(query(collection(as('veloA'), 'calendar_events'), where('magasinId', '==', 'A'), where('rayonType', '==', 'velo'), where('presence', '==', 'absent'))))
+  })
   it("un vendeur ne liste pas le calendrier d'un autre magasin", async () => {
-    await assertFails(getDocs(query(collection(as('veloA'), 'calendar_events'), where('magasinId', '==', 'B'))))
-    await assertSucceeds(getDocs(query(collection(as('veloA'), 'calendar_events'), where('magasinId', '==', 'A'))))
+    await assertFails(getDocs(query(collection(as('veloA'), 'calendar_events'), where('magasinId', '==', 'B'), where('rayonType', '==', 'velo'))))
   })
-  it("un directeur ne modifie pas un événement d'un autre magasin", async () => {
+  it("un rayon ne crée que dans son calendrier, sans invitation", async () => {
+    const rdv = { type: 'rdv_client', magasinId: 'A', createdBy: 'chaussureA', date: '2026-01-02' }
+    await assertSucceeds(setDoc(doc(as('chaussureA'), 'calendar_events', 'c1'), { ...rdv, rayonType: 'chaussure' }))
+    await assertFails(setDoc(doc(as('chaussureA'), 'calendar_events', 'c2'), { ...rdv, rayonType: 'velo' }))
+    await assertFails(setDoc(doc(as('chaussureA'), 'calendar_events', 'c3'), { ...rdv, rayonType: 'chaussure', cibles: ['B', 'B_velo'] }))
+    await assertFails(updateDoc(doc(as('chaussureA'), 'calendar_events', 'c1'), { rayonType: 'velo' }))
+  })
+  it("le directeur voit et gère tout son magasin", async () => {
+    await assertSucceeds(getDocs(query(collection(as('dirmagA'), 'calendar_events'), where('magasinId', '==', 'A'), ...semaine)))
+    await assertSucceeds(setDoc(doc(as('dirmagA'), 'calendar_events', 'd1'), { type: 'rdv_client', magasinId: 'A', rayonType: 'textile', createdBy: 'dirmagA', date: '2026-01-02' }))
+    await assertSucceeds(updateDoc(doc(as('dirmagA'), 'calendar_events', 'rdvA'), { rayonType: 'randonnee' }))
     await assertFails(updateDoc(doc(as('dirmagA'), 'calendar_events', 'evB'), { title: 'X' }))
+    await assertFails(updateDoc(doc(as('dirmagA'), 'calendar_events', 'rdvA'), { magasinId: 'B' }))
   })
-  it("un global crée un événement personnel", async () => {
+  it("acheteurs et direction n'ont pas accès aux calendriers des magasins", async () => {
+    for (const uid of ['acheteur', 'dirgen']) {
+      await assertFails(getDoc(doc(as(uid), 'calendar_events', 'rdvA')))
+      await assertFails(getDocs(query(collection(as(uid), 'calendar_events'), where('magasinId', '==', 'A'), ...semaine)))
+      await assertFails(setDoc(doc(as(uid), 'calendar_events', `x_${uid}`), { type: 'rdv_client', magasinId: 'A', rayonType: 'velo', createdBy: uid, date: '2026-01-02' }))
+      await assertFails(updateDoc(doc(as(uid), 'calendar_events', 'rdvA'), { title: 'X' }))
+      await assertFails(deleteDoc(doc(as(uid), 'calendar_events', 'rdvA')))
+    }
+  })
+  it("l'administrateur voit et gère les calendriers des équipes, pas les calendriers personnels", async () => {
+    await assertSucceeds(getDoc(doc(as('admin'), 'calendar_events', 'rdvA')))
+    await assertSucceeds(getDocs(query(collection(as('admin'), 'calendar_events'), where('magasinId', '==', 'A'), ...semaine)))
+    await assertSucceeds(setDoc(doc(as('admin'), 'calendar_events', 'a1'), { type: 'rdv_client', magasinId: 'A', rayonType: 'velo', createdBy: 'admin', date: '2026-01-02' }))
+    await assertSucceeds(updateDoc(doc(as('admin'), 'calendar_events', 'rdvA'), { rayonType: 'caisse' }))
+    await assertSucceeds(deleteDoc(doc(as('admin'), 'calendar_events', 'evB')))
+    await assertFails(setDoc(doc(as('admin'), 'calendar_events', 'a2'), { type: 'rdv_client', magasinId: 'A', rayonType: 'velo', createdBy: 'admin', date: '2026-01-02', cibles: ['B'] }))
+    await assertSucceeds(setDoc(doc(as('acheteur'), 'calendar_events', 'reu'), reunion))
+    await assertSucceeds(getDocs(query(collection(as('admin'), 'calendar_events'), where('invitation', '==', true), ...semaine)))
+    await assertFails(getDocs(query(collection(as('admin'), 'calendar_events'), where('createdBy', '==', 'acheteur'), ...semaine)))
+    await assertSucceeds(getDoc(doc(as('admin'), 'calendar_events', 'reu')))
+    await assertFails(updateDoc(doc(as('admin'), 'calendar_events', 'reu'), { title: 'X' }))
+    await assertSucceeds(setDoc(doc(as('acheteur'), 'calendar_events', 'persoAch'), { type: 'rdv_perso', magasinId: null, createdBy: 'acheteur', date: '2026-01-02', cibles: [] }))
+    await assertFails(getDoc(doc(as('admin'), 'calendar_events', 'persoAch')))
+  })
+  it("calendrier personnel : RDV perso et réunions", async () => {
     await assertSucceeds(setDoc(doc(as('acheteur'), 'calendar_events', 'perso'), {
-      magasinId: null, createdBy: 'acheteur', date: '2026-01-02',
+      type: 'rdv_perso', magasinId: null, createdBy: 'acheteur', date: '2026-01-02', cibles: [],
     }))
+    await assertSucceeds(getDocs(query(collection(as('acheteur'), 'calendar_events'), where('createdBy', '==', 'acheteur'), ...semaine)))
+    await assertFails(getDoc(doc(as('dirgen'), 'calendar_events', 'perso')))
+    await assertFails(setDoc(doc(as('acheteur'), 'calendar_events', 'perso2'), { type: 'rdv_client', magasinId: null, createdBy: 'acheteur', date: '2026-01-02' }))
+  })
+  it("réunion avec invitations : visible en lecture seule des rayons invités et du directeur", async () => {
+    await assertSucceeds(setDoc(doc(as('acheteur'), 'calendar_events', 'reu'), reunion))
+    await assertSucceeds(getDocs(query(collection(as('veloA'), 'calendar_events'), where('cibles', 'array-contains', 'A_velo'), ...semaine)))
+    await assertSucceeds(getDoc(doc(as('veloA'), 'calendar_events', 'reu')))
+    await assertSucceeds(getDocs(query(collection(as('dirmagA'), 'calendar_events'), where('cibles', 'array-contains', 'A'), ...semaine)))
+    await assertSucceeds(getDocs(query(collection(as('chaussureA'), 'calendar_events'), where('cibles', 'array-contains', 'A_chaussure'), ...semaine)))
+    await assertFails(getDoc(doc(as('chaussureA'), 'calendar_events', 'reu')))
+    await assertFails(getDocs(query(collection(as('chaussureA'), 'calendar_events'), where('cibles', 'array-contains', 'A_velo'))))
+    await assertFails(getDoc(doc(as('veloB'), 'calendar_events', 'reu')))
+    await assertFails(updateDoc(doc(as('veloA'), 'calendar_events', 'reu'), { title: 'X' }))
+    await assertFails(updateDoc(doc(as('dirmagA'), 'calendar_events', 'reu'), { title: 'X' }))
+    await assertFails(deleteDoc(doc(as('dirmagA'), 'calendar_events', 'reu')))
+    // L'organisateur change les invités
+    await assertSucceeds(updateDoc(doc(as('acheteur'), 'calendar_events', 'reu'), { cibles: ['B', 'B_velo'], teamsMagasins: ['B'] }))
+    await assertFails(updateDoc(doc(as('acheteur'), 'calendar_events', 'reu'), { magasinId: 'A' }))
+  })
+  it("planning Tamigo : importé par la direction ou le rayon, sans voir le reste du calendrier", async () => {
+    const shift = { type: 'planning_shift', magasinId: 'A', rayonType: 'velo', date: '2026-01-02', employeeName: 'Alice', startTime: '09:00' }
+    await assertSucceeds(setDoc(doc(as('dirgen'), 'calendar_events', 'sh1'), { ...shift, createdBy: 'dirgen' }))
+    await assertSucceeds(getDocs(query(collection(as('dirgen'), 'calendar_events'), where('magasinId', '==', 'A'), where('type', '==', 'planning_shift'), where('rayonType', '==', 'velo'))))
+    await assertFails(getDocs(query(collection(as('dirgen'), 'calendar_events'), where('magasinId', '==', 'A'), where('rayonType', '==', 'velo'))))
+    await assertSucceeds(getDocs(query(collection(as('veloA'), 'calendar_events'), where('magasinId', '==', 'A'), where('type', '==', 'planning_shift'), where('rayonType', '==', 'velo'))))
+    await assertSucceeds(deleteDoc(doc(as('veloA'), 'calendar_events', 'sh1')))
+    await assertFails(setDoc(doc(as('dirgen'), 'calendar_events', 'sh2'), { ...shift, createdBy: 'dirgen', type: 'rdv_client' }))
   })
   it("impossible de créer un événement au nom de quelqu'un d'autre", async () => {
-    await assertFails(setDoc(doc(as('veloA'), 'calendar_events', 'x'), { magasinId: 'A', createdBy: 'veloB' }))
+    await assertFails(setDoc(doc(as('veloA'), 'calendar_events', 'x'), { magasinId: 'A', rayonType: 'velo', createdBy: 'veloB' }))
   })
 })
 
