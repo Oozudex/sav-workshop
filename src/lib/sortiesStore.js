@@ -69,7 +69,7 @@ export async function deleteSemaine(id) {
   await deleteDoc(doc(db, COLL, id))
 }
 
-// Range une semaine importée dans une autre semaine (mauvaise semaine choisie) : copie le fichier et ses
+// Range une semaine importée dans une autre semaine (mauvaise semaine choisie, acheteurs et direction) : copie le fichier et ses
 // lignes vers la nouvelle semaine, puis supprime l'ancienne (rien n'est perdu si la copie échoue).
 // Refusé si la semaine visée a déjà un fichier importé.
 export async function moveSemaine(from, { annee, semaine }, user) {
@@ -86,6 +86,8 @@ export async function moveSemaine(from, { annee, semaine }, user) {
     ...(from.fichier && { fichier: from.fichier }),
     deplacee: { at: serverTimestamp(), by: author(user), de: from.nom },
   })
+  // Pour les règles : un acheteur ne supprime l'ancienne semaine que si son fichier est dans la nouvelle
+  await setDoc(doc(db, COLL, from.id), { deplaceeVers: id }, { merge: true })
   await deleteSemaine(from.id)
   return id
 }

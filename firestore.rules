@@ -559,10 +559,19 @@ service cloud.firestore {
 
     /* ── Statistiques Achats : taux de sortie hebdomadaires ─────────────────── */
     // Une semaine importée (fichier, totaux) et ses lignes compressées (parts). Acheteurs et direction
-    // créent et importent ; seule la direction supprime une semaine.
+    // créent et importent ; seule la direction supprime une semaine. Un acheteur peut seulement supprimer
+    // l'ancienne semaine d'un « Changer de semaine » : deplaceeVers pointe vers la semaine qui a reçu
+    // le même fichier (même version).
+    function semaineDeplacee(id) {
+      let vers = resource.data.get('deplaceeVers', '');
+      let cible = /databases/$(database)/documents/sorties_semaines/$(vers);
+      return vers is string && vers != '' && vers != id && exists(cible)
+        && (!('fichier' in resource.data)
+          || get(cible).data.get('fichier', {}).get('version', null) == resource.data.fichier.version);
+    }
     match /sorties_semaines/{id} {
       allow read, create, update: if isSignedIn() && isGlobal();
-      allow delete: if isSignedIn() && isDirGen();
+      allow delete: if isSignedIn() && (isDirGen() || (isAcheteur() && semaineDeplacee(id)));
       match /parts/{part} {
         allow read, write: if isSignedIn() && isGlobal();
       }

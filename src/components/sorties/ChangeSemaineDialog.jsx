@@ -1,4 +1,4 @@
-// Changer la semaine d'un taux de sortie (admin) : quand le fichier a été importé dans la mauvaise semaine,
+// Changer la semaine d'un taux de sortie (acheteurs et direction) : quand le fichier a été importé dans la mauvaise semaine,
 // on le range dans la bonne (fichier, lignes et N-1 associé suivent la nouvelle semaine).
 import { useState } from 'react'
 import { BTN_PRIMARY, BTN_SECONDARY, Field, Modal, Notice } from '../admin/ui'

@@ -80,7 +80,7 @@ export default function SortieDetail() {
           <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">Comparée à la même semaine de l’année précédente : {labelN1}.</p>
         </div>
         <div className="flex items-center gap-1">
-          {user.isAdmin && <button type="button" onClick={() => setDialog('move')} className={BTN_SECONDARY}>Changer de semaine</button>}
+          {(isDirection || user.role === 'acheteur') && <button type="button" onClick={() => setDialog('move')} className={BTN_SECONDARY}>Changer de semaine</button>}
           {isDirection && (
             <button type="button" onClick={remove} className="h-8 px-3 rounded-lg text-xs font-semibold text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10">Supprimer</button>
           )}

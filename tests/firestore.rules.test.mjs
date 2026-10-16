@@ -572,7 +572,7 @@ describe('accès anonyme', () => {
 })
 
 describe('statistiques achats : taux de sortie', () => {
-  it("acheteurs et direction importent les semaines, seule la direction en supprime", async () => {
+  it("acheteurs et direction importent les semaines, seule la direction en supprime (sauf déplacement)", async () => {
     for (const uid of ['acheteur', 'dirgen', 'admin']) {
       const db = as(uid)
       await assertSucceeds(setDoc(doc(db, 'sorties_semaines', `2026-S4${uid.length}`), { annee: 2026, semaine: 42 }))
@@ -582,6 +582,17 @@ describe('statistiques achats : taux de sortie', () => {
     await assertSucceeds(deleteDoc(doc(as('acheteur'), 'sorties_semaines', '2026-S42', 'parts', '0')))
     await assertFails(deleteDoc(doc(as('acheteur'), 'sorties_semaines', '2026-S42')))
     await assertSucceeds(deleteDoc(doc(as('dirgen'), 'sorties_semaines', '2026-S42')))
+    // Changer de semaine : l'acheteur supprime l'ancienne seulement si son fichier est dans la nouvelle
+    const ach = as('acheteur')
+    await assertSucceeds(setDoc(doc(ach, 'sorties_semaines', '2026-S30'), { annee: 2026, semaine: 30, fichier: { version: 7 } }))
+    await assertSucceeds(setDoc(doc(ach, 'sorties_semaines', '2026-S31'), { annee: 2026, semaine: 31, fichier: { version: 8 } }))
+    await assertSucceeds(setDoc(doc(ach, 'sorties_semaines', '2026-S30'), { deplaceeVers: '2026-S31' }, { merge: true }))
+    await assertFails(deleteDoc(doc(ach, 'sorties_semaines', '2026-S30'))) // pas le même fichier
+    await assertSucceeds(setDoc(doc(ach, 'sorties_semaines', '2026-S30'), { deplaceeVers: '2026-S99' }, { merge: true }))
+    await assertFails(deleteDoc(doc(ach, 'sorties_semaines', '2026-S30'))) // semaine absente
+    await assertSucceeds(setDoc(doc(ach, 'sorties_semaines', '2026-S31'), { fichier: { version: 7 } }, { merge: true }))
+    await assertSucceeds(setDoc(doc(ach, 'sorties_semaines', '2026-S30'), { deplaceeVers: '2026-S31' }, { merge: true }))
+    await assertSucceeds(deleteDoc(doc(ach, 'sorties_semaines', '2026-S30')))
     for (const uid of ['veloA', 'dirmagA']) {
       await assertFails(getDoc(doc(as(uid), 'sorties_semaines', '2026-S48')))
       await assertFails(setDoc(doc(as(uid), 'sorties_semaines', 'x'), { annee: 2026 }))
