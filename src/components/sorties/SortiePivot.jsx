@@ -135,13 +135,15 @@ function Cells({ s, ref1, n1 = false, total = false, rang = null }) {
   })
 }
 
-export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {} }) {
+// onFiltersChange : prévenu à chaque changement de filtres (le graphique de saison reprend ceux du tableau)
+export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {}, onFiltersChange }) {
   const [levels, setLevels] = useState(['magasin'])
   const [filters, setFilters] = useState(defaultFilters)
   const [open, setOpen] = useState(() => new Set())
   const [more, setMore] = useState({})
   const [sort, setSort] = useState({ key: 'caNet', period: 'n', dir: -1 })
   const [exporting, setExporting] = useState(false)
+  useEffect(() => { onFiltersChange?.(filters) }, [filters]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const values = useMemo(() => Object.fromEntries(DIMS.map(d => [d.key, dimValues([n, n1], d.key)])), [n, n1])
   const possible = useMemo(() => possibleValues([n, n1], filters), [n, n1, filters])

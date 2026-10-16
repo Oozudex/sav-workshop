@@ -266,9 +266,12 @@ export function possibleValues(datasets, filters = {}, keys = DIMS.map(d => d.ke
   return out
 }
 
-// Résumé d'une semaine pour le graphique de saison : sommes par magasin × univers × segment, sous la
-// même forme qu'un jeu de données (quelques milliers de lignes au lieu de 55 000).
-export const RESUME_DIMS = ['magasin', 'univers', 'segment']
+// Résumé d'une semaine pour le graphique de saison : sommes par magasin × univers × segment × famille ×
+// sous-famille × marque × fournisseur, sous la même forme qu'un jeu de données (~20 000 lignes et ~300 Ko
+// au lieu de 55 000 lignes ; modèle, référence et couleur le ramèneraient presque au fichier entier).
+// RESUME_FORMAT change quand les axes changent : les anciens résumés sont alors recalculés.
+export const RESUME_DIMS = ['magasin', 'univers', 'segment', 'famille', 'sousFamille', 'marque', 'fournisseur']
+export const RESUME_FORMAT = 2
 export function resumeSortie(ds) {
   const dims = {}, codes = {}, meas = {}
   for (const k of RESUME_DIMS) { dims[k] = ds.dims[k]; codes[k] = [] }

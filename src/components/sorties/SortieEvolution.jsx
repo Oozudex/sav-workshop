@@ -1,14 +1,14 @@
-// Graphique de saison sous le tableau d'une semaine, de la première semaine de la saison (AH : S23, PE : S49)
-// (semaines réglées dans les paramètres de la page) jusqu'à la semaine affichée, pour un indicateur au choix, filtrable par magasin, univers et segment.
+// Graphique de saison sous le tableau d'une semaine, de la première semaine de la saison (réglée dans les
+// paramètres de la page, par défaut AH : S23, PE : S49) jusqu'à la semaine affichée, pour un indicateur au
+// choix, avec les filtres du tableau en direct (sauf modèle, référence et couleur, absents des résumés).
 // Deux vues : « Groupe » (N bleu canard, N-1 gris en pointillés) et « Par magasin » (une courbe N par
 // magasin, le N-1 dans l'info-bulle). S'appuie sur les résumés des semaines.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  INDICATEURS, RESUME_DIMS, SAISON_NOMS, dimLabel, formatIndicateur, indicateurs, pivot, possibleValues,
+  DIMS, INDICATEURS, RESUME_DIMS, SAISON_NOMS, formatIndicateur, indicateurs, pivot,
   saisonDe, semaineId, semaineLabel, semaineN1, semainesEntre,
 } from '../../lib/sorties'
 import { useParametresAchats, useResumes, useSemaines } from '../../lib/sortiesStore'
-import { FilterButton } from './SortiePivot'
 
 const SELECT = 'h-8 px-2 rounded-lg border text-xs bg-white dark:bg-neutral-950 border-gray-200 dark:border-neutral-700 text-gray-900 dark:text-white'
 const H = 280
@@ -78,11 +78,14 @@ function placeLabels(items, top, bottom) {
   return out
 }
 
-export default function SortieEvolution({ semaine, defaultFilters = {} }) {
+export default function SortieEvolution({ semaine, filters: tableFilters = {} }) {
   const { list } = useSemaines()
   const [vue, setVue] = useState('magasin')
   const [ind, setInd] = useState('taux')
-  const [filters, setFilters] = useState(() => Object.fromEntries(Object.entries(defaultFilters).filter(([k]) => RESUME_DIMS.includes(k))))
+  // Filtres du tableau : ceux des axes résumés s'appliquent, les autres (modèle, référence, couleur) non
+  const filters = useMemo(() => Object.fromEntries(Object.entries(tableFilters).filter(([k, set]) => RESUME_DIMS.includes(k) && set?.size)), [tableFilters])
+  const appliques = DIMS.filter(d => filters[d.key])
+  const ignores = DIMS.filter(d => !RESUME_DIMS.includes(d.key) && tableFilters[d.key]?.size)
   const [asTable, setAsTable] = useState(false)
   const [hover, setHover] = useState(null)
   const [hidden, setHidden] = useState(() => new Set())
@@ -104,12 +107,12 @@ export default function SortieEvolution({ semaine, defaultFilters = {} }) {
   }, [list, weeks])
   const { data, done, error } = useResumes(imported)
 
-  const values = useMemo(() => Object.fromEntries(RESUME_DIMS.map(k => {
+  // Tous les magasins des semaines chargées (ordre alphabétique : il fixe la couleur de chacun)
+  const magasins = useMemo(() => {
     const set = new Set()
-    for (const r of data.values()) for (const v of r.dims[k]) set.add(v)
-    return [k, [...set].sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }))]
-  })), [data])
-  const possible = useMemo(() => possibleValues([...data.values()], filters, RESUME_DIMS), [data, filters])
+    for (const r of data.values()) for (const v of r.dims.magasin) set.add(v)
+    return [...set].sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }))
+  }, [data])
   const def = INDICATEURS.find(i => i.key === ind)
 
   // Vue groupe : une valeur N et N-1 par semaine
@@ -127,17 +130,16 @@ export default function SortieEvolution({ semaine, defaultFilters = {} }) {
     }
     return { n: byMag(w.id), n1: byMag(w.idN1) }
   }), [weeks, data, filters, ind])
-  const colorOf = useMemo(() => new Map(values.magasin.map((m, i) => [m, magStyle(i)])), [values.magasin])
+  const colorOf = useMemo(() => new Map(magasins.map((m, i) => [m, magStyle(i)])), [magasins])
   const stores = useMemo(() => {
     const set = new Set(parMagasin.flatMap(w => (w.n ? [...w.n.keys()] : [])))
-    return values.magasin.filter(m => set.has(m))
-  }, [parMagasin, values.magasin])
+    return magasins.filter(m => set.has(m))
+  }, [parMagasin, magasins])
   const shown = stores.filter(m => !hidden.has(m))
 
   const labelN = `${semaineLabel(saison.debut.annee, saison.debut.semaine)} → ${semaineLabel(semaine.annee, semaine.semaine)}`
   const p0 = semaineN1(saison.debut), p1 = semaineN1(semaine)
   const labelN1 = `${semaineLabel(p0.annee, p0.semaine)} → ${semaineLabel(p1.annee, p1.semaine)}`
-  const activeFilters = RESUME_DIMS.filter(k => filters[k]?.size)
   const loading = done < imported.length
   const parMag = vue === 'magasin'
 
@@ -220,16 +222,21 @@ export default function SortieEvolution({ semaine, defaultFilters = {} }) {
             {INDICATEURS.map(i => <option key={i.key} value={i.key}>{i.label}</option>)}
           </select>
         </label>
-        {RESUME_DIMS.map(k => (
-          <FilterButton key={k} dim={{ key: k, label: dimLabel(k) }} values={values[k]} possible={possible[k]} selected={filters[k] || new Set()}
-            onChange={set => setFilters(f => ({ ...f, [k]: set }))} />
-        ))}
-        {activeFilters.length > 0 && (
-          <button type="button" onClick={() => setFilters({})} className="text-xs underline text-gray-500 dark:text-neutral-400">Effacer les filtres</button>
-        )}
+        <span className="text-[11px] text-gray-500 dark:text-neutral-400">
+          Filtres du tableau : {appliques.length
+            ? appliques.map(d => `${d.label} (${[...filters[d.key]].slice(0, 3).join(', ')}${filters[d.key].size > 3 ? ` +${filters[d.key].size - 3}` : ''})`).join(' · ')
+            : 'aucun'}
+        </span>
         {loading && <span className="text-[11px] text-gray-500 dark:text-neutral-400">Chargement des semaines… {done}/{imported.length}</span>}
         {error && <span className="text-[11px] text-red-600 dark:text-red-400">{error}</span>}
       </div>
+
+      {ignores.length > 0 && (
+        <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+          Le graphique ne tient pas compte du filtre {ignores.map(d => d.label).join(', ')} du tableau : trop détaillé pour suivre toute la saison.
+          Les autres filtres s’appliquent.
+        </p>
+      )}
 
       <div ref={ref} className="relative">
       {asTable ? (

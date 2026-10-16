@@ -134,13 +134,14 @@ describe('taux de sortie : tableau croisé', () => {
     assert.deepEqual(sorted(deux.marque), ['NIKE'])
     assert.deepEqual(sorted(deux.univers), [])
   })
-  it('résume une semaine par magasin × univers × segment sans changer les totaux', () => {
+  it('résume une semaine (sans modèle, référence ni couleur) sans changer les totaux', () => {
     const r = resumeSortie(mk([
       row('LAVAL', 'RUNNING', 'ASICS', 'R1', 'NOIR', 1200, 200, 10, 4, 6),
-      row('LAVAL', 'RUNNING', 'NIKE', 'R2', 'BLANC', 300, 50, 1, 1, 0),
+      row('LAVAL', 'RUNNING', 'ASICS', 'R3', 'BLANC', 300, 50, 1, 1, 0),
       row('CHECY', 'RUNNING', 'NIKE', 'R2', 'NOIR', 600, 60, 5, 5, 0),
     ]))
-    assert.equal(r.n, 2)
+    assert.equal(r.n, 2) // les deux références ASICS de LAVAL fusionnent
+    assert.equal(r.dims.reference, undefined)
     const p = pivot({ n: r, n1: null, levels: [], filters: { magasin: new Set(['LAVAL']) } })
     assert.deepEqual(p.total.n, [1500, 250, 11, 5, 6])
     assert.deepEqual([...possibleValues([r], { magasin: new Set(['CHECY']) }, ['magasin', 'univers', 'segment']).univers], ['RUNNING'])

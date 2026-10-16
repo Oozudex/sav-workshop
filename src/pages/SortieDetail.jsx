@@ -50,6 +50,7 @@ export default function SortieDetail() {
   const { list: univers } = useBudgetUnivers()
   const [dialog, setDialog] = useState(null)
   const [notice, setNotice] = useState(null)
+  const [tableFilters, setTableFilters] = useState({})
   const isDirection = user.role === 'directeurgen'
 
   // Acheteur : filtre par défaut sur ses univers (s'ils existent dans les fichiers)
@@ -101,8 +102,8 @@ export default function SortieDetail() {
       {ready ? (
         <>
           <SortiePivot key={`${semaine.fichier?.version}-${semN1?.fichier?.version}`} n={dataN.ds} n1={dataN1.ds} labelN={labelN} labelN1={labelN1}
-            defaultFilters={defaultFilters} />
-          <SortieEvolution key={semaine.id} semaine={semaine} defaultFilters={defaultFilters} />
+            defaultFilters={defaultFilters} onFiltersChange={setTableFilters} />
+          <SortieEvolution key={semaine.id} semaine={semaine} filters={tableFilters} />
         </>
       ) : !dataN.loading && !dataN1.loading && (<>
         <SortieInfo labelN={labelN} labelN1={labelN1} />

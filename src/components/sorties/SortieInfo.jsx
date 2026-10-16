@@ -212,7 +212,7 @@ export default function SortieInfo({ total, labelN, labelN1, filtre }) {
             </li>
             <li>
               Le graphique sous le tableau suit la saison semaine par semaine (par défaut Automne-Hiver dès la S23 et Printemps-Été dès la S49 ; réglable avec l’engrenage de la page Statistiques Achats),
-              comparée aux mêmes semaines de l’année précédente. Il se filtre par magasin, univers et segment, indépendamment du tableau.
+              comparée aux mêmes semaines de l’année précédente. Il reprend en direct les filtres du tableau (sauf modèle, référence et couleur, trop détaillés pour toute une saison).
             </li>
             <li>La ligne de total en bas du fichier Excel est ignorée à l’import ; l’application refait ses propres totaux.</li>
             <li>Les magasins sont rapprochés de la liste des budgets : « INTERSPORT LAVAL » devient « LAVAL ».</li>

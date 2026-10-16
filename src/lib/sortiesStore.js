@@ -11,7 +11,8 @@ import {
 } from 'firebase/firestore'
 import { db } from './firebase'
 import {
-  SAISON_DEBUT, chunkBytes, datasetTotals, gunzipJson, gzipJson, joinBytes, resumeSortie, saisonDebutValide, semaineId, semaineNom,
+  RESUME_FORMAT, SAISON_DEBUT, chunkBytes, datasetTotals, gunzipJson, gzipJson, joinBytes, resumeSortie, saisonDebutValide, semaineId,
+  semaineNom,
 } from './sorties'
 
 const COLL = 'sorties_semaines'
@@ -98,7 +99,7 @@ const resumeRef = id => doc(db, COLL, id, 'resume', 'data')
 // Résumé trop gros pour un document : pas enregistré, il sera recalculé depuis les lignes
 async function saveResume(id, version, resume) {
   const b = await gzipJson(resume)
-  if (b.length <= PART_BYTES) await setDoc(resumeRef(id), { version, b: Bytes.fromUint8Array(b) })
+  if (b.length <= PART_BYTES) await setDoc(resumeRef(id), { version, format: RESUME_FORMAT, b: Bytes.fromUint8Array(b) })
 }
 
 export async function deleteSemaine(id) {
@@ -169,11 +170,12 @@ export function useSemaineData(semaine) {
 // le graphique : le résumé est calculé une fois depuis ses lignes puis enregistré.
 const resumes = new Map()
 function loadResume(s) {
-  const key = `${s.id}:${s.fichier.version}`
+  const key = `${s.id}:${s.fichier.version}:${RESUME_FORMAT}`
   if (!resumes.has(key)) {
     resumes.set(key, (async () => {
       const snap = await getDoc(resumeRef(s.id))
-      if (snap.exists() && snap.data().version === s.fichier.version) return gunzipJson(snap.data().b.toUint8Array())
+      const d = snap.data()
+      if (d?.version === s.fichier.version && d.format === RESUME_FORMAT) return gunzipJson(d.b.toUint8Array())
       const resume = resumeSortie(await loadSemaineData(s.id, s.fichier))
       await saveResume(s.id, s.fichier.version, resume).catch(() => {})
       return resume
