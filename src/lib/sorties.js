@@ -67,6 +67,8 @@ export const DIMS = [
   { key: 'fournisseur', label: 'Fournisseur', noms: ['FOURNISSEUR', 'LIB FOURNISSEUR', 'FRS', 'FOURN'] },
   { key: 'modele', label: 'Modèle', noms: ['MODELE', 'LIB MODELE', 'DESIGNATION', 'LIBELLE'] },
   { key: 'reference', label: 'Référence', noms: ['REFERENCE', 'REF', 'CODE ARTICLE', 'ARTICLE', 'REF ARTICLE'] },
+  // Code chrono Intersport de l'article (0-163546), presque un par référence
+  { key: 'chrono', label: 'Chrono', noms: ['CHRONO', 'CODE CHRONO', 'N CHRONO', 'NUM CHRONO'] },
   { key: 'couleur', label: 'Couleur', noms: ['COULEUR', 'COLORIS', 'LIB COULEUR'] },
 ]
 export const MEASURES = [
@@ -137,7 +139,7 @@ export function lundiSemaine(annee, semaine) {
 
 // La date de dernière réception n'a de sens qu'à partir d'un niveau Modèle, Référence ou Couleur : indice
 // du premier de ces niveaux dans les lignes du tableau (-1 : pas de colonne Der Recep)
-export const RECEP_DIMS = ['modele', 'reference', 'couleur']
+export const RECEP_DIMS = ['modele', 'reference', 'chrono', 'couleur']
 export const recepDepuis = levels => levels.findIndex(k => RECEP_DIMS.includes(k))
 // Dimanche (jour) d'une semaine ISO : référence de l'ancienneté des réceptions
 export const finSemaine = (annee, semaine) => jourDeIso(lundiSemaine(annee, semaine)) + 6
@@ -238,7 +240,22 @@ export function parseSortie(rows, { headerRow, mapping, canon = {} }) {
     if (recep) recep.push(parseJour(row[mapping[RECEP.key]]) ?? -1)
     n++
   }
-  return { n, dims, codes, meas, ...(recep && { recep }), skipped }
+  // absentes : axes sans colonne dans le fichier (toutes leurs lignes valent « (vide) »)
+  const absentes = DIMS.filter(d => !(mapping[d.key] >= 0)).map(d => d.key)
+  return { n, dims, codes, meas, ...(recep && { recep }), absentes, skipped }
+}
+
+// Semaine importée avant l'ajout d'un axe (ex. Chrono) : l'axe est ajouté avec « (vide) » partout et noté
+// dans absentes, pour que filtres et lignes fonctionnent (et que la page propose de réimporter)
+export function completerAxes(ds) {
+  if (!ds) return ds
+  for (const d of DIMS) {
+    if (ds.dims[d.key]) continue
+    ds.dims[d.key] = ['(vide)']
+    ds.codes[d.key] = new Array(ds.n).fill(0)
+    ds.absentes = [...new Set([...(ds.absentes || []), d.key])]
+  }
+  return ds
 }
 
 export function datasetTotals(ds) {

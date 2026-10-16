@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   autoMapping, chunkBytes, datasetTotals, dimValues, findHeaderRow, gunzipJson, gzipJson, indicateurs, isoWeek, joinBytes,
-  classement, filtresTexte, isoMoinsAns, lundiSemaine, matchSemaine, anciennete, jourCourt, missingMeasures, parseJour, parseSortie, recepRaccourcis, pivot, pivotExport, possibleValues, resumeSortie, saisonDe, semainesEntre, semaineId, semaineN1, semaineNom,
+  classement, filtresTexte, isoMoinsAns, lundiSemaine, matchSemaine, anciennete, completerAxes, jourCourt, missingMeasures, parseJour, parseSortie, recepRaccourcis, pivot, pivotExport, possibleValues, resumeSortie, saisonDe, semainesEntre, semaineId, semaineN1, semaineNom,
 } from '../../src/lib/sorties.js'
 
 const HEADER = ['Magasin', 'Univers', 'Segment', 'Famille', 'Sous-famille', 'Marque', 'Fournisseur', 'Modèle', 'Référence', 'Couleur',
@@ -289,5 +289,33 @@ describe('taux de sortie : date de dernière réception', () => {
     assert.equal(x.table.find(row => row[0] === 'Total A')[9], j('2026-10-01') + 25569)
     assert.equal(x.table.at(-1)[9], '') // total général
     assert.equal(x.formats[9], 'dd/mm/yy')
+  })
+})
+
+describe('taux de sortie : code chrono', () => {
+  // En-tête comme l'extraction Intersport : Réf puis Chrono puis Couleur
+  const H = ['Magasin', 'Univers', 'Segment', 'Famille', 'Sous-Famille', 'Modèle', 'Fourn. stat', 'Marque', 'Réf', 'Chrono', 'Couleur',
+    'QtRecep', 'QtVte', 'QtStkFin', 'MtMrg', 'CANet']
+  const r = (mag, ref, chrono, vte, stk) => [mag, 'RUNNING', 'SEG', 'FAM', 'SFAM', 'MOD', 'FRS', 'ASICS', ref, chrono, 'NOIR', 1, vte, stk, 10, 100]
+  const mk = lines => parseSortie([H, ...lines], { headerRow: 0, mapping: autoMapping(H) })
+
+  it('lit la colonne Chrono comme un axe (filtre et niveau de lignes)', () => {
+    assert.equal(autoMapping(H).chrono, 9)
+    const ds = mk([r('LAVAL', 'R1', '0-163546', 4, 6), r('CHECY', 'R1', '0-163546', 1, 1), r('LAVAL', 'R2', '980-112417', 2, 2)])
+    assert.deepEqual(ds.dims.chrono, ['0-163546', '980-112417'])
+    assert.deepEqual(ds.absentes, [])
+    const p = pivot({ n: ds, n1: null, levels: ['chrono'], filters: { chrono: new Set(['0-163546']) } })
+    assert.deepEqual(p.children('').map(c => [c.label, c.n[3]]), [['0-163546', 5]])
+  })
+  it('complète une semaine importée avant l’axe Chrono', () => {
+    const old = mk([r('LAVAL', 'R1', '0-1', 4, 6)])
+    delete old.dims.chrono; delete old.codes.chrono; delete old.absentes
+    completerAxes(old)
+    assert.deepEqual(old.dims.chrono, ['(vide)'])
+    assert.deepEqual(old.codes.chrono, [0])
+    assert.deepEqual(old.absentes, ['chrono'])
+    assert.deepEqual(pivot({ n: old, n1: null, levels: ['chrono'] }).children('').map(c => c.label), ['(vide)'])
+    // Fichier sans la colonne : l'axe vaut « (vide) » et il est noté absent
+    assert.ok(parseSortie([HEADER, row('LAVAL', 'RUNNING', 'ASICS', 'R1', 'NOIR', 1, 1, 1, 1, 1)], { headerRow: 0, mapping: autoMapping(HEADER) }).absentes.includes('chrono'))
   })
 })

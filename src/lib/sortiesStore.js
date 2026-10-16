@@ -11,7 +11,7 @@ import {
 } from 'firebase/firestore'
 import { db } from './firebase'
 import {
-  RESUME_FORMAT, SAISON_DEBUT, chunkBytes, datasetTotals, gunzipJson, gzipJson, joinBytes, resumeSortie, saisonDebutValide, semaineId,
+  RESUME_FORMAT, SAISON_DEBUT, chunkBytes, completerAxes, datasetTotals, gunzipJson, gzipJson, joinBytes, resumeSortie, saisonDebutValide, semaineId,
   semaineNom,
 } from './sorties'
 
@@ -142,7 +142,7 @@ async function loadSemaineData(id, fichier) {
       const snap = await getDocs(collection(db, COLL, id, 'parts'))
       const parts = snap.docs.map(d => d.data()).filter(p => p.i < fichier.parts).sort((a, b) => a.i - b.i)
       if (parts.length !== fichier.parts) throw new Error('Import incomplet : réimporte le fichier.')
-      return gunzipJson(joinBytes(parts.map(p => p.b.toUint8Array())))
+      return completerAxes(await gunzipJson(joinBytes(parts.map(p => p.b.toUint8Array()))))
     })().catch(err => { cache.delete(key); throw err }))
   }
   return cache.get(key)

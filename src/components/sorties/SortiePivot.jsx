@@ -63,8 +63,17 @@ export function FilterButton({ dim, values, possible, selected, onChange }) {
     document.addEventListener('mousedown', close)
     return () => document.removeEventListener('mousedown', close)
   }, [open])
+  // Plusieurs valeurs séparées par des virgules ou points-virgules (une colonne Excel collée devient une
+  // liste) : chacune cherchée telle quelle ; une seule : contenue dans le libellé
   const needle = q.trim().toUpperCase()
-  const match = v => !needle || v.toUpperCase().includes(needle)
+  const liste = needle.split(/\s*[,;]\s*/).filter(Boolean)
+  const match = v => !needle || (liste.length > 1 ? liste.includes(v.toUpperCase()) : v.toUpperCase().includes(needle))
+  const coller = e => {
+    const t = e.clipboardData?.getData('text') || ''
+    if (!/[\r\n\t]/.test(t.trim())) return
+    e.preventDefault()
+    setQ(t.split(/[\r\n\t]+/).map(x => x.trim()).filter(Boolean).join(', '))
+  }
   const live = values.filter(v => possible.has(v))
   const shown = live.filter(match)
   const stale = values.filter(v => selected.has(v) && !possible.has(v) && match(v))
@@ -78,11 +87,11 @@ export function FilterButton({ dim, values, possible, selected, onChange }) {
       </button>
       {open && (
         <div className="absolute z-30 mt-1 w-72 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 shadow-lg p-2 space-y-2">
-          <input autoFocus type="search" value={q} onChange={e => setQ(e.target.value)} placeholder={`Rechercher (${live.length})…`}
+          <input autoFocus type="search" value={q} onChange={e => setQ(e.target.value)} onPaste={coller} placeholder={`Rechercher (${live.length})…`}
             aria-label={`Rechercher dans ${dim.label}`} className="Input h-8 text-xs w-full" />
           <div className="flex gap-2 text-[11px]">
             <button type="button" className="underline text-gray-600 dark:text-neutral-300"
-              onClick={() => onChange(new Set([...selected, ...shown.slice(0, 1000)]))}>Tout cocher{needle ? ' (recherche)' : ''}</button>
+              onClick={() => onChange(new Set([...selected, ...shown.slice(0, 1000)]))}>Tout cocher{needle ? ` (recherche${liste.length > 1 ? ` : ${shown.length} sur ${liste.length}` : ''})` : ''}</button>
             {active && <button type="button" className="underline text-gray-600 dark:text-neutral-300" onClick={() => onChange(new Set())}>Effacer</button>}
           </div>
           <ul className="max-h-64 overflow-y-auto space-y-0.5">
@@ -239,6 +248,9 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
   const NB = COLS.length + (showRecep ? 1 : 0) // colonnes par période
   // Semaines importées sans la colonne Der Recep (le filtre n'y garde aucune ligne)
   const sansDates = [[n, labelN], [n1, labelN1]].filter(([ds]) => ds && !ds.recep).map(([, l]) => l)
+  // Semaines importées sans la colonne Chrono (toutes leurs lignes valent « (vide) »)
+  const chronoOn = levels.includes('chrono') || filters.chrono?.size > 0
+  const sansChrono = [[n, labelN], [n1, labelN1]].filter(([ds]) => ds?.absentes?.includes('chrono')).map(([, l]) => l)
 
   const setLevel = next => { setLevels(next); setOpen(new Set()); setMore({}) }
   const move = (i, d) => { const l = [...levels]; [l[i], l[i + d]] = [l[i + d], l[i]]; setLevel(l) }
@@ -355,6 +367,12 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
               ...activeFilters.map(d => `${d.label} : ${[...filters[d.key]].slice(0, 4).join(', ')}${filters[d.key].size > 4 ? ` +${filters[d.key].size - 4}` : ''}`),
               ...(recepOn ? [`${RECEP.label} : ${recepTexte(filters.recep)} (N-1 : ${recepTexte(filters.recep, 1)})`] : []),
             ].join(' · ')}
+          </p>
+        )}
+        {chronoOn && sansChrono.length > 0 && (
+          <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+            {sansChrono.join(' et ')} {sansChrono.length > 1 ? 'ont été importées' : 'a été importée'} sans les codes chrono : ses lignes sont regroupées sous « (vide) ».
+            Recharge la page puis clique sur « Réimporter » avec le même fichier.
           </p>
         )}
         {(recepOn || showRecep) && sansDates.length > 0 && (

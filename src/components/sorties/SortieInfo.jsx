@@ -206,7 +206,11 @@ export default function SortieInfo({ total, labelN, labelN1, filtre }) {
           <ul className="list-disc pl-4 space-y-0.5">
             <li>Les filtres changent le total : il ne compte que les lignes filtrées.</li>
             <li>
-              Avec un niveau <strong>Modèle, Référence ou Couleur</strong> dans les lignes, une colonne <strong>Der Recep</strong> donne la dernière
+              <strong>Chrono</strong> (code article Intersport, ex. 0-163546) est un axe comme les autres : filtre et niveau de lignes. Dans la
+              recherche d’un filtre, colle une colonne de codes copiée d’Excel (ou sépare-les par des virgules) pour les retrouver tous d’un coup.
+            </li>
+            <li>
+              Avec un niveau <strong>Modèle, Référence, Chrono ou Couleur</strong> dans les lignes, une colonne <strong>Der Recep</strong> donne la dernière
               réception de chaque ligne (la plus récente des lignes regroupées) et son ancienneté à la fin de la semaine. En ambre : reçu il y a
               moins de 4 semaines, un taux de sortie bas peut venir de là (le stock a eu peu de temps pour sortir).
             </li>
