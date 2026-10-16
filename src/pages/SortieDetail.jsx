@@ -32,6 +32,9 @@ function Status({ title, dot, s, data, onImport, importLabel }) {
       ) : <p className="text-sm text-amber-700 dark:text-amber-400">Pas encore importé</p>}
       {data.loading && <p className="text-[11px] text-gray-500 dark:text-neutral-400">Chargement des lignes…</p>}
       {data.error && <p className="text-[11px] text-red-600 dark:text-red-400">{data.error}</p>}
+      {data.ds && !data.ds.recep && (
+        <p className="text-[11px] text-amber-700 dark:text-amber-400">Sans les dates de réception (Der Recep) : réimporte le fichier pour les avoir.</p>
+      )}
       <button type="button" onClick={onImport} className={`mt-2 ${f ? BTN_SECONDARY : BTN_PRIMARY}`}>{f ? `Réimporter` : importLabel}</button>
     </div>
   )

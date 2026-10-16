@@ -357,10 +357,11 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
             ].join(' · ')}
           </p>
         )}
-        {recepOn && sansDates.length > 0 && (
+        {(recepOn || showRecep) && sansDates.length > 0 && (
           <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-            {sansDates.join(' et ')} {sansDates.length > 1 ? 'ont été importées' : 'a été importée'} sans la colonne Der Recep : aucune de ses lignes ne passe ce filtre.
-            Réimporte le fichier pour avoir les dates.
+            {sansDates.join(' et ')} {sansDates.length > 1 ? 'ont été importées' : 'a été importée'} sans les dates de réception (import fait avant leur ajout,
+            ou depuis une page ouverte avant la mise à jour) : {recepOn ? 'aucune de ses lignes ne passe le filtre Der Recep' : 'la colonne Der Recep reste vide'}.
+            Recharge la page puis clique sur « Réimporter » avec le même fichier.
           </p>
         )}
       </div>
