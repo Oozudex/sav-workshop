@@ -8,8 +8,14 @@ import { deleteLine, setCommentaire } from '../../lib/budgetsStore'
 import { AddBrandForm, BrandEngage, BrandNote, OrphanTag, Reste, SaisieCell, TextInput, brandInfo } from './SegmentSaisie'
 import { TONE } from './tones'
 
-const TH = 'py-1.5 px-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-neutral-400'
-const STICKY = 'sticky left-0 z-10 bg-white dark:bg-neutral-900'
+const TH = 'py-1.5 px-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-neutral-400 border-b border-gray-200 dark:border-neutral-700'
+const BG = 'bg-white dark:bg-neutral-900'
+// Quand le tableau ne tient pas à l'écran : la colonne Marque (à gauche) et la colonne Total (à droite, sauf sur
+// téléphone où il ne resterait plus de place) restent visibles, seules les colonnes des magasins défilent ; la ligne
+// des magasins reste en haut quand on descend dans les marques.
+const STICKY = `sticky left-0 z-10 ${BG}`
+const STICKY_TOTAL = `sm:sticky sm:right-0 sm:z-10 ${BG} sm:border-l border-gray-200 dark:border-neutral-700`
+const HEAD = `sticky top-0 z-20 ${BG}`
 
 export default function BrandGrid({ budgetId, seg, magasins, totals, hasGroupe, adapte, brands, user, readOnly = false }) {
   const [error, setError] = useState('')
@@ -24,7 +30,7 @@ export default function BrandGrid({ budgetId, seg, magasins, totals, hasGroupe, 
     <tr className={TONE[key].row}>
       <th scope="row" className={`${STICKY} ${TONE[key].sticky} py-1.5 pr-2 text-xs font-semibold ${TONE[key].text}`}>{TONE[key].label}</th>
       {magasins.map(m => <td key={m.id} className={`py-1.5 px-1.5 text-right text-xs font-semibold tabular-nums ${TONE[key].text}`}>{formatBudget(value(m.id))}</td>)}
-      <td className={`py-1.5 px-1.5 text-right text-xs font-bold tabular-nums ${TONE[key].text}`}>{formatBudget(total[key])}</td>
+      <td className={`${STICKY_TOTAL} ${TONE[key].sticky} py-1.5 px-1.5 text-right text-xs font-bold tabular-nums ${TONE[key].text}`}>{formatBudget(total[key])}</td>
       <td colSpan={readOnly ? 1 : 2} />
     </tr>
   )
@@ -34,7 +40,7 @@ export default function BrandGrid({ budgetId, seg, magasins, totals, hasGroupe, 
     <tr className={`text-xs ${tone ? TONE[tone].text : 'text-gray-700 dark:text-neutral-300'}`}>
       <th scope="row" className={`${STICKY} py-1 pr-2 text-left font-medium`}>{label}</th>
       {magasins.map(m => <td key={m.id} className="py-1 px-1.5 text-right tabular-nums">{Math.round(value(m.id)) ? format(value(m.id)) : '—'}</td>)}
-      <td className="py-1 px-1.5 text-right tabular-nums font-semibold">{Math.round(totalValue) ? format(totalValue) : '—'}</td>
+      <td className={`${STICKY_TOTAL} py-1 px-1.5 text-right tabular-nums font-semibold`}>{Math.round(totalValue) ? format(totalValue) : '—'}</td>
       <td colSpan={readOnly ? 1 : 2} />
     </tr>
   )
@@ -69,15 +75,15 @@ export default function BrandGrid({ budgetId, seg, magasins, totals, hasGroupe, 
       )}
       {error && <p role="alert" className="text-[11px] text-red-600 dark:text-red-400">{error}</p>}
 
-      <div className="overflow-x-auto">
+      <div className="overflow-auto max-h-[calc(100dvh-5rem)] overscroll-x-contain">
         <table className="w-full text-left border-separate border-spacing-0">
           <thead>
             <tr>
-              <th scope="col" className={`${TH} ${STICKY} pl-0 min-w-[9rem]`}>Marque</th>
-              {magasins.map(m => <th key={m.id} scope="col" className={`${TH} text-right min-w-[7.5rem]`} title={m.nom}>{m.nom}</th>)}
-              <th scope="col" className={`${TH} text-right min-w-[6.5rem]`}>Total</th>
-              <th scope="col" className={`${TH} min-w-[12rem]`}>Commentaire</th>
-              {!readOnly && <th scope="col" className={TH}><span className="sr-only">Actions</span></th>}
+              <th scope="col" className={`${TH} sticky left-0 top-0 z-30 ${BG} pl-0 min-w-[9rem]`}>Marque</th>
+              {magasins.map(m => <th key={m.id} scope="col" className={`${TH} ${HEAD} text-right min-w-[7.5rem]`} title={m.nom}>{m.nom}</th>)}
+              <th scope="col" className={`${TH} ${HEAD} sm:right-0 sm:z-30 sm:border-l text-right min-w-[6.5rem]`}>Total</th>
+              <th scope="col" className={`${TH} ${HEAD} min-w-[12rem]`}>Commentaire</th>
+              {!readOnly && <th scope="col" className={`${TH} ${HEAD}`}><span className="sr-only">Actions</span></th>}
             </tr>
           </thead>
           <tbody>
@@ -102,7 +108,7 @@ export default function BrandGrid({ budgetId, seg, magasins, totals, hasGroupe, 
                       <SaisieCell budgetId={budgetId} brand={b} mag={m} user={user} readOnly={readOnly} run={run} adapte={adapteB[m.id] || 0} />
                     </td>
                   ))}
-                  <td className="border-t border-gray-100 dark:border-neutral-800 py-1.5 px-1.5 text-right">
+                  <td className={`${STICKY_TOTAL} border-t border-t-gray-100 dark:border-t-neutral-800 py-1.5 px-1.5 text-right`}>
                     <p className="h-8 leading-8 text-sm font-semibold tabular-nums text-gray-900 dark:text-white">{formatBudget(saisieTotal)}</p>
                     {(qte > 0 || !readOnly) && <p className="h-7 leading-7 mt-1 text-xs tabular-nums text-gray-700 dark:text-neutral-300">{qte > 0 ? formatQte(qte) : ''}</p>}
                     <p className={`mt-0.5 text-[10px] tabular-nums ${TONE.n1.head}`}>N-1 {formatBudget(n1Total)}{qteN1 > 0 ? ` · ${formatQte(qteN1)}` : ''}</p>
@@ -137,7 +143,7 @@ export default function BrandGrid({ budgetId, seg, magasins, totals, hasGroupe, 
             <tr className="text-sm font-semibold text-gray-900 dark:text-white">
               <th scope="row" className={`${STICKY} border-t border-gray-200 dark:border-neutral-700 py-1.5 pr-2 text-left`}>Total saisi</th>
               {magasins.map(m => <td key={m.id} className="border-t border-gray-200 dark:border-neutral-700 py-1.5 px-1.5 text-right tabular-nums">{formatBudget(cell(m.id).saisie)}</td>)}
-              <td className="border-t border-gray-200 dark:border-neutral-700 py-1.5 px-1.5 text-right tabular-nums">{formatBudget(sum('saisie'))}</td>
+              <td className={`${STICKY_TOTAL} border-t py-1.5 px-1.5 text-right tabular-nums`}>{formatBudget(sum('saisie'))}</td>
               <td colSpan={readOnly ? 1 : 2} className="border-t border-gray-200 dark:border-neutral-700" />
             </tr>
             {footRow('dont engagé', 'engage', id => cell(id).engage, sum('engage'), formatBudget)}
@@ -146,7 +152,7 @@ export default function BrandGrid({ budgetId, seg, magasins, totals, hasGroupe, 
             <tr className="text-xs">
               <th scope="row" className={`${STICKY} py-1.5 pr-2 text-left font-semibold text-gray-700 dark:text-neutral-200`}>Reste</th>
               {magasins.map(m => <td key={m.id} className="py-1.5 px-1.5 text-right"><Reste objectif={objectif(cell(m.id), hasGroupe)} saisie={cell(m.id).saisie} short /></td>)}
-              <td className="py-1.5 px-1.5 text-right"><Reste objectif={objectif(total, hasGroupe)} saisie={sum('saisie')} short /></td>
+              <td className={`${STICKY_TOTAL} py-1.5 px-1.5 text-right`}><Reste objectif={objectif(total, hasGroupe)} saisie={sum('saisie')} short /></td>
               <td colSpan={readOnly ? 1 : 2} />
             </tr>
           </tfoot>
