@@ -324,7 +324,7 @@ function Page({ children }) {
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
       <Navbar />
       <main id="contenu" tabIndex={-1} className="focus:outline-none flex-1 p-4 sm:p-6">
-        <div className="max-w-6xl mx-auto space-y-5">{children}</div>
+        <div className="w-full space-y-5">{children}</div>
       </main>
     </div>
   )
