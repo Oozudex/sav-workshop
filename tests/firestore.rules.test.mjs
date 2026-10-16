@@ -578,6 +578,7 @@ describe('statistiques achats : taux de sortie', () => {
       await assertSucceeds(setDoc(doc(db, 'sorties_semaines', `2026-S4${uid.length}`), { annee: 2026, semaine: 42 }))
       await assertSucceeds(setDoc(doc(db, 'sorties_semaines', '2026-S42', 'parts', '0'), { i: 0, b: 'x' }))
       await assertSucceeds(getDocs(collection(db, 'sorties_semaines', '2026-S42', 'parts')))
+      await assertSucceeds(setDoc(doc(db, 'sorties_semaines', '2026-S42', 'resume', 'data'), { version: 1, b: 'x' }))
     }
     await assertSucceeds(deleteDoc(doc(as('acheteur'), 'sorties_semaines', '2026-S42', 'parts', '0')))
     await assertFails(deleteDoc(doc(as('acheteur'), 'sorties_semaines', '2026-S42')))
@@ -597,6 +598,7 @@ describe('statistiques achats : taux de sortie', () => {
       await assertFails(getDoc(doc(as(uid), 'sorties_semaines', '2026-S48')))
       await assertFails(setDoc(doc(as(uid), 'sorties_semaines', 'x'), { annee: 2026 }))
       await assertFails(getDocs(collection(as(uid), 'sorties_semaines', '2026-S48', 'parts')))
+      await assertFails(getDoc(doc(as(uid), 'sorties_semaines', '2026-S48', 'resume', 'data')))
     }
   })
 })

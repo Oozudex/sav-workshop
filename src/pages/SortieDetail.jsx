@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import ChangeSemaineDialog from '../components/sorties/ChangeSemaineDialog'
 import ImportSortieDialog from '../components/sorties/ImportSortieDialog'
+import SortieEvolution from '../components/sorties/SortieEvolution'
 import SortieInfo from '../components/sorties/SortieInfo'
 import SortiePivot from '../components/sorties/SortiePivot'
 import { BTN_PRIMARY, BTN_SECONDARY, EmptyState, Notice } from '../components/admin/ui'
@@ -98,8 +99,11 @@ export default function SortieDetail() {
       </p>
 
       {ready ? (
-        <SortiePivot key={`${semaine.fichier?.version}-${semN1?.fichier?.version}`} n={dataN.ds} n1={dataN1.ds} labelN={labelN} labelN1={labelN1}
-          defaultFilters={defaultFilters} />
+        <>
+          <SortiePivot key={`${semaine.fichier?.version}-${semN1?.fichier?.version}`} n={dataN.ds} n1={dataN1.ds} labelN={labelN} labelN1={labelN1}
+            defaultFilters={defaultFilters} />
+          <SortieEvolution key={semaine.id} semaine={semaine} defaultFilters={defaultFilters} />
+        </>
       ) : !dataN.loading && !dataN1.loading && (<>
         <SortieInfo labelN={labelN} labelN1={labelN1} />
         <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">

@@ -2,22 +2,15 @@
 // choisi (Magasin › Univers › Marque…), filtres sur les valeurs de chaque axe, 15 colonnes : le libellé,
 // puis CANet, MtMrg, Marge %, QtRecep, QtVte, QtStkFin et taux de sortie pour N (à gauche) et pour N-1 (à droite).
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
-import { DIMS, classement, dimLabel, dimValues, indicateurs, pivot, possibleValues } from '../../lib/sorties'
+import { DIMS, INDICATEURS, classement, dimLabel, dimValues, formatIndicateur as fmt, indicateurs, pivot, possibleValues } from '../../lib/sorties'
 import { RANG_CLS, RangNuancier, rangStyle, rangTexte } from './rang'
 import SortieInfo from './SortieInfo'
 
 const PAGE = 200
 // compare : colonne où une hausse par rapport à N-1 est une bonne nouvelle (vert) et une baisse une
 // mauvaise (rouge). Réceptions et stock restent neutres (une hausse n'est ni bonne ni mauvaise en soi).
-const COLS = [
-  { key: 'caNet', label: 'CANet', fmt: 'eur', compare: true },
-  { key: 'mtMrg', label: 'MtMrg', fmt: 'eur', compare: true },
-  { key: 'marge', label: 'Marge %', fmt: 'pct', compare: true },
-  { key: 'qtRecep', label: 'QtRecep', fmt: 'qte' },
-  { key: 'qtVte', label: 'QtVte', fmt: 'qte', compare: true },
-  { key: 'qtStkFin', label: 'QtStkFin', fmt: 'qte' },
-  { key: 'taux', label: 'Taux de sortie', fmt: 'pct', compare: true },
-]
+const NEUTRES = ['qtRecep', 'qtStkFin']
+const COLS = INDICATEURS.map(c => ({ ...c, compare: !NEUTRES.includes(c.key) }))
 // Colonnes dont le fond classe les lignes entre elles (plus haut = meilleur)
 const CLASSES = ['marge', 'taux']
 // Couleur de chaque période : N-1 en gris (le passé, comme dans les budgets), N en bleu canard (la semaine
@@ -42,12 +35,6 @@ const PERIOD = {
     dot: 'bg-teal-600',
   },
 }
-const fmt = (v, f) => {
-  if (v == null) return '—'
-  if (f === 'pct') return `${(Math.round(v * 1000) / 10).toLocaleString('fr-FR', { minimumFractionDigits: 1 })} %`
-  if (f === 'eur') return `${Math.round(v).toLocaleString('fr-FR')} €`
-  return Math.round(v).toLocaleString('fr-FR')
-}
 // Écart N / N-1 : en % pour les montants et quantités, en points pour les pourcentages
 const ecart = (v, r, f) => {
   const d = f === 'pct' ? (v - r) * 100 : (v - r) / Math.abs(r) * 100
@@ -62,7 +49,7 @@ const CHIP = 'h-7 inline-flex items-center gap-1 rounded-lg border px-2 text-xs 
 
 // Filtre d'un axe : liste de valeurs à cocher, avec recherche. possible : valeurs qui existent encore avec
 // les autres filtres (les autres sont masquées) ; une valeur cochée qui n'existe plus reste en haut, grisée.
-function FilterButton({ dim, values, possible, selected, onChange }) {
+export function FilterButton({ dim, values, possible, selected, onChange }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const ref = useRef(null)

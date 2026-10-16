@@ -26,6 +26,29 @@ export function semaineN1({ annee, semaine }) {
   return { annee: annee - 1, semaine: Math.min(semaine, weeksInYear(annee - 1)) }
 }
 
+// Saisons : Automne-Hiver à partir de la S23, Printemps-Été à partir de la S49 (de l'année précédente
+// pour les semaines de janvier à la S22)
+export const SAISON_DEBUT = { AH: 23, PE: 49 }
+export const SAISON_NOMS = { AH: 'Automne-Hiver', PE: 'Printemps-Été' }
+
+// Saison d'une semaine et sa semaine de début
+export function saisonDe({ annee, semaine }) {
+  if (semaine >= SAISON_DEBUT.PE) return { saison: 'PE', debut: { annee, semaine: SAISON_DEBUT.PE } }
+  if (semaine >= SAISON_DEBUT.AH) return { saison: 'AH', debut: { annee, semaine: SAISON_DEBUT.AH } }
+  return { saison: 'PE', debut: { annee: annee - 1, semaine: SAISON_DEBUT.PE } }
+}
+
+// Semaines de debut à fin comprises (en passant d'une année à l'autre)
+export function semainesEntre(debut, fin) {
+  const out = []
+  let { annee, semaine } = debut
+  while (annee < fin.annee || (annee === fin.annee && semaine <= fin.semaine)) {
+    out.push({ annee, semaine })
+    if (semaine >= weeksInYear(annee)) { annee++; semaine = 1 } else semaine++
+  }
+  return out
+}
+
 // ── Colonnes ────────────────────────────────────────────────────────────────────
 
 // Axes du tableau croisé (ordre des filtres) et mesures du fichier
@@ -49,6 +72,22 @@ export const MEASURES = [
   { key: 'qtStkFin', label: 'QtStkFin', noms: ['QTSTKFIN', 'QT STK FIN', 'QTE STK FIN', 'STOCK FIN'] },
 ]
 export const FIELDS = [...DIMS, ...MEASURES]
+// Indicateurs affichés (tableau et graphique) et leur format
+export const INDICATEURS = [
+  { key: 'caNet', label: 'CANet', fmt: 'eur' },
+  { key: 'mtMrg', label: 'MtMrg', fmt: 'eur' },
+  { key: 'marge', label: 'Marge %', fmt: 'pct' },
+  { key: 'qtRecep', label: 'QtRecep', fmt: 'qte' },
+  { key: 'qtVte', label: 'QtVte', fmt: 'qte' },
+  { key: 'qtStkFin', label: 'QtStkFin', fmt: 'qte' },
+  { key: 'taux', label: 'Taux de sortie', fmt: 'pct' },
+]
+export function formatIndicateur(v, f) {
+  if (v == null) return '—'
+  if (f === 'pct') return `${(Math.round(v * 1000) / 10).toLocaleString('fr-FR', { minimumFractionDigits: 1 })} %`
+  if (f === 'eur') return `${Math.round(v).toLocaleString('fr-FR')} €`
+  return Math.round(v).toLocaleString('fr-FR')
+}
 export const dimLabel = key => DIMS.find(d => d.key === key)?.label || key
 
 const norm = v => cleanText(v).normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim()
@@ -203,23 +242,45 @@ export function dimValues(datasets, key) {
 // Valeurs encore possibles de chaque axe avec les filtres des autres axes (comme les segments d'Excel) :
 // { clé: Set }. Un filtre ne limite pas sa propre liste (on peut cocher un deuxième univers), mais limite
 // toutes les autres, dans tous les sens (univers → segments, marque → univers…).
-export function possibleValues(datasets, filters = {}) {
-  const out = Object.fromEntries(DIMS.map(d => [d.key, new Set()]))
+export function possibleValues(datasets, filters = {}, keys = DIMS.map(d => d.key)) {
+  const out = Object.fromEntries(keys.map(k => [k, new Set()]))
   for (const ds of datasets) {
     if (!ds) continue
     const fs = Object.entries(filters).filter(([, set]) => set?.size)
       .map(([k, set]) => ({ k, codes: ds.codes[k], ok: ds.dims[k].map(v => set.has(v)) }))
-    const seen = DIMS.map(d => new Uint8Array(ds.dims[d.key].length))
+    const seen = keys.map(k => new Uint8Array(ds.dims[k].length))
     for (let i = 0; i < ds.n; i++) {
       // Ligne écartée par un seul filtre : elle compte encore pour la liste de cet axe-là
       let fail = null, nb = 0
       for (const f of fs) if (!f.ok[f.codes[i]]) { fail = f.k; if (++nb > 1) break }
       if (nb > 1) continue
-      DIMS.forEach((d, j) => { if (!nb || d.key === fail) seen[j][ds.codes[d.key][i]] = 1 })
+      keys.forEach((k, j) => { if (!nb || k === fail) seen[j][ds.codes[k][i]] = 1 })
     }
-    DIMS.forEach((d, j) => seen[j].forEach((s, c) => { if (s) out[d.key].add(ds.dims[d.key][c]) }))
+    keys.forEach((k, j) => seen[j].forEach((s, c) => { if (s) out[k].add(ds.dims[k][c]) }))
   }
   return out
+}
+
+// Résumé d'une semaine pour le graphique de saison : sommes par magasin × univers × segment, sous la
+// même forme qu'un jeu de données (quelques milliers de lignes au lieu de 55 000).
+export const RESUME_DIMS = ['magasin', 'univers', 'segment']
+export function resumeSortie(ds) {
+  const dims = {}, codes = {}, meas = {}
+  for (const k of RESUME_DIMS) { dims[k] = ds.dims[k]; codes[k] = [] }
+  for (const k of KEYS) meas[k] = []
+  const index = new Map()
+  for (let i = 0; i < ds.n; i++) {
+    const key = RESUME_DIMS.map(k => ds.codes[k][i]).join(',')
+    let r = index.get(key)
+    if (r == null) {
+      r = index.size; index.set(key, r)
+      for (const k of RESUME_DIMS) codes[k].push(ds.codes[k][i])
+      for (const k of KEYS) meas[k].push(0)
+    }
+    for (const k of KEYS) meas[k][r] += ds.meas[k][i]
+  }
+  for (const k of KEYS) meas[k] = meas[k].map(v => Math.round(v * 100) / 100)
+  return { n: index.size, dims, codes, meas }
 }
 
 // Sommes par chemin de valeurs (« LAVAL␟RUNNING ») pour chaque profondeur de levels.

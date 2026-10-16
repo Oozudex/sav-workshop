@@ -210,6 +210,10 @@ export default function SortieInfo({ total, labelN, labelN1, filtre }) {
               textile homme (et de même pour familles, marques, couleurs…) ; une marque cochée limite aussi les univers et les magasins.
               Une valeur cochée qui ne correspond plus aux autres filtres reste en haut de sa liste, en gris : décoche-la si elle ne sert plus.
             </li>
+            <li>
+              Le graphique sous le tableau suit la saison semaine par semaine (Automne-Hiver dès la S23, Printemps-Été dès la S49),
+              comparée aux mêmes semaines de l’année précédente. Il se filtre par magasin, univers et segment, indépendamment du tableau.
+            </li>
             <li>La ligne de total en bas du fichier Excel est ignorée à l’import ; l’application refait ses propres totaux.</li>
             <li>Les magasins sont rapprochés de la liste des budgets : « INTERSPORT LAVAL » devient « LAVAL ».</li>
             <li>Réimporter une semaine remplace ses lignes ; tout se recalcule aussitôt.</li>

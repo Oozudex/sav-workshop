@@ -575,6 +575,10 @@ service cloud.firestore {
       match /parts/{part} {
         allow read, write: if isSignedIn() && isGlobal();
       }
+      // Résumé pour le graphique de saison (recalculé par n'importe quel lecteur s'il manque)
+      match /resume/{doc} {
+        allow read, write: if isSignedIn() && isGlobal();
+      }
     }
 
     /* ── Budgets acheteurs (AH / PE) ─────────────────────────────────────── */

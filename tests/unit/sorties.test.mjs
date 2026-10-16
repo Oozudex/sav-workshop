@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   autoMapping, chunkBytes, datasetTotals, dimValues, findHeaderRow, gunzipJson, gzipJson, indicateurs, isoWeek, joinBytes,
-  classement, matchSemaine, missingMeasures, parseSortie, pivot, possibleValues, semaineId, semaineN1, semaineNom,
+  classement, matchSemaine, missingMeasures, parseSortie, pivot, possibleValues, resumeSortie, saisonDe, semainesEntre, semaineId, semaineN1, semaineNom,
 } from '../../src/lib/sorties.js'
 
 const HEADER = ['Magasin', 'Univers', 'Segment', 'Famille', 'Sous-famille', 'Marque', 'Fournisseur', 'Modèle', 'Référence', 'Couleur',
@@ -134,9 +134,34 @@ describe('taux de sortie : tableau croisé', () => {
     assert.deepEqual(sorted(deux.marque), ['NIKE'])
     assert.deepEqual(sorted(deux.univers), [])
   })
+  it('résume une semaine par magasin × univers × segment sans changer les totaux', () => {
+    const r = resumeSortie(mk([
+      row('LAVAL', 'RUNNING', 'ASICS', 'R1', 'NOIR', 1200, 200, 10, 4, 6),
+      row('LAVAL', 'RUNNING', 'NIKE', 'R2', 'BLANC', 300, 50, 1, 1, 0),
+      row('CHECY', 'RUNNING', 'NIKE', 'R2', 'NOIR', 600, 60, 5, 5, 0),
+    ]))
+    assert.equal(r.n, 2)
+    const p = pivot({ n: r, n1: null, levels: [], filters: { magasin: new Set(['LAVAL']) } })
+    assert.deepEqual(p.total.n, [1500, 250, 11, 5, 6])
+    assert.deepEqual([...possibleValues([r], { magasin: new Set(['CHECY']) }, ['magasin', 'univers', 'segment']).univers], ['RUNNING'])
+  })
   it('sans niveau : seulement le total', () => {
     const p = pivot({ n, n1: null, levels: [] })
     assert.deepEqual(p.children(''), [])
     assert.deepEqual(p.total.n1, [0, 0, 0, 0, 0])
+  })
+})
+
+describe('taux de sortie : saisons', () => {
+  it('AH dès la S23, PE dès la S49 (de l’année précédente en début d’année)', () => {
+    assert.deepEqual(saisonDe({ annee: 2026, semaine: 42 }), { saison: 'AH', debut: { annee: 2026, semaine: 23 } })
+    assert.deepEqual(saisonDe({ annee: 2026, semaine: 23 }), { saison: 'AH', debut: { annee: 2026, semaine: 23 } })
+    assert.deepEqual(saisonDe({ annee: 2026, semaine: 22 }), { saison: 'PE', debut: { annee: 2025, semaine: 49 } })
+    assert.deepEqual(saisonDe({ annee: 2026, semaine: 50 }), { saison: 'PE', debut: { annee: 2026, semaine: 49 } })
+  })
+  it('liste les semaines en passant d’une année à l’autre', () => {
+    const w = semainesEntre({ annee: 2026, semaine: 49 }, { annee: 2027, semaine: 2 })
+    assert.deepEqual(w.map(x => `${x.annee}-${x.semaine}`), ['2026-49', '2026-50', '2026-51', '2026-52', '2026-53', '2027-1', '2027-2'])
+    assert.equal(semainesEntre({ annee: 2026, semaine: 23 }, { annee: 2026, semaine: 42 }).length, 20)
   })
 })
