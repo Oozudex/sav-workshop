@@ -714,6 +714,14 @@ describe('budgets acheteurs', () => {
     await assertFails(updateDoc(doc(db, 'users', 'acheteurLoisir'), { universSegments: {} }))
     await assertSucceeds(updateDoc(doc(as('dirgen'), 'budgets', 'b', 'marques', 'multi'), { 'saisie.a': 10 }))
   })
+  it("sauvegarde sur Google Drive : seule la direction choisit le dossier", async () => {
+    for (const uid of ['dirgen', 'admin']) {
+      await assertSucceeds(setDoc(doc(as(uid), 'budget_reglages', 'sauvegardes'), { dossierId: `d-${uid}` }, { merge: true }))
+    }
+    await assertSucceeds(getDoc(doc(as('acheteurCycle'), 'budget_reglages', 'sauvegardes')))
+    await assertFails(setDoc(doc(as('acheteurCycle'), 'budget_reglages', 'sauvegardes'), { dossierId: 'x' }, { merge: true }))
+    await assertFails(getDoc(doc(as('veloA'), 'budget_reglages', 'sauvegardes')))
+  })
   it("un acheteur ne peut pas s'attribuer d'univers", async () => {
     await assertFails(updateDoc(doc(as('acheteurCycle'), 'users', 'acheteurCycle'), { univers: ['CYCLE', 'GOLF'] }))
   })

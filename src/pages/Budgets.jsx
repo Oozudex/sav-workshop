@@ -6,6 +6,7 @@ import Navbar from '../components/Navbar'
 import BrandsTab from '../components/budgets/BrandsTab'
 import StatsTab from '../components/budgets/StatsTab'
 import ListEditor from '../components/budgets/ListEditor'
+import SauvegardePanel from '../components/budgets/SauvegardePanel'
 import { BTN_PRIMARY, BTN_SECONDARY, EmptyState, Field, Modal, Notice } from '../components/admin/ui'
 import { SAISONS, budgetName, formatBudget, previousSeason, sumValues } from '../lib/budgets'
 import { createBudget, useBudgetMagasins, useBudgetUnivers, useBudgetUser, useBudgets } from '../lib/budgetsStore'
@@ -114,6 +115,7 @@ function BudgetCard({ budget, onOpen }) {
 
 export default function Budgets() {
   const navigate = useNavigate()
+  const user = useBudgetUser()
   const [tab, setTab] = useState('budgets')
   const [creating, setCreating] = useState(false)
   const budgets = useBudgets()
@@ -160,6 +162,7 @@ export default function Budgets() {
               ))}
             </div>
           ))}
+          {tab === 'budgets' && user.role === 'directeurgen' && <SauvegardePanel user={user} />}
           {tab === 'stats' && <StatsTab />}
           {tab === 'marques' && <BrandsTab />}
           {tab === 'univers' && <ListEditor kind="univers" list={univers.list} loading={univers.loading} />}

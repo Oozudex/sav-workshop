@@ -624,8 +624,10 @@ service cloud.firestore {
       allow read, write: if isSignedIn() && isGlobal();
     }
     // Réglages communs (pondérations de la notation des marques) : acheteurs et direction
+    // sauvegardes : dossier Google Drive des sauvegardes automatiques, choisi par la direction
     match /budget_reglages/{id} {
-      allow read, write: if isSignedIn() && isGlobal();
+      allow read: if isSignedIn() && isGlobal();
+      allow write: if isSignedIn() && isGlobal() && (id != 'sauvegardes' || isDirGen());
     }
     // Liste des marques par univers et segment : même droits que les lignes par marque, sauf l'ajout
     // (l'import du N-1 par un acheteur ajoute les marques de tous les univers)

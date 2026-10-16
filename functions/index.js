@@ -12,6 +12,8 @@
 //   calendriers des rayons, todo lists personnelles des comptes supprimés.
 // - majN1Suivant : une ligne de budget modifiée (AH27) met à jour le N-1 du budget suivant (AH28) quand
 //   celui-ci a repris sa saisie comme N-1.
+// - sauvegardeBudgets (chaque nuit à 2 h) et sauvegarderBudgetsMaintenant (bouton de la direction) :
+//   export Excel des budgets modifiés dans un Drive partagé Google (cf. sauvegarde.js).
 import { applicationDefault, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
@@ -22,7 +24,10 @@ import { onDocumentWritten } from 'firebase-functions/v2/firestore'
 import { logger } from 'firebase-functions'
 import {
   canManageStaff, limiteRdvClient, migrationEvenement, n1DepuisLigne, n1RepriseDe, newPassword, peutReinitialiserDoubleAuth,
+  peutSauvegarderBudgets,
 } from './lib.js'
+import { clientDrive } from './drive.js'
+import { sauvegarderBudgets } from './sauvegarde.js'
 
 initializeApp()
 setGlobalOptions({ region: 'europe-west1', maxInstances: 2 })
@@ -143,6 +148,31 @@ export const majN1Suivant = onDocumentWritten({ document: 'budgets/{budgetId}/ma
     await suivant.ref.update({ segments: FieldValue.arrayUnion({ id: n1.segId, univers: n1.univers, nom: n1.segment }) })
   }
   logger.info('N-1 mis à jour', { de: budget.nom, vers: suivant.get('nom'), marque: n1.nom })
+})
+
+/* ── Budgets : sauvegarde automatique sur Google Drive ─────────────────── */
+// Export Excel (code du site regroupé dans gen/ au déploiement, cf. scripts/build-functions-lib.mjs)
+async function lancerSauvegarde() {
+  const { budgetExcel, budgetsAvant } = await import('./gen/budgetSauvegarde.js')
+  const r = await sauvegarderBudgets({ db, drive: clientDrive(), budgetExcel, budgetsAvant, FieldValue })
+  logger.info('Sauvegarde des budgets', { statut: r.statut, sauvegardes: r.sauvegardes, inchanges: r.inchanges, jetes: r.jetes, erreur: r.erreur })
+  return r
+}
+
+const OPTIONS_SAUVEGARDE = { memory: '512MiB', timeoutSeconds: 300 }
+
+export const sauvegardeBudgets = onSchedule(
+  { schedule: '0 2 * * *', timeZone: 'Europe/Paris', retryCount: 1, ...OPTIONS_SAUVEGARDE },
+  async () => { await lancerSauvegarde() },
+)
+
+export const sauvegarderBudgetsMaintenant = onCall({ enforceAppCheck: APP_CHECK_OBLIGATOIRE, ...OPTIONS_SAUVEGARDE }, async request => {
+  const uid = request.auth?.uid
+  if (!uid) throw new HttpsError('unauthenticated', 'Connexion requise.')
+  const caller = (await db.doc(`users/${uid}`).get()).data()
+  if (!peutSauvegarderBudgets(caller, request.auth.token)) throw new HttpsError('permission-denied', 'Réservé à la direction.')
+  const r = await lancerSauvegarde()
+  return { statut: r.statut, sauvegardes: r.sauvegardes, inchanges: r.inchanges || 0, erreur: r.erreur || null }
 })
 
 /* ── Retrait d'un collaborateur : nouveau mot de passe pour le compte du rayon ── */

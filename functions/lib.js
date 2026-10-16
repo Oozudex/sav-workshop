@@ -1,5 +1,5 @@
 // Fonctions pures des Cloud Functions (tests/unit/functionsLib.test.mjs)
-import { randomInt } from 'node:crypto'
+import { createHash, randomInt } from 'node:crypto'
 
 // Sans caractères ambigus (0/O, 1/l/I) : le mot de passe est recopié à la main par l'équipe
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
@@ -94,4 +94,57 @@ export function n1DepuisLigne(avant, apres) {
     univers: ligne.univers || '', segId: ligne.segId || '', segment: ligne.segment || '', nom: ligne.nom || '',
     n1: nombres(apres?.saisie), quantiteN1: nombres(apres?.quantite), commentaireN1: apres?.commentaire || '',
   }
+}
+
+// ── Budgets : sauvegarde automatique sur Google Drive ─────────────────────────
+// Chaque nuit, chaque budget modifié depuis sa dernière sauvegarde est exporté (même fichier que le bouton
+// « Exporter (Excel) ») dans un sous-dossier du Drive partagé. On garde les 30 derniers jours, puis la
+// dernière sauvegarde de chaque mois.
+export const SAUVEGARDE_JOURS = 30
+const CHAMPS_VOLATILS = new Set(['updatedAt', 'updatedBy', 'sauvegarde', 'export', 'suppression'])
+
+// JSON stable (clés triées, dates en millisecondes) pour comparer le contenu d'un budget
+function stable(v) {
+  if (v == null || typeof v !== 'object') return v
+  if (typeof v.toMillis === 'function') return v.toMillis()
+  if (Array.isArray(v)) return v.map(stable)
+  return Object.fromEntries(Object.keys(v).sort().map(k => [k, stable(v[k])]))
+}
+const sansVolatils = d => Object.fromEntries(Object.entries(d || {}).filter(([k]) => !CHAMPS_VOLATILS.has(k)))
+
+// Empreinte du contenu d'un budget : budget, lignes (marques), fiches et listes communes. Les dates de
+// modification et de sauvegarde n'y entrent pas : retaper la même valeur ne crée pas de sauvegarde.
+export function empreinteBudget({ budget, lines, fiches, brands, universList, magasins, reglages, liens }) {
+  const docs = l => [...l].sort((a, b) => String(a.id).localeCompare(String(b.id))).map(d => stable(sansVolatils(d)))
+  const json = JSON.stringify({
+    budget: stable(sansVolatils(budget)), lines: docs(lines), fiches: docs(fiches), brands: docs(brands),
+    univers: docs(universList), magasins: docs(magasins), reglages: stable(sansVolatils(reglages)), liens: stable(liens || {}),
+  })
+  return createHash('sha256').update(json).digest('hex').slice(0, 32)
+}
+
+// 'YYYY-MM-DD' (heure de Paris)
+export const jourParis = (d = new Date()) => d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Paris' })
+
+// Sauvegardes d'un budget à mettre à la corbeille : celles de plus de 30 jours, sauf la dernière de
+// chaque mois. fichiers : [{ id, date: 'YYYY-MM-DD' }] ; aujourdhui : 'YYYY-MM-DD'
+export function sauvegardesAJeter(fichiers, aujourdhui) {
+  const d = new Date(`${aujourdhui}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() - SAUVEGARDE_JOURS)
+  const limite = d.toISOString().slice(0, 10)
+  const anciennes = fichiers.filter(f => f.date && f.date < limite)
+  const derniereDuMois = new Map()
+  for (const f of anciennes) {
+    const m = f.date.slice(0, 7)
+    if (!derniereDuMois.has(m) || f.date > derniereDuMois.get(m).date) derniereDuMois.set(m, f)
+  }
+  const garder = new Set([...derniereDuMois.values()].map(f => f.id))
+  return anciennes.filter(f => !garder.has(f.id)).map(f => f.id)
+}
+
+
+// Lancer la sauvegarde des budgets à la main : la direction (et les administrateurs), connectée avec son code
+export function peutSauvegarderBudgets(caller, token) {
+  if (!caller || caller.isActive === false || !['admin', 'directeurgen'].includes(caller.role)) return false
+  return sessionDoubleAuthOk(caller, token)
 }

@@ -21,6 +21,9 @@ dist/
 service-account*.json
 *-firebase-adminsdk-*.json
 
+# Code du site regroupé pour les Cloud Functions (scripts/build-functions-lib.mjs)
+functions/gen/
+
 # Firebase (logs et données locales des émulateurs)
 *-debug.log
 emulator-data/

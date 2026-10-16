@@ -191,6 +191,7 @@ export default function BudgetDetail() {
           <p className="text-xs text-gray-500 dark:text-neutral-400">
             Gardé {CONSERVATION_ANS} ans, jusqu’au {budgetEcheance(budget).split('-').reverse().join('/')}
             {budget.export?.at && ` · Dernier export le ${dateLabel(budget.export.at)}${budget.export.by?.nom ? ` par ${budget.export.by.nom}` : ''}`}
+            {budget.sauvegarde?.at && ` · Sauvegardé sur Google Drive le ${dateLabel(budget.sauvegarde.at)}`}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
