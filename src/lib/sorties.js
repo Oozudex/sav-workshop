@@ -148,6 +148,16 @@ export function joinBytes(parts) {
   return out
 }
 
+// Recherche d'une semaine : « 42 » ou « S42 » → semaine 42, « 2025 » → année 2025, sinon dans le nom
+export function matchSemaine(s, q) {
+  return q.trim().toUpperCase().split(/\s+/).filter(Boolean).every(t => {
+    const w = t.match(/^S?(\d{1,2})$/)
+    if (w) return s.semaine === Number(w[1])
+    if (/^\d{4}$/.test(t)) return s.annee === Number(t)
+    return (s.nom || semaineNom(s.annee, s.semaine)).toUpperCase().includes(t)
+  })
+}
+
 // ── Tableau croisé ──────────────────────────────────────────────────────────────
 
 // Sommes : [CANet, MtMrg, QtRecep, QtVte, QtStkFin]

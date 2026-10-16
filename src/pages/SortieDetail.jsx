@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import ImportSortieDialog from '../components/sorties/ImportSortieDialog'
+import SortieInfo from '../components/sorties/SortieInfo'
 import SortiePivot from '../components/sorties/SortiePivot'
 import { BTN_PRIMARY, BTN_SECONDARY, EmptyState, Notice } from '../components/admin/ui'
 import { normLabel } from '../lib/budgets'
@@ -95,11 +96,12 @@ export default function SortieDetail() {
       {ready ? (
         <SortiePivot key={`${semaine.fichier?.version}-${semN1?.fichier?.version}`} n={dataN.ds} n1={dataN1.ds} labelN={labelN} labelN1={labelN1}
           defaultFilters={defaultFilters} />
-      ) : !dataN.loading && !dataN1.loading && (
+      ) : !dataN.loading && !dataN1.loading && (<>
+        <SortieInfo labelN={labelN} labelN1={labelN1} />
         <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
           <EmptyState title="Rien à afficher" text="Importe le fichier de la semaine et celui de la même semaine de l’année précédente." />
         </div>
-      )}
+      </>)}
 
       {dialog && (
         <ImportSortieDialog target={dialog === 'n' ? { ...semaine, label: `la semaine ${labelN}` } : { ...p, label: `le N-1 (${labelN1})` }}

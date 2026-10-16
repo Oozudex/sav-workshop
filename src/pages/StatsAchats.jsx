@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import { BTN_PRIMARY, BTN_SECONDARY, EmptyState, Field, Modal, Notice } from '../components/admin/ui'
 import { useBudgetUser } from '../lib/budgetsStore'
-import { isoWeek, semaineId, semaineLabel, semaineN1, semaineNom, weeksInYear } from '../lib/sorties'
+import { isoWeek, matchSemaine, semaineId, semaineLabel, semaineN1, semaineNom, weeksInYear } from '../lib/sorties'
 import { ensureSemaine, useSemaines } from '../lib/sortiesStore'
 
 const TABS = [['sorties', 'Taux de sortie']]
@@ -67,7 +67,7 @@ function SemaineCard({ s, n1, onOpen }) {
   const p = semaineN1(s)
   return (
     <button type="button" onClick={onOpen}
-      className="text-left rounded-2xl border p-4 bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 hover:shadow-lg hover:ring-4 hover:ring-teal-200 dark:hover:ring-teal-500/30 transition-all space-y-2">
+      className="flex flex-col text-left rounded-2xl border p-4 bg-white dark:bg-neutral-900 border-gray-200 dark:border-neutral-800 hover:shadow-lg hover:ring-4 hover:ring-teal-200 dark:hover:ring-teal-500/30 transition-all space-y-2">
       <div>
         <p className="text-base font-bold text-gray-900 dark:text-white">{s.nom}</p>
         <p className="text-xs text-gray-500 dark:text-neutral-400">N-1 : {semaineLabel(p.annee, p.semaine)}</p>
@@ -83,12 +83,25 @@ function SemaineCard({ s, n1, onOpen }) {
   )
 }
 
+// Périodes de la liste des semaines (année ISO de la semaine)
+const PERIODES = [
+  ['cette', 'Cette année', (s, an) => s.annee === an],
+  ['derniere', 'L’année dernière', (s, an) => s.annee === an - 1],
+  ['toutes', 'Toutes', () => true],
+]
+
 export default function StatsAchats() {
   const navigate = useNavigate()
   const [tab, setTab] = useState('sorties')
   const [creating, setCreating] = useState(false)
+  const [periode, setPeriode] = useState('cette')
+  const [q, setQ] = useState('')
   const { list, loading } = useSemaines()
   const byId = new Map(list.map(s => [s.id, s]))
+  const an = isoWeek().annee
+  const counts = Object.fromEntries(PERIODES.map(([k, , f]) => [k, list.filter(s => f(s, an)).length]))
+  const inPeriode = list.filter(s => PERIODES.find(x => x[0] === periode)[2](s, an))
+  const shown = q.trim() ? inPeriode.filter(s => matchSemaine(s, q)) : inPeriode
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-neutral-950">
@@ -121,14 +134,37 @@ export default function StatsAchats() {
               <EmptyState title="Aucune semaine" text="Crée la semaine en cours puis importe son fichier et celui de la même semaine de l’année précédente."
                 action={<button type="button" onClick={() => setCreating(true)} className={BTN_PRIMARY}>Nouvelle semaine</button>} />
             </div>
-          ) : (
+          ) : (<>
+            <div className="flex flex-wrap items-center gap-2">
+              <div role="radiogroup" aria-label="Période" className="inline-flex p-0.5 rounded-lg bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800">
+                {PERIODES.map(([k, label]) => (
+                  <button key={k} type="button" role="radio" aria-checked={periode === k} onClick={() => setPeriode(k)}
+                    className={`h-7 px-2.5 rounded-md text-xs font-semibold transition-colors ${periode === k
+                      ? 'bg-teal-600 text-white'
+                      : 'text-gray-600 hover:text-gray-900 dark:text-neutral-400 dark:hover:text-white'}`}>
+                    {label} <span className="tabular-nums opacity-75">{counts[k]}</span>
+                  </button>
+                ))}
+              </div>
+              <input type="search" value={q} onChange={e => setQ(e.target.value)} placeholder="Rechercher une semaine (S42, 2025…)"
+                aria-label="Rechercher une semaine" className="Input h-8 text-xs w-full sm:w-64" />
+            </div>
+            {shown.length === 0 ? (
+              <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
+                <EmptyState title="Aucune semaine" text={q.trim()
+                  ? `Aucune semaine ne correspond à « ${q.trim()} » ${periode === 'toutes' ? '' : 'sur cette période'}.`
+                  : 'Aucune semaine sur cette période.'}
+                  action={periode !== 'toutes' && <button type="button" onClick={() => setPeriode('toutes')} className={BTN_SECONDARY}>Voir toutes les semaines</button>} />
+              </div>
+            ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {list.map(s => {
+              {shown.map(s => {
                 const p = semaineN1(s)
                 return <SemaineCard key={s.id} s={s} n1={byId.get(semaineId(p.annee, p.semaine))} onOpen={() => navigate(`/stats-achats/sorties/${s.id}`)} />
               })}
             </div>
-          ))}
+            )}
+          </>))}
         </div>
       </main>
       {creating && <NewSemaineModal semaines={list} onClose={() => setCreating(false)} />}

@@ -3,7 +3,7 @@
 // puis CANet, MtMrg, Marge %, QtRecep, QtVte, QtStkFin et taux de sortie pour N-1 et pour N.
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { DIMS, dimLabel, dimValues, indicateurs, pivot } from '../../lib/sorties'
-import { TONE } from '../budgets/tones'
+import SortieInfo from './SortieInfo'
 
 const PAGE = 200
 // compare : colonne où une hausse par rapport à N-1 est une bonne nouvelle (vert) et une baisse une
@@ -23,16 +23,18 @@ const PERIOD = {
   n1: {
     group: 'bg-gray-200/70 text-gray-700 dark:bg-neutral-700/60 dark:text-neutral-200',
     head: 'bg-gray-100 text-gray-500 dark:bg-neutral-800 dark:text-neutral-400',
-    cell: 'bg-gray-50 text-gray-600 dark:bg-neutral-800/40 dark:text-neutral-300',
-    total: 'bg-gray-100 text-gray-700 dark:bg-neutral-800 dark:text-neutral-200',
+    cell: 'bg-gray-50 dark:bg-neutral-800/40',
+    total: 'bg-gray-100 dark:bg-neutral-800',
+    text: 'text-gray-600 dark:text-neutral-300',
     edge: 'border-l-2 border-l-gray-300 dark:border-l-neutral-600',
     dot: 'bg-gray-400',
   },
   n: {
     group: 'bg-teal-600 text-white dark:bg-teal-500/80',
     head: 'bg-teal-50 text-teal-800 dark:bg-teal-500/15 dark:text-teal-300',
-    cell: 'text-gray-900 dark:text-white',
-    total: 'bg-teal-50 text-gray-900 dark:bg-teal-500/15 dark:text-white',
+    cell: '',
+    total: 'bg-teal-50 dark:bg-teal-500/15',
+    text: 'text-gray-900 dark:text-white',
     edge: 'border-l-2 border-l-teal-500',
     dot: 'bg-teal-600',
   },
@@ -43,6 +45,15 @@ const fmt = (v, f) => {
   if (f === 'eur') return `${Math.round(v).toLocaleString('fr-FR')} €`
   return Math.round(v).toLocaleString('fr-FR')
 }
+// Écart N / N-1 : en % pour les montants et quantités, en points pour les pourcentages
+const ecart = (v, r, f) => {
+  const d = f === 'pct' ? (v - r) * 100 : (v - r) / Math.abs(r) * 100
+  const t = `${d > 0 ? '+' : ''}${(Math.round(d * 10) / 10).toLocaleString('fr-FR', { minimumFractionDigits: 1 })}`
+  return f === 'pct' ? `${t} pt` : `${t} %`
+}
+// Hausse / baisse par rapport à N-1 : fond teinté, texte coloré et flèche (lisible sans les couleurs)
+const UP = { cls: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300 font-semibold', arrow: '▲', label: 'en hausse' }
+const DOWN = { cls: 'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300 font-semibold', arrow: '▼', label: 'en baisse' }
 const SELECT = 'h-8 px-2 rounded-lg border text-xs bg-white dark:bg-neutral-950 border-gray-200 dark:border-neutral-700 text-gray-900 dark:text-white'
 const CHIP = 'h-7 inline-flex items-center gap-1 rounded-lg border px-2 text-xs font-semibold'
 
@@ -94,19 +105,19 @@ function FilterButton({ dim, values, selected, onChange }) {
   )
 }
 
-// Cellules d'une période ; en N, comparaison avec N-1 colorée (vert en hausse, rouge en baisse)
+// Cellules d'une période ; en N, comparaison avec N-1 : vert ▲ en hausse, rouge ▼ en baisse
 function Cells({ s, ref1, n1 = false, total = false }) {
   const v = indicateurs(s)
   const r = ref1 ? indicateurs(ref1) : null
   const P = PERIOD[n1 ? 'n1' : 'n']
   return COLS.map((c, i) => {
-    let tone = ''
-    if (!n1 && c.compare && r && v[c.key] != null && r[c.key] != null && v[c.key] && r[c.key]
-      && Math.abs(v[c.key] - r[c.key]) > Math.abs(r[c.key]) * 0.0005) {
-      tone = v[c.key] > r[c.key] ? `${TONE.engage.text} font-semibold` : `${TONE.depassement.text} font-semibold`
-    }
+    let dir = null
+    if (!n1 && c.compare && r && v[c.key] && r[c.key]
+      && Math.abs(v[c.key] - r[c.key]) > Math.abs(r[c.key]) * 0.0005) dir = v[c.key] > r[c.key] ? UP : DOWN
     return (
-      <td key={c.key} className={`py-1.5 px-2 text-right text-xs tabular-nums whitespace-nowrap ${total ? `${P.total} py-2` : P.cell} ${tone} ${i === 0 ? P.edge : ''}`}>
+      <td key={c.key} title={dir ? `N-1 : ${fmt(r[c.key], c.fmt)} · ${ecart(v[c.key], r[c.key], c.fmt)}` : undefined}
+        className={`py-1.5 px-2 text-right text-xs tabular-nums whitespace-nowrap ${total ? 'py-2' : ''} ${dir ? dir.cls : `${total ? P.total : P.cell} ${P.text}`} ${i === 0 ? P.edge : ''}`}>
+        {dir && <><span aria-hidden="true" className="mr-1 text-[9px]">{dir.arrow}</span><span className="sr-only">{dir.label}, </span></>}
         {fmt(v[c.key], c.fmt)}
       </td>
     )
@@ -179,6 +190,7 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
   const th = 'py-1.5 px-2 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap cursor-pointer select-none'
   return (
     <div className="space-y-3">
+      <SortieInfo total={p.total} labelN={labelN} labelN1={labelN1} filtre={activeFilters.length > 0} />
       <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-3 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold text-gray-700 dark:text-neutral-200 w-20">Lignes</span>
@@ -214,7 +226,7 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
         )}
       </div>
 
-      <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-x-auto">
+      <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-x-auto relative">
         <table className="w-full border-separate border-spacing-0">
           <thead>
             <tr>
@@ -249,14 +261,11 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-600 dark:text-neutral-300" aria-label="Légende des couleurs">
         <li className="inline-flex items-center gap-1.5"><span aria-hidden="true" className={`h-2.5 w-2.5 rounded-sm ${PERIOD.n1.dot}`} />N-1 · {labelN1} (référence)</li>
         <li className="inline-flex items-center gap-1.5"><span aria-hidden="true" className={`h-2.5 w-2.5 rounded-sm ${PERIOD.n.dot}`} />N · {labelN} (semaine analysée)</li>
-        <li className={`font-semibold ${TONE.engage.text}`}>En hausse par rapport à N-1</li>
-        <li className={`font-semibold ${TONE.depassement.text}`}>En baisse par rapport à N-1</li>
+        <li><span className={`px-1.5 py-0.5 rounded ${UP.cls}`}>▲ En hausse par rapport à N-1</span></li>
+        <li><span className={`px-1.5 py-0.5 rounded ${DOWN.cls}`}>▼ En baisse par rapport à N-1</span></li>
+        <li>Survole une case pour voir la valeur N-1 et l’écart.</li>
       </ul>
-      <p className="text-[11px] text-gray-500 dark:text-neutral-400">
-        Marge % = MtMrg ÷ (CANet ÷ 1,20). Taux de sortie = QtVte ÷ (QtVte + QtStkFin). Sur une ligne regroupée, les montants et quantités
-        sont additionnés puis les % recalculés. Vert et rouge sur CANet, MtMrg, Marge %, QtVte et taux de sortie (une hausse y est une bonne nouvelle) ;
-        QtRecep et QtStkFin restent neutres. Clique sur un en-tête de colonne pour trier.
-      </p>
+      <p className="text-[11px] text-gray-500 dark:text-neutral-400">Clique sur un en-tête de colonne pour trier.</p>
     </div>
   )
 }

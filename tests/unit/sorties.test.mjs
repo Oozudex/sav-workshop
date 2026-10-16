@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   autoMapping, chunkBytes, datasetTotals, dimValues, findHeaderRow, gunzipJson, gzipJson, indicateurs, isoWeek, joinBytes,
-  missingMeasures, parseSortie, pivot, semaineId, semaineN1, semaineNom,
+  matchSemaine, missingMeasures, parseSortie, pivot, semaineId, semaineN1, semaineNom,
 } from '../../src/lib/sorties.js'
 
 const HEADER = ['Magasin', 'Univers', 'Segment', 'Famille', 'Sous-famille', 'Marque', 'Fournisseur', 'Modèle', 'Référence', 'Couleur',
@@ -11,6 +11,12 @@ const row = (mag, univ, marque, ref, coul, ca, mrg, rec, vte, stk) =>
   [mag, univ, 'SEG', 'FAM', 'SFAM', marque, 'FRS', 'MOD', ref, coul, ca, mrg, rec, vte, stk]
 
 describe('taux de sortie : semaines', () => {
+  it('recherche une semaine par numéro, année ou nom', () => {
+    const s = { annee: 2026, semaine: 42, nom: 'TAUX DE SORTIE S42 2026' }
+    for (const q of ['42', 's42', 'S42 2026', '2026', 'sortie', '']) assert.equal(matchSemaine(s, q), true, q)
+    for (const q of ['4', 'S41', '2025', 'S42 2025']) assert.equal(matchSemaine(s, q), false, q)
+    assert.equal(matchSemaine({ annee: 2026, semaine: 3 }, 'S03'), true)
+  })
   it('numérote les semaines ISO et trouve la même semaine N-1', () => {
     assert.deepEqual(isoWeek(new Date(2026, 9, 15)), { annee: 2026, semaine: 42 })
     assert.deepEqual(isoWeek(new Date(2027, 0, 1)), { annee: 2026, semaine: 53 })
