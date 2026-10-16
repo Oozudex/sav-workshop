@@ -1,7 +1,7 @@
 // Explication des calculs du taux de sortie (point info, comme « Comment est calculé le budget adapté ? »),
 // avec des exemples et les chiffres du tableau affiché (total N et N-1, filtres compris).
 import { classement, indicateurs } from '../../lib/sorties'
-import { RANG, rangNuance, rangTexte } from './rang'
+import { RANG_CLS, RangNuancier, rangStyle, rangTexte } from './rang'
 
 const eur = v => `${Math.round(v).toLocaleString('fr-FR')} €`
 const qte = v => Math.round(v).toLocaleString('fr-FR')
@@ -41,6 +41,8 @@ const MAGS_RANG = classement(MAGS.map(m => m[2]))
 // Même exemple pour la marge % (N-1, N) : classement indépendant de celui du taux
 const MARGES = [0.370, 0.352, 0.372, 0.368, 0.330, 0.360, 0.385, 0.371, 0.392, 0.384]
 const MARGES_RANG = classement(MAGS.map((_, i) => MARGES[i * 2 + 1]))
+
+const Rang = ({ rk }) => <span className={`px-1.5 py-0.5 rounded font-semibold ${RANG_CLS}`} style={rangStyle(rk.t)}>{rangTexte(rk)}</span>
 
 // total : { n, n1 } sommes du tableau affiché (pivot.total)
 export default function SortieInfo({ total, labelN, labelN1, filtre }) {
@@ -150,20 +152,25 @@ export default function SortieInfo({ total, labelN, labelN1, filtre }) {
             niveau (les magasins entre eux, les marques d’un magasin entre elles…), <strong>sans regarder N-1</strong>. Chaque colonne a son
             propre classement : un magasin peut être bleu en marge et orange en taux de sortie.
           </p>
-          <ul className="list-disc pl-4 space-y-0.5">
-            <li><span className={`px-1 rounded font-semibold ${RANG[4].cls}`}>bleu foncé</span> : parmi les meilleurs, <span className={`px-1 rounded font-semibold ${RANG[3].cls}`}>bleu clair</span> : plutôt meilleur ;</li>
-            <li><span className={`px-1 rounded font-semibold ${RANG[2].cls}`}>jaune</span> : dans la moyenne ;</li>
-            <li><span className={`px-1 rounded font-semibold ${RANG[1].cls}`}>orange clair</span> : plutôt moins bon, <span className={`px-1 rounded font-semibold ${RANG[0].cls}`}>orange foncé</span> : parmi les moins bons.</li>
-          </ul>
-          <p className="mt-1">
-            La nuance dépend de la <strong>place</strong> dans le classement, découpé en 5 parts égales : le premier est toujours bleu foncé et le dernier
-            orange foncé, même si les valeurs sont proches. N et N-1 sont classés chacun de leur côté. Le total n’est pas classé.
+          <p className="mt-1 flex flex-wrap items-center gap-1.5">
+            <span className="font-semibold">1er : bleu foncé</span> <RangNuancier /> <span className="font-semibold">dernier : orange foncé</span>
           </p>
+          <ul className="list-disc pl-4 space-y-0.5">
+            <li>
+              <strong>Une nuance par place</strong> : avec 10 magasins, il y a 10 nuances, du bleu foncé (1er) au jaune (milieu du classement) puis à
+              l’orange foncé (10e). Deux lignes n’ont la même couleur que si elles sont ex æquo : le 9e et le 10e ont deux oranges différents.
+            </li>
+            <li>Plus il y a de lignes (ex. 40 marques), plus les nuances voisines sont proches ; la place exacte s’affiche au survol.</li>
+            <li>
+              La nuance dépend de la <strong>place</strong>, pas de l’écart : le premier est toujours bleu foncé et le dernier orange foncé, même si les
+              valeurs sont proches. N et N-1 sont classés chacun de leur côté. Le total n’est pas classé.
+            </li>
+          </ul>
           <ExTable head={['Exemple · 5 magasins', 'Taux N-1', 'Taux N', 'Évolution', 'Classement N']}
             rows={MAGS.map(([m, a, b], i) => [
               m, pct(a), pct(b),
               <span key="e" className={`font-semibold ${b > a ? UP : DOWN}`}>{b > a ? '▲' : '▼'} {evolPt(b, a)}</span>,
-              <span key="r" className={`px-1.5 py-0.5 rounded ${rangNuance(MAGS_RANG[i].t).cls}`}>{rangTexte(MAGS_RANG[i])}</span>,
+              <Rang key="r" rk={MAGS_RANG[i]} />,
             ])} />
           <p>
             CHATEAU GONTIER progresse (▲ vert, +2 points) mais a le plus faible taux de la semaine : il est en orange foncé. À l’inverse, CHECY
@@ -179,8 +186,8 @@ export default function SortieInfo({ total, labelN, labelN1, filtre }) {
               return [
                 m, pct(a), pct(b),
                 <span key="e" className={`font-semibold ${b > a ? UP : DOWN}`}>{b > a ? '▲' : '▼'} {evolPt(b, a)}</span>,
-                <span key="r" className={`px-1.5 py-0.5 rounded ${rangNuance(MARGES_RANG[i].t).cls}`}>{rangTexte(MARGES_RANG[i])}</span>,
-                <span key="t" className={`px-1.5 py-0.5 rounded ${rangNuance(MAGS_RANG[i].t).cls}`}>{rangTexte(MAGS_RANG[i])}</span>,
+                <Rang key="r" rk={MARGES_RANG[i]} />,
+                <Rang key="t" rk={MAGS_RANG[i]} />,
               ]
             })} />
           <ul className="list-disc pl-4 space-y-0.5">

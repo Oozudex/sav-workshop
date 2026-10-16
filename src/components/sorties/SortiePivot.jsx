@@ -3,7 +3,7 @@
 // puis CANet, MtMrg, Marge %, QtRecep, QtVte, QtStkFin et taux de sortie pour N (à gauche) et pour N-1 (à droite).
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { DIMS, classement, dimLabel, dimValues, indicateurs, pivot } from '../../lib/sorties'
-import { RANG, rangNuance, rangTexte } from './rang'
+import { RANG_CLS, RangNuancier, rangStyle, rangTexte } from './rang'
 import SortieInfo from './SortieInfo'
 
 const PAGE = 200
@@ -109,7 +109,7 @@ function FilterButton({ dim, values, selected, onChange }) {
 }
 
 // Cellules d'une période ; en N, comparaison avec N-1 : vert ▲ en hausse, rouge ▼ en baisse.
-// rang : { marge, taux } classement parmi les lignes du même niveau (fond bleu → jaune → orange) ; sur ces
+// rang : { marge, taux } classement parmi les lignes du même niveau (fond bleu → jaune → orange, une nuance par place) ; sur ces
 // cases, l'évolution N-1 n'est plus donnée que par la flèche colorée.
 function Cells({ s, ref1, n1 = false, total = false, rang = null }) {
   const v = indicateurs(s)
@@ -121,10 +121,10 @@ function Cells({ s, ref1, n1 = false, total = false, rang = null }) {
     if (!n1 && c.compare && r && v[c.key] && r[c.key]
       && Math.abs(v[c.key] - r[c.key]) > Math.abs(r[c.key]) * 0.0005) dir = v[c.key] > r[c.key] ? UP : DOWN
     const rk = rang?.[c.key] || null
-    const cls = rk ? `${rangNuance(rk.t).cls || plain} font-semibold` : dir ? dir.cls : plain
+    const cls = rk ? `${RANG_CLS} font-semibold` : dir ? dir.cls : plain
     const title = [rk && `Classement : ${rangTexte(rk)}`, dir && `N-1 : ${fmt(r[c.key], c.fmt)} · ${ecart(v[c.key], r[c.key], c.fmt)}`].filter(Boolean).join(' · ')
     return (
-      <td key={c.key} title={title || undefined}
+      <td key={c.key} title={title || undefined} style={rk ? rangStyle(rk.t) : undefined}
         className={`py-1.5 px-2 text-right text-xs tabular-nums whitespace-nowrap ${total ? 'py-2' : ''} ${cls} ${i === 0 ? P.edge : ''}`}>
         {dir && <><span aria-hidden="true" className={`mr-1 text-[9px] ${rk ? dir.text : ''}`}>{dir.arrow}</span><span className="sr-only">{dir.label}, </span></>}
         {rk && <span className="sr-only">{rangTexte(rk)}, </span>}
@@ -282,11 +282,10 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
         <li><span className={`px-1.5 py-0.5 rounded ${DOWN.cls}`}>▼ En baisse par rapport à N-1</span></li>
         <li className="inline-flex items-center gap-1">
           Marge % et taux de sortie, classement entre lignes du même niveau :
-          <span className={`px-1.5 py-0.5 rounded font-semibold ${RANG[4].cls}`}>meilleurs</span>
-          <span className={`px-1.5 py-0.5 rounded font-semibold ${RANG[3].cls}`}>…</span>
-          <span className={`px-1.5 py-0.5 rounded font-semibold ${RANG[2].cls}`}>moyenne</span>
-          <span className={`px-1.5 py-0.5 rounded font-semibold ${RANG[1].cls}`}>…</span>
-          <span className={`px-1.5 py-0.5 rounded font-semibold ${RANG[0].cls}`}>moins bons</span>
+          <span className="font-semibold">meilleur</span>
+          <RangNuancier />
+          <span className="font-semibold">moins bon</span>
+          (une nuance par place, jaune = milieu)
         </li>
         <li>Survole une case pour voir l’écart avec N-1 et le classement.</li>
       </ul>
