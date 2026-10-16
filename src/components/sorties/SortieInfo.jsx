@@ -211,7 +211,7 @@ export default function SortieInfo({ total, labelN, labelN1, filtre }) {
               Une valeur cochée qui ne correspond plus aux autres filtres reste en haut de sa liste, en gris : décoche-la si elle ne sert plus.
             </li>
             <li>
-              Le graphique sous le tableau suit la saison semaine par semaine (Automne-Hiver dès la S23, Printemps-Été dès la S49),
+              Le graphique sous le tableau suit la saison semaine par semaine (par défaut Automne-Hiver dès la S23 et Printemps-Été dès la S49 ; réglable avec l’engrenage de la page Statistiques Achats),
               comparée aux mêmes semaines de l’année précédente. Il se filtre par magasin, univers et segment, indépendamment du tableau.
             </li>
             <li>La ligne de total en bas du fichier Excel est ignorée à l’import ; l’application refait ses propres totaux.</li>

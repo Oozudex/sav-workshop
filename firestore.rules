@@ -581,6 +581,18 @@ service cloud.firestore {
       }
     }
 
+    // Paramètres communs des Statistiques Achats (débuts de saison AH / PE : semaines 1 à 52, différentes),
+    // réglés par les acheteurs et la direction
+    function semaineParam(v) { return v is int && v >= 1 && v <= 52; }
+    match /stats_achats_parametres/{id} {
+      allow read: if isSignedIn() && isGlobal();
+      allow create, update: if isSignedIn() && isGlobal() && id == 'general'
+        && request.resource.data.keys().hasOnly(['saisons', 'updatedAt', 'updatedBy'])
+        && request.resource.data.saisons.keys().hasOnly(['AH', 'PE'])
+        && semaineParam(request.resource.data.saisons.AH) && semaineParam(request.resource.data.saisons.PE)
+        && request.resource.data.saisons.AH != request.resource.data.saisons.PE;
+    }
+
     /* ── Budgets acheteurs (AH / PE) ─────────────────────────────────────── */
     // Réservés aux acheteurs et à la direction : listes des univers et des magasins du budget,
     // budgets du groupe (base, segments) et leurs lignes par marque. Les lignes par marque

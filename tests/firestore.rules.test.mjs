@@ -572,6 +572,26 @@ describe('accès anonyme', () => {
 })
 
 describe('statistiques achats : taux de sortie', () => {
+  it('acheteurs et direction règlent les débuts de saison (semaines 1 à 52, différentes)', async () => {
+    const ref = db => doc(db, 'stats_achats_parametres', 'general')
+    for (const uid of ['acheteur', 'dirgen', 'admin']) {
+      await assertSucceeds(setDoc(ref(as(uid)), { saisons: { AH: 24, PE: 48 }, updatedAt: serverTimestamp(), updatedBy: { uid, nom: '' } }))
+      await assertSucceeds(getDoc(ref(as(uid))))
+    }
+    const ach = as('acheteur')
+    await assertFails(setDoc(ref(ach), { saisons: { AH: 0, PE: 48 } }))
+    await assertFails(setDoc(ref(ach), { saisons: { AH: 24, PE: 53 } }))
+    await assertFails(setDoc(ref(ach), { saisons: { AH: 24, PE: 24 } }))
+    await assertFails(setDoc(ref(ach), { saisons: { AH: '24', PE: 48 } }))
+    await assertFails(setDoc(ref(ach), { saisons: { AH: 24, PE: 48 }, autre: 1 }))
+    await assertFails(setDoc(doc(ach, 'stats_achats_parametres', 'autre'), { saisons: { AH: 24, PE: 48 } }))
+    await assertFails(deleteDoc(ref(ach)))
+    for (const uid of ['veloA', 'dirmagA']) {
+      await assertFails(getDoc(ref(as(uid))))
+      await assertFails(setDoc(ref(as(uid)), { saisons: { AH: 24, PE: 48 } }))
+    }
+  })
+
   it("acheteurs et direction importent les semaines, seule la direction en supprime (sauf déplacement)", async () => {
     for (const uid of ['acheteur', 'dirgen', 'admin']) {
       const db = as(uid)

@@ -6,7 +6,8 @@ import Navbar from '../components/Navbar'
 import { BTN_PRIMARY, BTN_SECONDARY, EmptyState, Field, Modal, Notice } from '../components/admin/ui'
 import { useBudgetUser } from '../lib/budgetsStore'
 import { isoWeek, matchSemaine, semaineId, semaineLabel, semaineN1, semaineNom, weeksInYear } from '../lib/sorties'
-import { ensureSemaine, useSemaines } from '../lib/sortiesStore'
+import { ensureSemaine, useParametresAchats, useSemaines } from '../lib/sortiesStore'
+import ParametresAchatsDialog, { GearIcon } from '../components/sorties/ParametresAchatsDialog'
 
 const TABS = [['sorties', 'Taux de sortie']]
 const SELECT = 'w-full h-9 px-2 rounded-lg border text-sm bg-white dark:bg-neutral-950 border-gray-200 dark:border-neutral-700 text-gray-900 dark:text-white'
@@ -94,6 +95,9 @@ export default function StatsAchats() {
   const navigate = useNavigate()
   const [tab, setTab] = useState('sorties')
   const [creating, setCreating] = useState(false)
+  const [settings, setSettings] = useState(false)
+  const parametres = useParametresAchats()
+  const user = useBudgetUser()
   const [periode, setPeriode] = useState('cette')
   const [q, setQ] = useState('')
   const { list, loading } = useSemaines()
@@ -113,7 +117,13 @@ export default function StatsAchats() {
               <h1 className="text-lg font-bold text-gray-900 dark:text-white">Statistiques Achats</h1>
               <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">Ventes, marge, stock et taux de sortie du groupe, semaine par semaine.</p>
             </div>
-            {tab === 'sorties' && <button type="button" onClick={() => setCreating(true)} className={BTN_PRIMARY}>Nouvelle semaine</button>}
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setSettings(true)} disabled={parametres.loading} aria-label="Paramètres des Statistiques Achats" title="Paramètres"
+                className="h-9 w-9 grid place-items-center rounded-lg border border-gray-200 dark:border-neutral-700 text-gray-500 dark:text-neutral-400 hover:text-gray-800 hover:bg-gray-100 dark:hover:text-neutral-100 dark:hover:bg-neutral-800 transition-colors">
+                <GearIcon />
+              </button>
+              {tab === 'sorties' && <button type="button" onClick={() => setCreating(true)} className={BTN_PRIMARY}>Nouvelle semaine</button>}
+            </div>
           </div>
 
           <div role="tablist" aria-label="Rubriques" className="inline-flex p-1 rounded-xl bg-gray-100 dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800">
@@ -168,6 +178,7 @@ export default function StatsAchats() {
         </div>
       </main>
       {creating && <NewSemaineModal semaines={list} onClose={() => setCreating(false)} />}
+      {settings && <ParametresAchatsDialog parametres={parametres} user={user} onClose={() => setSettings(false)} />}
     </div>
   )
 }

@@ -183,6 +183,15 @@ describe('taux de sortie : saisons', () => {
     assert.deepEqual(saisonDe({ annee: 2026, semaine: 22 }), { saison: 'PE', debut: { annee: 2025, semaine: 49 } })
     assert.deepEqual(saisonDe({ annee: 2026, semaine: 50 }), { saison: 'PE', debut: { annee: 2026, semaine: 49 } })
   })
+  it('suit les semaines de début réglées dans les paramètres', () => {
+    const d = { AH: 30, PE: 5 }
+    assert.deepEqual(saisonDe({ annee: 2026, semaine: 42 }, d), { saison: 'AH', debut: { annee: 2026, semaine: 30 } })
+    assert.deepEqual(saisonDe({ annee: 2026, semaine: 10 }, d), { saison: 'PE', debut: { annee: 2026, semaine: 5 } })
+    assert.deepEqual(saisonDe({ annee: 2026, semaine: 3 }, d), { saison: 'AH', debut: { annee: 2025, semaine: 30 } })
+    // Réglage incomplet ou incohérent : valeurs par défaut
+    assert.deepEqual(saisonDe({ annee: 2026, semaine: 42 }, { AH: 23, PE: 23 }), { saison: 'AH', debut: { annee: 2026, semaine: 23 } })
+    assert.deepEqual(saisonDe({ annee: 2026, semaine: 42 }, null), { saison: 'AH', debut: { annee: 2026, semaine: 23 } })
+  })
   it('liste les semaines en passant d’une année à l’autre', () => {
     const w = semainesEntre({ annee: 2026, semaine: 49 }, { annee: 2027, semaine: 2 })
     assert.deepEqual(w.map(x => `${x.annee}-${x.semaine}`), ['2026-49', '2026-50', '2026-51', '2026-52', '2026-53', '2027-1', '2027-2'])

@@ -3,17 +3,44 @@
 // La semaine N-1 d'un rapport est la même semaine de l'année précédente : un import de N-1 est rangé
 // dans sa propre semaine, qui sert ensuite automatiquement. sorties_semaines/{id}/resume/data : résumé
 // compressé (magasin × univers × segment) pour le graphique de saison, de la même version que le fichier.
+// stats_achats_parametres/general : paramètres communs de la carte (débuts de saison), modifiables par
+// les acheteurs et la direction (engrenage de la page).
 import { useEffect, useState } from 'react'
 import {
   Bytes, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc,
 } from 'firebase/firestore'
 import { db } from './firebase'
-import { chunkBytes, datasetTotals, gunzipJson, gzipJson, joinBytes, resumeSortie, semaineId, semaineNom } from './sorties'
+import {
+  SAISON_DEBUT, chunkBytes, datasetTotals, gunzipJson, gzipJson, joinBytes, resumeSortie, saisonDebutValide, semaineId, semaineNom,
+} from './sorties'
 
 const COLL = 'sorties_semaines'
 const PART_BYTES = 900_000 // un document Firestore fait au plus 1 Mo
 
 const author = user => ({ uid: user?.uid || null, nom: user?.displayName || '' })
+
+// ── Paramètres ──────────────────────────────────────────────────────────────────
+
+const PARAMS = () => doc(db, 'stats_achats_parametres', 'general')
+
+// { saisons: { AH, PE }, updatedAt, updatedBy, loading } (valeurs par défaut tant que rien n'est réglé)
+export function useParametresAchats() {
+  const [state, setState] = useState({ saisons: SAISON_DEBUT, loading: true })
+  useEffect(() => onSnapshot(PARAMS(),
+    snap => {
+      const d = snap.data() || {}
+      setState({ ...d, saisons: saisonDebutValide(d.saisons) ? d.saisons : SAISON_DEBUT, loading: false })
+    },
+    () => setState({ saisons: SAISON_DEBUT, loading: false })), [])
+  return state
+}
+
+export async function saveParametresAchats({ saisons }, user) {
+  if (!saisonDebutValide(saisons)) throw new Error('Choisis deux semaines différentes, de S01 à S52.')
+  await setDoc(PARAMS(), { saisons, updatedAt: serverTimestamp(), updatedBy: author(user) }, { merge: true })
+}
+
+// ── Semaines ────────────────────────────────────────────────────────────────────
 
 export function useSemaines() {
   const [state, setState] = useState({ list: [], loading: true })

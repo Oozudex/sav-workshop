@@ -1,5 +1,5 @@
 // Graphique de saison sous le tableau d'une semaine, de la première semaine de la saison (AH : S23, PE : S49)
-// jusqu'à la semaine affichée, pour un indicateur au choix, filtrable par magasin, univers et segment.
+// (semaines réglées dans les paramètres de la page) jusqu'à la semaine affichée, pour un indicateur au choix, filtrable par magasin, univers et segment.
 // Deux vues : « Groupe » (N bleu canard, N-1 gris en pointillés) et « Par magasin » (une courbe N par
 // magasin, le N-1 dans l'info-bulle). S'appuie sur les résumés des semaines.
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -7,7 +7,7 @@ import {
   INDICATEURS, RESUME_DIMS, SAISON_NOMS, dimLabel, formatIndicateur, indicateurs, pivot, possibleValues,
   saisonDe, semaineId, semaineLabel, semaineN1, semainesEntre,
 } from '../../lib/sorties'
-import { useResumes, useSemaines } from '../../lib/sortiesStore'
+import { useParametresAchats, useResumes, useSemaines } from '../../lib/sortiesStore'
 import { FilterButton } from './SortiePivot'
 
 const SELECT = 'h-8 px-2 rounded-lg border text-xs bg-white dark:bg-neutral-950 border-gray-200 dark:border-neutral-700 text-gray-900 dark:text-white'
@@ -89,7 +89,8 @@ export default function SortieEvolution({ semaine, defaultFilters = {} }) {
   const [emph, setEmph] = useState(null)
   const [ref, width] = useWidth()
 
-  const saison = saisonDe(semaine)
+  const { saisons } = useParametresAchats()
+  const saison = saisonDe(semaine, saisons)
   const weeks = useMemo(() => semainesEntre(saison.debut, semaine).map(w => {
     const p = semaineN1(w)
     return { ...w, id: semaineId(w.annee, w.semaine), idN1: semaineId(p.annee, p.semaine), label: `S${String(w.semaine).padStart(2, '0')}` }

@@ -26,16 +26,21 @@ export function semaineN1({ annee, semaine }) {
   return { annee: annee - 1, semaine: Math.min(semaine, weeksInYear(annee - 1)) }
 }
 
-// Saisons : Automne-Hiver à partir de la S23, Printemps-Été à partir de la S49 (de l'année précédente
-// pour les semaines de janvier à la S22)
+// Saisons : semaine de début de chaque saison, réglable dans les paramètres des Statistiques Achats
+// (par défaut Automne-Hiver à la S23, Printemps-Été à la S49). Une semaine appartient à la dernière saison
+// commencée, éventuellement l'année précédente (S01 à S22 : PE commencé en S49 l'année d'avant).
 export const SAISON_DEBUT = { AH: 23, PE: 49 }
 export const SAISON_NOMS = { AH: 'Automne-Hiver', PE: 'Printemps-Été' }
+export const saisonDebutValide = d => ['AH', 'PE'].every(k => Number.isInteger(d?.[k]) && d[k] >= 1 && d[k] <= 52) && d.AH !== d.PE
 
 // Saison d'une semaine et sa semaine de début
-export function saisonDe({ annee, semaine }) {
-  if (semaine >= SAISON_DEBUT.PE) return { saison: 'PE', debut: { annee, semaine: SAISON_DEBUT.PE } }
-  if (semaine >= SAISON_DEBUT.AH) return { saison: 'AH', debut: { annee, semaine: SAISON_DEBUT.AH } }
-  return { saison: 'PE', debut: { annee: annee - 1, semaine: SAISON_DEBUT.PE } }
+export function saisonDe({ annee, semaine }, debuts = SAISON_DEBUT) {
+  const d = saisonDebutValide(debuts) ? debuts : SAISON_DEBUT
+  const starts = ['AH', 'PE'].map(saison => ({ saison, semaine: d[saison] })).sort((a, b) => a.semaine - b.semaine)
+  const cur = starts.findLast(s => s.semaine <= semaine)
+  if (cur) return { saison: cur.saison, debut: { annee, semaine: cur.semaine } }
+  const prev = starts.at(-1)
+  return { saison: prev.saison, debut: { annee: annee - 1, semaine: prev.semaine } }
 }
 
 // Semaines de debut à fin comprises (en passant d'une année à l'autre)
