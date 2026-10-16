@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   autoMapping, chunkBytes, datasetTotals, dimValues, findHeaderRow, gunzipJson, gzipJson, indicateurs, isoWeek, joinBytes,
-  classement, matchSemaine, missingMeasures, parseSortie, pivot, pivotExport, possibleValues, resumeSortie, saisonDe, semainesEntre, semaineId, semaineN1, semaineNom,
+  classement, filtresTexte, isoMoinsAns, lundiSemaine, matchSemaine, anciennete, jourCourt, missingMeasures, parseJour, parseSortie, recepRaccourcis, pivot, pivotExport, possibleValues, resumeSortie, saisonDe, semainesEntre, semaineId, semaineN1, semaineNom,
 } from '../../src/lib/sorties.js'
 
 const HEADER = ['Magasin', 'Univers', 'Segment', 'Famille', 'Sous-famille', 'Marque', 'Fournisseur', 'Modèle', 'Référence', 'Couleur',
@@ -197,5 +197,97 @@ describe('taux de sortie : saisons', () => {
     const w = semainesEntre({ annee: 2026, semaine: 49 }, { annee: 2027, semaine: 2 })
     assert.deepEqual(w.map(x => `${x.annee}-${x.semaine}`), ['2026-49', '2026-50', '2026-51', '2026-52', '2026-53', '2027-1', '2027-2'])
     assert.equal(semainesEntre({ annee: 2026, semaine: 23 }, { annee: 2026, semaine: 42 }).length, 20)
+  })
+})
+
+describe('taux de sortie : date de dernière réception', () => {
+  const H = [...HEADER, 'Der Recep', 'Der Recep Ts Mags']
+  const r = (mag, ref, recep, vte, stk, recepTs = '') => ['' + mag, 'RUNNING', 'SEG', 'FAM', 'SFAM', 'ASICS', 'FRS', 'MOD', ref, 'NOIR', 100, 10, 1, vte, stk, recep, recepTs]
+  const mk = lines => parseSortie([H, ...lines], { headerRow: 0, mapping: autoMapping(H) })
+  const j = iso => parseJour(iso)
+
+  it('lit les dates (texte court, long, ISO, date Excel) et prend « Der Recep » plutôt que « Ts Mags »', () => {
+    assert.equal(parseJour('01/10/26'), j('2026-10-01'))
+    assert.equal(parseJour('1/10/2026'), j('2026-10-01'))
+    assert.equal(parseJour(46296), j('2026-10-01')) // date Excel
+    assert.equal(parseJour(new Date(2026, 9, 1)), j('2026-10-01'))
+    assert.equal(parseJour('31/02/26'), null)
+    assert.equal(parseJour(''), null)
+    assert.equal(autoMapping(H).derRecep, 15)
+    const ds = mk([r('LAVAL', 'A', '01/10/26', 1, 1, '05/10/26'), r('LAVAL', 'B', '', 1, 1)])
+    assert.deepEqual(ds.recep, [j('2026-10-01'), -1])
+    assert.equal(mk([]).recep.length, 0)
+    assert.equal(parseSortie([HEADER], { headerRow: 0, mapping: autoMapping(HEADER) }).recep, undefined)
+  })
+  it('décale les dates d’un an et trouve le lundi d’une semaine', () => {
+    assert.equal(isoMoinsAns('2026-09-01', 1), '2025-09-01')
+    assert.equal(isoMoinsAns('2028-02-29', 1), '2027-02-28')
+    assert.equal(lundiSemaine(2026, 42), '2026-10-12')
+    assert.equal(lundiSemaine(2026, 1), '2025-12-29')
+    assert.deepEqual(recepRaccourcis({ annee: 2026, semaine: 42 }, { AH: 23, PE: 49 }), [
+      { label: '4 dernières semaines', du: '2026-09-21', au: '2026-10-18' },
+      { label: '8 dernières semaines', du: '2026-08-24', au: '2026-10-18' },
+      { label: 'Depuis le début de saison (S23 2026)', du: '2026-06-01', au: '2026-10-18' },
+    ])
+  })
+  it('filtre N sur la période et N-1 sur la même période un an plus tôt', () => {
+    const n = mk([
+      r('LAVAL', 'A', '01/09/26', 4, 6), // dans la période
+      r('LAVAL', 'B', '15/08/26', 1, 1), // avant
+      r('CHECY', 'C', '', 2, 2), // sans date : écartée
+    ])
+    const n1 = mk([r('LAVAL', 'A', '10/09/25', 3, 1), r('SARAN', 'D', '10/09/26', 5, 5)])
+    const filters = { recep: { du: '2026-09-01', au: '2026-09-30' } }
+    const p = pivot({ n, n1, levels: ['magasin'], filters })
+    assert.deepEqual(p.total.n.slice(3), [4, 6])
+    assert.deepEqual(p.total.n1.slice(3), [3, 1]) // 10/09/25 gardé, 10/09/26 hors de la période N-1
+    assert.deepEqual(p.children('').map(c => c.label), ['LAVAL'])
+    // Seule borne de début
+    assert.deepEqual(pivot({ n, n1, levels: [], filters: { recep: { du: '2026-08-20' } } }).total.n.slice(3), [4, 6])
+    // Les listes des filtres se limitent aussi à la période
+    assert.deepEqual([...possibleValues([n, n1], filters).magasin].sort(), ['LAVAL'])
+    // Semaine importée sans la colonne : rien ne passe le filtre
+    const sans = parseSortie([HEADER, row('LAVAL', 'RUNNING', 'ASICS', 'R1', 'NOIR', 1, 1, 1, 1, 1)], { headerRow: 0, mapping: autoMapping(HEADER) })
+    assert.deepEqual(pivot({ n: sans, n1: null, levels: [], filters }).total.n, [0, 0, 0, 0, 0])
+    assert.equal(filtresTexte(filters), 'Der Recep : du 01/09/2026 au 30/09/2026 (N-1 : du 01/09/2025 au 30/09/2025)')
+  })
+  it('donne la dernière réception à partir du niveau Modèle / Référence / Couleur', () => {
+    const n = mk([
+      r('LAVAL', 'A', '01/09/26', 1, 1), r('CHECY', 'A', '20/09/26', 1, 1), r('LAVAL', 'B', '', 1, 1),
+    ])
+    const n1 = mk([r('LAVAL', 'A', '10/09/25', 1, 1)])
+    // Magasin › Référence : rien sur le magasin, la date sur la référence de ce magasin
+    let p = pivot({ n, n1, levels: ['magasin', 'reference'] })
+    const laval = p.children('').find(c => c.label === 'LAVAL')
+    assert.deepEqual(laval.recep, { n: null, n1: null })
+    const lavalA = p.children(laval.path).find(c => c.label === 'A')
+    assert.deepEqual(lavalA.recep, { n: j('2026-09-01'), n1: j('2025-09-10') })
+    assert.deepEqual(p.children(laval.path).find(c => c.label === 'B').recep, { n: null, n1: null }) // sans date
+    // Référence seule : la plus récente de tous les magasins
+    p = pivot({ n, n1, levels: ['reference'] })
+    assert.equal(p.children('').find(c => c.label === 'A').recep.n, j('2026-09-20'))
+    // Référence › Magasin : la date reste sur les magasins sous la référence
+    p = pivot({ n, n1, levels: ['reference', 'magasin'] })
+    assert.equal(p.children('A').find(c => c.label === 'LAVAL').recep.n, j('2026-09-01'))
+    assert.equal(jourCourt(j('2026-10-01')), '01/10/26')
+    assert.equal(anciennete(j('2026-10-01'), j('2026-10-18')), '2 sem.')
+    assert.equal(anciennete(j('2026-10-15'), j('2026-10-18')), '3 j')
+  })
+  it('exporte la date de dernière réception en date Excel avec un niveau Référence', () => {
+    const n = mk([r('LAVAL', 'A', '01/10/26', 1, 1), r('CHECY', 'A', '20/09/26', 1, 1)])
+    const levels = ['reference', 'magasin']
+    const p = pivot({ n, n1: null, levels })
+    const x = pivotExport({ total: p.total, children: path => p.children(path), levels, titre: 'T', labelN: 'S42 2026', labelN1: 'S42 2025' })
+    const head = x.table[4]
+    assert.deepEqual(head.slice(0, 2), ['Référence', 'Magasin'])
+    assert.equal(head[9], 'Der Recep') // 2 niveaux + 7 indicateurs N
+    assert.equal(head[17], 'Der Recep')
+    assert.equal(x.table[3][10], 'N-1 · S42 2025')
+    const laval = x.table.find(row => row[1] === 'LAVAL')
+    assert.equal(laval[9], j('2026-10-01') + 25569)
+    assert.equal(laval[17], '') // pas de N-1
+    assert.equal(x.table.find(row => row[0] === 'Total A')[9], j('2026-10-01') + 25569)
+    assert.equal(x.table.at(-1)[9], '') // total général
+    assert.equal(x.formats[9], 'dd/mm/yy')
   })
 })

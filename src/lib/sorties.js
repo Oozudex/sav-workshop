@@ -76,7 +76,10 @@ export const MEASURES = [
   { key: 'qtVte', label: 'QtVte', noms: ['QTVTE', 'QT VTE', 'QTE VTE'] },
   { key: 'qtStkFin', label: 'QtStkFin', noms: ['QTSTKFIN', 'QT STK FIN', 'QTE STK FIN', 'STOCK FIN'] },
 ]
-export const FIELDS = [...DIMS, ...MEASURES]
+// Date de dernière réception de la ligne (« Der Recep », texte 01/10/26 dans l'extraction) : facultative,
+// gardée en jours depuis le 01/01/1970 (ds.recep, -1 si vide) pour le filtre par période
+export const RECEP = { key: 'derRecep', label: 'Der Recep', noms: ['DER RECEP', 'DERRECEP', 'DATE DER RECEP', 'DERNIERE RECEP', 'DERNIERE RECEPTION'] }
+export const FIELDS = [...DIMS, ...MEASURES, RECEP]
 // Indicateurs affichés (tableau et graphique) et leur format
 export const INDICATEURS = [
   { key: 'caNet', label: 'CANet', fmt: 'eur' },
@@ -97,6 +100,85 @@ export const dimLabel = key => DIMS.find(d => d.key === key)?.label || key
 
 const norm = v => cleanText(v).normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim()
 const compact = v => norm(v).replace(/ /g, '')
+
+// ── Dates de réception ──────────────────────────────────────────────────────────
+
+const JOUR_MS = 86400000
+// Jour (nombre de jours depuis le 01/01/1970) d'une cellule : texte 01/10/26 ou 01/10/2026 ou 2026-10-01,
+// date Excel (nombre) ou objet Date. null si vide ou illisible.
+export function parseJour(v) {
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : Math.round(Date.UTC(v.getFullYear(), v.getMonth(), v.getDate()) / JOUR_MS)
+  if (typeof v === 'number') return v > 0 && v < 2958466 ? Math.floor(v) - 25569 : null
+  const t = cleanText(v)
+  let y, m, d, r
+  if ((r = t.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/))) { d = +r[1]; m = +r[2]; y = +r[3] < 100 ? 2000 + +r[3] : +r[3] }
+  else if ((r = t.match(/^(\d{4})-(\d{2})-(\d{2})/))) { y = +r[1]; m = +r[2]; d = +r[3] }
+  else return null
+  const ms = Date.UTC(y, m - 1, d)
+  const back = new Date(ms)
+  return back.getUTCMonth() === m - 1 && back.getUTCDate() === d ? ms / JOUR_MS : null
+}
+export const jourIso = j => new Date(j * JOUR_MS).toISOString().slice(0, 10)
+export const jourDeIso = iso => (iso ? parseJour(iso) : null)
+export const isoFr = iso => (iso ? iso.split('-').reverse().join('/') : '')
+// Même date un ou plusieurs ans plus tôt (29/02 → 28/02)
+export function isoMoinsAns(iso, ans) {
+  if (!iso || !ans) return iso
+  const [y, m, d] = iso.split('-').map(Number)
+  const last = new Date(Date.UTC(y - ans, m, 0)).getUTCDate()
+  return `${y - ans}-${String(m).padStart(2, '0')}-${String(Math.min(d, last)).padStart(2, '0')}`
+}
+// Lundi d'une semaine ISO (AAAA-MM-JJ)
+export function lundiSemaine(annee, semaine) {
+  const jan4 = new Date(Date.UTC(annee, 0, 4))
+  const lundi1 = Date.UTC(annee, 0, 4) - ((jan4.getUTCDay() || 7) - 1) * JOUR_MS
+  return jourIso(lundi1 / JOUR_MS + (semaine - 1) * 7)
+}
+
+// La date de dernière réception n'a de sens qu'à partir d'un niveau Modèle, Référence ou Couleur : indice
+// du premier de ces niveaux dans les lignes du tableau (-1 : pas de colonne Der Recep)
+export const RECEP_DIMS = ['modele', 'reference', 'couleur']
+export const recepDepuis = levels => levels.findIndex(k => RECEP_DIMS.includes(k))
+// Dimanche (jour) d'une semaine ISO : référence de l'ancienneté des réceptions
+export const finSemaine = (annee, semaine) => jourDeIso(lundiSemaine(annee, semaine)) + 6
+// « 01/10/26 » et l'ancienneté par rapport à un jour de référence (fin de la semaine affichée)
+export const jourCourt = j => (j == null ? '—' : isoFr(jourIso(j)).replace(/\/(\d\d)(\d\d)$/, '/$2'))
+export function anciennete(j, ref) {
+  if (j == null || ref == null) return ''
+  const jours = ref - j
+  if (jours < 0) return 'après la semaine'
+  if (jours < 7) return jours === 0 ? 'le dernier jour' : `${jours} j`
+  return `${Math.floor(jours / 7)} sem.`
+}
+
+// Raccourcis du filtre de réception, jusqu'au dimanche de la semaine affichée : 4 et 8 dernières semaines,
+// depuis le début de sa saison (débuts réglés dans les paramètres)
+export function recepRaccourcis({ annee, semaine }, saisons) {
+  const lundi = jourDeIso(lundiSemaine(annee, semaine))
+  const au = jourIso(lundi + 6)
+  const { debut } = saisonDe({ annee, semaine }, saisons)
+  return [
+    { label: '4 dernières semaines', du: jourIso(lundi - 21), au },
+    { label: '8 dernières semaines', du: jourIso(lundi - 49), au },
+    { label: `Depuis le début de saison (${semaineLabel(debut.annee, debut.semaine)})`, du: lundiSemaine(debut.annee, debut.semaine), au },
+  ]
+}
+
+// Filtre par période de dernière réception : filters.recep = { du, au } (AAAA-MM-JJ, l'un ou l'autre
+// facultatif). Pour le N-1 (decalage 1), les mêmes dates un an plus tôt.
+export const recepActif = r => !!(r && (r.du || r.au))
+export function recepBornes(r, decalage = 0) {
+  if (!recepActif(r)) return null
+  const du = jourDeIso(isoMoinsAns(r.du, decalage)), au = jourDeIso(isoMoinsAns(r.au, decalage))
+  return { min: du ?? -Infinity, max: au ?? Infinity }
+}
+// Ligne gardée par le filtre de période (date absente : écartée)
+const dansPeriode = (ds, i, b) => !b || (!!ds.recep && ds.recep[i] >= 0 && ds.recep[i] >= b.min && ds.recep[i] <= b.max)
+export function recepTexte(r, decalage = 0) {
+  if (!recepActif(r)) return ''
+  const du = isoFr(isoMoinsAns(r.du, decalage)), au = isoFr(isoMoinsAns(r.au, decalage))
+  return du && au ? `du ${du} au ${au}` : du ? `depuis le ${du}` : `jusqu’au ${au}`
+}
 
 // Ligne d'en-tête : la première (sur 30) qui contient au moins 3 des mesures
 export function findHeaderRow(rows) {
@@ -135,6 +217,7 @@ export function parseSortie(rows, { headerRow, mapping, canon = {} }) {
   const dims = {}, codes = {}, index = {}, meas = {}
   for (const d of DIMS) { dims[d.key] = []; codes[d.key] = []; index[d.key] = new Map() }
   for (const m of MEASURES) meas[m.key] = []
+  const recep = mapping[RECEP.key] >= 0 ? [] : null
   let n = 0, skipped = 0
   for (const row of rows.slice(headerRow + 1)) {
     if (!row || !row.some(c => cleanText(c))) continue
@@ -152,9 +235,10 @@ export function parseSortie(rows, { headerRow, mapping, canon = {} }) {
       codes[d.key].push(code)
     })
     MEASURES.forEach((m, k) => meas[m.key].push(values[k] ?? 0))
+    if (recep) recep.push(parseJour(row[mapping[RECEP.key]]) ?? -1)
     n++
   }
-  return { n, dims, codes, meas, skipped }
+  return { n, dims, codes, meas, ...(recep && { recep }), skipped }
 }
 
 export function datasetTotals(ds) {
@@ -244,17 +328,20 @@ export function dimValues(datasets, key) {
   return [...set].sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }))
 }
 
-// Valeurs encore possibles de chaque axe avec les filtres des autres axes (comme les segments d'Excel) :
+// Valeurs encore possibles de chaque axe avec les filtres des autres axes (comme les segments d'Excel).
+// datasets : [N, N-1] (la période de réception du N-1 est décalée d'un an) :
 // { clé: Set }. Un filtre ne limite pas sa propre liste (on peut cocher un deuxième univers), mais limite
 // toutes les autres, dans tous les sens (univers → segments, marque → univers…).
 export function possibleValues(datasets, filters = {}, keys = DIMS.map(d => d.key)) {
   const out = Object.fromEntries(keys.map(k => [k, new Set()]))
-  for (const ds of datasets) {
-    if (!ds) continue
+  datasets.forEach((ds, decalage) => {
+    if (!ds) return
     const fs = Object.entries(filters).filter(([, set]) => set?.size)
       .map(([k, set]) => ({ k, codes: ds.codes[k], ok: ds.dims[k].map(v => set.has(v)) }))
     const seen = keys.map(k => new Uint8Array(ds.dims[k].length))
+    const periode = recepBornes(filters.recep, decalage)
     for (let i = 0; i < ds.n; i++) {
+      if (!dansPeriode(ds, i, periode)) continue
       // Ligne écartée par un seul filtre : elle compte encore pour la liste de cet axe-là
       let fail = null, nb = 0
       for (const f of fs) if (!f.ok[f.codes[i]]) { fail = f.k; if (++nb > 1) break }
@@ -262,7 +349,7 @@ export function possibleValues(datasets, filters = {}, keys = DIMS.map(d => d.ke
       keys.forEach((k, j) => { if (!nb || k === fail) seen[j][ds.codes[k][i]] = 1 })
     }
     keys.forEach((k, j) => seen[j].forEach((s, c) => { if (s) out[k].add(ds.dims[k][c]) }))
-  }
+  })
   return out
 }
 
@@ -292,10 +379,14 @@ export function resumeSortie(ds) {
 }
 
 // Sommes par chemin de valeurs (« LAVAL␟RUNNING ») pour chaque profondeur de levels.
-// filters : { clé: Set de valeurs gardées }
-function aggregate(ds, levels, filters) {
-  const out = new Map()
-  if (!ds) return out
+// filters : { clé: Set de valeurs gardées, recep: { du, au } } ; decalage : 1 pour le N-1 (période un an plus tôt)
+// Aussi, à partir du premier niveau Modèle / Référence / Couleur : la dernière réception (jour le plus
+// récent) des lignes regroupées, dans last.
+function aggregate(ds, levels, filters, decalage = 0) {
+  const out = new Map(), last = new Map()
+  if (!ds) return { sums: out, last }
+  const periode = recepBornes(filters.recep, decalage)
+  const from = ds.recep ? recepDepuis(levels) : -1
   const keepCode = Object.entries(filters).filter(([, set]) => set?.size)
     .map(([k, set]) => ({ codes: ds.codes[k], ok: ds.dims[k].map(v => set.has(v)) }))
   const lv = levels.map(k => ({ codes: ds.codes[k], values: ds.dims[k] }))
@@ -306,22 +397,24 @@ function aggregate(ds, levels, filters) {
     for (let j = 0; j < 5; j++) s[j] += m[j][i]
   }
   for (let i = 0; i < ds.n; i++) {
-    if (keepCode.some(f => !f.ok[f.codes[i]])) continue
+    if (keepCode.some(f => !f.ok[f.codes[i]]) || !dansPeriode(ds, i, periode)) continue
     add('', i)
     let path = ''
     for (let d = 0; d < lv.length; d++) {
       path = d ? `${path}\u001f${lv[d].values[lv[d].codes[i]]}` : lv[d].values[lv[d].codes[i]]
       add(path, i)
+      if (from >= 0 && d >= from && ds.recep[i] >= 0 && !(last.get(path) >= ds.recep[i])) last.set(path, ds.recep[i])
     }
   }
-  return out
+  return { sums: out, last }
 }
 
-// Arbre du tableau croisé : { total: { n, n1 }, children(path) → [{ path, label, depth, n, n1 }] }
-// n / n1 : sommes (emptySums si absente de la semaine)
+// Arbre du tableau croisé : { total: { n, n1 }, children(path) → [{ path, label, depth, n, n1, recep }] }
+// n / n1 : sommes (emptySums si absente de la semaine) ; recep : { n, n1 } jour de dernière réception
+// (null au-dessus du premier niveau Modèle / Référence / Couleur, ou sans date)
 export function pivot({ n, n1, levels, filters = {} }) {
-  const a = aggregate(n, levels, filters)
-  const b = aggregate(n1, levels, filters)
+  const { sums: a, last: la } = aggregate(n, levels, filters)
+  const { sums: b, last: lb } = aggregate(n1, levels, filters, 1)
   const kids = new Map()
   for (const path of new Set([...a.keys(), ...b.keys()])) {
     if (!path) continue
@@ -330,7 +423,10 @@ export function pivot({ n, n1, levels, filters = {} }) {
     if (!kids.has(parent)) kids.set(parent, [])
     kids.get(parent).push({ path, label: parts.at(-1), depth: parts.length - 1 })
   }
-  const withSums = r => ({ ...r, n: a.get(r.path) || emptySums(), n1: b.get(r.path) || emptySums() })
+  const withSums = r => ({
+    ...r, n: a.get(r.path) || emptySums(), n1: b.get(r.path) || emptySums(),
+    recep: { n: la.get(r.path) ?? null, n1: lb.get(r.path) ?? null },
+  })
   return {
     total: { n: a.get('') || emptySums(), n1: b.get('') || emptySums() },
     children: path => (kids.get(path) || []).map(withSums),
@@ -345,8 +441,9 @@ const arrondi = (v, f) => (v == null ? '' : f === 'pct' ? v : Math.round(v * 100
 
 // « Univers : RUNNING, CYCLE · Segment : LOISIR » (toutes les valeurs, pour le fichier)
 export function filtresTexte(filters) {
-  const actifs = DIMS.filter(d => filters[d.key]?.size)
-  return actifs.length ? actifs.map(d => `${d.label} : ${[...filters[d.key]].join(', ')}`).join(' · ') : 'aucun'
+  const actifs = DIMS.filter(d => filters[d.key]?.size).map(d => `${d.label} : ${[...filters[d.key]].join(', ')}`)
+  if (recepActif(filters.recep)) actifs.push(`${RECEP.label} : ${recepTexte(filters.recep)} (N-1 : ${recepTexte(filters.recep, 1)})`)
+  return actifs.length ? actifs.join(' · ') : 'aucun'
 }
 
 // Tableau croisé à plat pour Excel : une colonne par niveau (libellés répétés pour pouvoir trier et
@@ -355,9 +452,17 @@ export function filtresTexte(filters) {
 // puis 7 colonnes N-1 (nombres bruts, formatés par Excel). children(path) : lignes triées comme à l'écran.
 export function pivotExport({ total, children, levels, titre, filters = {}, labelN, labelN1 }) {
   const L = Math.max(1, levels.length)
-  const K = INDICATEURS.length
-  const vals = s => { const v = indicateurs(s); return INDICATEURS.map(c => arrondi(v[c.key], c.fmt)) }
-  const line = (labels, r) => [...labels, ...Array(L - labels.length).fill(''), ...vals(r.n), ...vals(r.n1)]
+  // Avec un niveau Modèle / Référence / Couleur : une colonne Der Recep (date Excel) après chaque période
+  const from = recepDepuis(levels)
+  const showRecep = from >= 0
+  const K = INDICATEURS.length + (showRecep ? 1 : 0)
+  const heads = [...INDICATEURS.map(c => c.label), ...(showRecep ? [RECEP.label] : [])]
+  const excelDate = (r, period) => (r.recep && r.depth >= from && r.recep[period] != null ? r.recep[period] + 25569 : '')
+  const vals = (r, period) => {
+    const v = indicateurs(r[period])
+    return [...INDICATEURS.map(c => arrondi(v[c.key], c.fmt)), ...(showRecep ? [excelDate(r, period)] : [])]
+  }
+  const line = (labels, r) => [...labels, ...Array(L - labels.length).fill(''), ...vals(r, 'n'), ...vals(r, 'n1')]
   const rows = []
   const walk = (path, labels) => {
     for (const r of children(path)) {
@@ -369,16 +474,17 @@ export function pivotExport({ total, children, levels, titre, filters = {}, labe
     }
   }
   if (levels.length) walk('', [])
-  rows.push(line([Object.keys(filters).some(k => filters[k]?.size) ? 'Total (filtré)' : 'Total'], total))
+  rows.push(line([Object.keys(filters).some(k => filters[k]?.size) || recepActif(filters.recep) ? 'Total (filtré)' : 'Total'], total))
   const head = [
     [titre],
     [`Filtres : ${filtresTexte(filters)}`],
     [],
     [...Array(L).fill(''), `N · ${labelN}`, ...Array(K - 1).fill(''), `N-1 · ${labelN1}`, ...Array(K - 1).fill('')],
-    [...(levels.length ? levels.map(dimLabel) : ['']), ...INDICATEURS.map(c => c.label), ...INDICATEURS.map(c => c.label)],
+    [...(levels.length ? levels.map(dimLabel) : ['']), ...heads, ...heads],
   ]
   const formats = {}
   INDICATEURS.forEach((c, k) => { formats[L + k] = XLS_FMT[c.fmt]; formats[L + K + k] = XLS_FMT[c.fmt] })
+  if (showRecep) { formats[L + K - 1] = 'dd/mm/yy'; formats[L + 2 * K - 1] = 'dd/mm/yy' }
   return {
     table: [...head, ...rows],
     merges: [{ s: { r: 3, c: L }, e: { r: 3, c: L + K - 1 } }, { s: { r: 3, c: L + K }, e: { r: 3, c: L + 2 * K - 1 } }],

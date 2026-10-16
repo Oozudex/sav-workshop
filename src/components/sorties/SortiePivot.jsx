@@ -3,7 +3,10 @@
 // puis CANet, MtMrg, Marge %, QtRecep, QtVte, QtStkFin et taux de sortie pour N (à gauche) et pour N-1 (à droite).
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { downloadWorkbook } from '../../lib/excel'
-import { DIMS, INDICATEURS, classement, dimLabel, dimValues, formatIndicateur as fmt, indicateurs, pivot, pivotExport, possibleValues } from '../../lib/sorties'
+import {
+  DIMS, INDICATEURS, RECEP, anciennete, classement, dimLabel, dimValues, formatIndicateur as fmt, indicateurs, isoFr, jourCourt, pivot,
+  pivotExport, possibleValues, recepActif, recepDepuis, recepTexte,
+} from '../../lib/sorties'
 import { RANG_CLS, RangNuancier, rangStyle, rangTexte } from './rang'
 import SortieInfo from './SortieInfo'
 
@@ -109,6 +112,25 @@ export function FilterButton({ dim, values, possible, selected, onChange }) {
   )
 }
 
+// Dernière réception de la ligne (à partir d'un niveau Modèle / Référence / Couleur) et son ancienneté à la
+// fin de la semaine de la période ; moins de 4 semaines : en ambre (le stock a eu peu de temps pour sortir).
+// applicable = false : ligne au-dessus de ces niveaux (case vide).
+const RECENT = 28
+function RecepCell({ jour, fin, n1 = false, total = false, applicable = true }) {
+  const P = PERIOD[n1 ? 'n1' : 'n']
+  const age = jour != null && fin != null ? fin - jour : null
+  const recent = age != null && age >= 0 && age < RECENT
+  return (
+    <td title={recent ? 'Reçu il y a moins de 4 semaines : le stock a eu peu de temps pour sortir' : undefined}
+      className={`py-1.5 px-2 text-right text-xs tabular-nums whitespace-nowrap ${total ? `py-2 ${P.total}` : P.cell} ${P.text}`}>
+      {applicable && !total && (jour == null ? '—' : <>
+        {jourCourt(jour)}
+        <span className={`ml-1 text-[10px] ${recent ? 'font-semibold text-amber-700 dark:text-amber-400' : 'text-gray-500 dark:text-neutral-400'}`}>{anciennete(jour, fin)}</span>
+      </>)}
+    </td>
+  )
+}
+
 // Cellules d'une période ; en N, comparaison avec N-1 : vert ▲ en hausse, rouge ▼ en baisse.
 // rang : { marge, taux } classement parmi les lignes du même niveau (fond bleu → jaune → orange, une nuance par place) ; sur ces
 // cases, l'évolution N-1 n'est plus donnée que par la flèche colorée.
@@ -136,7 +158,66 @@ function Cells({ s, ref1, n1 = false, total = false, rang = null }) {
 }
 
 // onFiltersChange : prévenu à chaque changement de filtres (le graphique de saison reprend ceux du tableau)
-export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {}, onFiltersChange }) {
+// Filtre par période de dernière réception (« Der Recep ») : du … au …, chaque date facultative, avec des
+// raccourcis (4 / 8 dernières semaines, début de saison) ; le N-1 prend la même période un an plus tôt
+function RecepFilterButton({ value, onChange, raccourcis = [], disponible }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const close = e => { if (!ref.current?.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+  const active = recepActif(value)
+  const set = (k, v) => onChange({ ...value, [k]: v || undefined })
+  const court = iso => isoFr(iso).slice(0, 5)
+  return (
+    <div ref={ref} className="relative">
+      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+        className={`${CHIP} ${active ? 'border-gray-900 text-gray-900 bg-gray-100 dark:border-white dark:text-white dark:bg-neutral-800' : 'border-gray-200 text-gray-600 bg-white dark:border-neutral-700 dark:text-neutral-300 dark:bg-neutral-900'}`}>
+        {RECEP.label}
+        {active && <span className="tabular-nums">({value.du ? court(value.du) : '…'} → {value.au ? court(value.au) : '…'})</span>}
+        <span aria-hidden="true">▾</span>
+      </button>
+      {open && (
+        <div className="absolute z-30 mt-1 w-72 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 shadow-lg p-3 space-y-2">
+          <p className="text-[11px] text-gray-500 dark:text-neutral-400">Date de dernière réception de la ligne. Le N-1 prend la même période un an plus tôt.</p>
+          {!disponible && <p className="text-[11px] text-amber-700 dark:text-amber-400">Ces fichiers ont été importés sans la colonne Der Recep : réimporte-les pour filtrer.</p>}
+          <div className="grid grid-cols-2 gap-2">
+            {[['du', 'Du'], ['au', 'Au']].map(([k, label]) => (
+              <label key={k} className="text-[11px] font-semibold text-gray-600 dark:text-neutral-300 space-y-0.5">
+                <span className="block">{label}</span>
+                <input type="date" value={value?.[k] || ''} max={k === 'du' ? value?.au : undefined} min={k === 'au' ? value?.du : undefined}
+                  onChange={e => set(k, e.target.value)} className="Input h-8 text-xs w-full" />
+              </label>
+            ))}
+          </div>
+          {raccourcis.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {raccourcis.map(r => (
+                <button key={r.label} type="button" onClick={() => onChange({ du: r.du, au: r.au })}
+                  className="h-6 px-2 rounded-md border border-gray-200 dark:border-neutral-700 text-[11px] text-gray-700 dark:text-neutral-200 hover:bg-gray-50 dark:hover:bg-neutral-800">
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {active && (
+            <div className="flex items-center justify-between gap-2 text-[11px]">
+              <span className="text-gray-500 dark:text-neutral-400">N-1 : {recepTexte(value, 1)}</span>
+              <button type="button" className="underline text-gray-600 dark:text-neutral-300" onClick={() => onChange(undefined)}>Effacer</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// recepRaccourcis : périodes proposées dans le filtre Der Recep ([{ label, du, au }]) ; finN / finN1 : dimanche
+// (jour) des semaines N et N-1, pour l'ancienneté de la dernière réception
+export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {}, onFiltersChange, recepRaccourcis, finN, finN1 }) {
   const [levels, setLevels] = useState(['magasin'])
   const [filters, setFilters] = useState(defaultFilters)
   const [open, setOpen] = useState(() => new Set())
@@ -150,12 +231,21 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
   const p = useMemo(() => pivot({ n, n1, levels, filters }), [n, n1, levels, filters])
   const available = DIMS.filter(d => !levels.includes(d.key))
   const activeFilters = DIMS.filter(d => filters[d.key]?.size)
+  const recepOn = recepActif(filters.recep)
+  const anyFilter = activeFilters.length > 0 || recepOn
+  // Colonne Der Recep (N et N-1) dès qu'un niveau Modèle, Référence ou Couleur est dans les lignes
+  const recepFrom = recepDepuis(levels)
+  const showRecep = recepFrom >= 0
+  const NB = COLS.length + (showRecep ? 1 : 0) // colonnes par période
+  // Semaines importées sans la colonne Der Recep (le filtre n'y garde aucune ligne)
+  const sansDates = [[n, labelN], [n1, labelN1]].filter(([ds]) => ds && !ds.recep).map(([, l]) => l)
 
   const setLevel = next => { setLevels(next); setOpen(new Set()); setMore({}) }
   const move = (i, d) => { const l = [...levels]; [l[i], l[i + d]] = [l[i + d], l[i]]; setLevel(l) }
   const toggle = path => setOpen(s => { const x = new Set(s); if (x.has(path)) x.delete(path); else x.add(path); return x })
   const sortVal = row => {
     if (sort.key === 'label') return row.label
+    if (sort.key === 'recep') return row.recep?.[sort.period] ?? -Infinity
     return indicateurs(sort.period === 'n' ? row.n : row.n1)[sort.key] ?? -Infinity
   }
   const children = path => p.children(path).sort((a, b) => {
@@ -202,14 +292,16 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
                 ) : <span className="block truncate max-w-[18rem]" title={r.label}>{r.label}</span>}
               </th>
               <Cells s={r.n} ref1={r.n1} rang={rangN(idx)} />
+              {showRecep && <RecepCell jour={r.recep.n} fin={finN} applicable={r.depth >= recepFrom} />}
               <Cells s={r.n1} n1 rang={rangN1(idx)} />
+              {showRecep && <RecepCell jour={r.recep.n1} fin={finN1} n1 applicable={r.depth >= recepFrom} />}
             </tr>
             {canOpen && isOpen && renderRows(r.path)}
           </Fragment>
         )
       })}
       {rows.length > limit && (
-        <tr><td colSpan={15} className="py-1.5 pl-4 text-xs">
+        <tr><td colSpan={1 + 2 * NB} className="py-1.5 pl-4 text-xs">
           <button type="button" className="font-semibold underline text-gray-600 dark:text-neutral-300"
             onClick={() => setMore(m => ({ ...m, [path]: limit + PAGE }))}>
             Afficher {Math.min(PAGE, rows.length - limit)} de plus ({rows.length - limit} restants)
@@ -222,7 +314,7 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
   const th = 'py-1.5 px-2 text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap cursor-pointer select-none'
   return (
     <div className="space-y-3">
-      <SortieInfo total={p.total} labelN={labelN} labelN1={labelN1} filtre={activeFilters.length > 0} />
+      <SortieInfo total={p.total} labelN={labelN} labelN1={labelN1} filtre={anyFilter} />
       <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-3 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold text-gray-700 dark:text-neutral-200 w-20">Lignes</span>
@@ -251,13 +343,24 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
             <FilterButton key={d.key} dim={d} values={values[d.key]} possible={possible[d.key]} selected={filters[d.key] || new Set()}
               onChange={set => setFilters(f => ({ ...f, [d.key]: set }))} />
           ))}
-          {activeFilters.length > 0 && (
+          <RecepFilterButton value={filters.recep} raccourcis={recepRaccourcis} disponible={sansDates.length < [n, n1].filter(Boolean).length}
+            onChange={r => setFilters(f => ({ ...f, recep: r }))} />
+          {anyFilter && (
             <button type="button" onClick={() => setFilters({})} className="text-xs underline text-gray-500 dark:text-neutral-400">Effacer les filtres</button>
           )}
         </div>
-        {activeFilters.length > 0 && (
+        {anyFilter && (
           <p className="text-[11px] text-gray-600 dark:text-neutral-300">
-            {activeFilters.map(d => `${d.label} : ${[...filters[d.key]].slice(0, 4).join(', ')}${filters[d.key].size > 4 ? ` +${filters[d.key].size - 4}` : ''}`).join(' · ')}
+            {[
+              ...activeFilters.map(d => `${d.label} : ${[...filters[d.key]].slice(0, 4).join(', ')}${filters[d.key].size > 4 ? ` +${filters[d.key].size - 4}` : ''}`),
+              ...(recepOn ? [`${RECEP.label} : ${recepTexte(filters.recep)} (N-1 : ${recepTexte(filters.recep, 1)})`] : []),
+            ].join(' · ')}
+          </p>
+        )}
+        {recepOn && sansDates.length > 0 && (
+          <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+            {sansDates.join(' et ')} {sansDates.length > 1 ? 'ont été importées' : 'a été importée'} sans la colonne Der Recep : aucune de ses lignes ne passe ce filtre.
+            Réimporte le fichier pour avoir les dates.
           </p>
         )}
       </div>
@@ -270,26 +373,37 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
                 className={`${th} sticky left-0 z-20 bg-white dark:bg-neutral-900 text-left text-gray-500 dark:text-neutral-400 min-w-[12rem] border-b border-gray-200 dark:border-neutral-700`}>
                 {levels.length ? levels.map(dimLabel).join(' › ') : 'Total'}{arrow('label', 'n')}
               </th>
-              <th colSpan={7} scope="colgroup" className={`py-1.5 text-xs font-bold text-center ${PERIOD.n.group} ${PERIOD.n.edge}`}>N · {labelN}</th>
-              <th colSpan={7} scope="colgroup" className={`py-1.5 text-xs font-bold text-center ${PERIOD.n1.group} ${PERIOD.n1.edge}`}>N-1 · {labelN1}</th>
+              <th colSpan={NB} scope="colgroup" className={`py-1.5 text-xs font-bold text-center ${PERIOD.n.group} ${PERIOD.n.edge}`}>N · {labelN}</th>
+              <th colSpan={NB} scope="colgroup" className={`py-1.5 text-xs font-bold text-center ${PERIOD.n1.group} ${PERIOD.n1.edge}`}>N-1 · {labelN1}</th>
             </tr>
             <tr>
-              {['n', 'n1'].map(period => COLS.map((c, i) => (
-                <th key={`${period}-${c.key}`} scope="col" onClick={() => sortBy(c.key, period)} title="Trier"
-                  className={`${th} text-right border-b border-gray-200 dark:border-neutral-700 ${i === 0 ? PERIOD[period].edge : ''} ${PERIOD[period].head}`}>
-                  {c.label}{arrow(c.key, period)}
-                </th>
-              )))}
+              {['n', 'n1'].map(period => [
+                ...COLS.map((c, i) => (
+                  <th key={`${period}-${c.key}`} scope="col" onClick={() => sortBy(c.key, period)} title="Trier"
+                    className={`${th} text-right border-b border-gray-200 dark:border-neutral-700 ${i === 0 ? PERIOD[period].edge : ''} ${PERIOD[period].head}`}>
+                    {c.label}{arrow(c.key, period)}
+                  </th>
+                )),
+                showRecep && (
+                  <th key={`${period}-recep`} scope="col" onClick={() => sortBy('recep', period)}
+                    title="Dernière réception (la plus récente des lignes regroupées) et son ancienneté à la fin de la semaine. Trier"
+                    className={`${th} text-right border-b border-gray-200 dark:border-neutral-700 ${PERIOD[period].head}`}>
+                    {RECEP.label}{arrow('recep', period)}
+                  </th>
+                ),
+              ])}
             </tr>
           </thead>
           <tbody>{levels.length > 0 && renderRows('')}</tbody>
           <tfoot>
             <tr className="border-t-2 border-gray-300 dark:border-neutral-600 font-bold">
               <th scope="row" className="sticky left-0 z-10 bg-white dark:bg-neutral-900 py-2 pl-2 pr-2 text-left text-xs text-gray-900 dark:text-white border-t border-gray-300 dark:border-neutral-600">
-                Total{activeFilters.length ? ' (filtré)' : ''}
+                Total{anyFilter ? ' (filtré)' : ''}
               </th>
               <Cells s={p.total.n} ref1={p.total.n1} total />
+              {showRecep && <RecepCell total />}
               <Cells s={p.total.n1} n1 total />
+              {showRecep && <RecepCell n1 total />}
             </tr>
           </tfoot>
         </table>

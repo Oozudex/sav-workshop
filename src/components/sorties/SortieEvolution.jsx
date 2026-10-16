@@ -5,7 +5,7 @@
 // magasin, le N-1 dans l'info-bulle). S'appuie sur les résumés des semaines.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  DIMS, INDICATEURS, RESUME_DIMS, SAISON_NOMS, formatIndicateur, indicateurs, pivot,
+  DIMS, INDICATEURS, RECEP, RESUME_DIMS, SAISON_NOMS, formatIndicateur, indicateurs, pivot, recepActif,
   saisonDe, semaineId, semaineLabel, semaineN1, semainesEntre,
 } from '../../lib/sorties'
 import { useParametresAchats, useResumes, useSemaines } from '../../lib/sortiesStore'
@@ -85,7 +85,11 @@ export default function SortieEvolution({ semaine, filters: tableFilters = {} })
   // Filtres du tableau : ceux des axes résumés s'appliquent, les autres (modèle, référence, couleur) non
   const filters = useMemo(() => Object.fromEntries(Object.entries(tableFilters).filter(([k, set]) => RESUME_DIMS.includes(k) && set?.size)), [tableFilters])
   const appliques = DIMS.filter(d => filters[d.key])
-  const ignores = DIMS.filter(d => !RESUME_DIMS.includes(d.key) && tableFilters[d.key]?.size)
+  // Filtres du tableau absents des résumés : modèle, référence, couleur et période de réception
+  const ignores = [
+    ...DIMS.filter(d => !RESUME_DIMS.includes(d.key) && tableFilters[d.key]?.size).map(d => d.label),
+    ...(recepActif(tableFilters.recep) ? [RECEP.label] : []),
+  ]
   const [asTable, setAsTable] = useState(false)
   const [hover, setHover] = useState(null)
   const [hidden, setHidden] = useState(() => new Set())
@@ -233,7 +237,7 @@ export default function SortieEvolution({ semaine, filters: tableFilters = {} })
 
       {ignores.length > 0 && (
         <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-          Le graphique ne tient pas compte du filtre {ignores.map(d => d.label).join(', ')} du tableau : trop détaillé pour suivre toute la saison.
+          Le graphique ne tient pas compte {ignores.length > 1 ? 'des filtres' : 'du filtre'} {ignores.join(', ')} du tableau : ce détail n’est pas gardé semaine par semaine pour toute la saison.
           Les autres filtres s’appliquent.
         </p>
       )}

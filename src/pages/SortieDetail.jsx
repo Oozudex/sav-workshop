@@ -11,8 +11,8 @@ import SortiePivot from '../components/sorties/SortiePivot'
 import { BTN_PRIMARY, BTN_SECONDARY, EmptyState, Notice } from '../components/admin/ui'
 import { normLabel } from '../lib/budgets'
 import { useBudgetMagasins, useBudgetUnivers, useBudgetUser } from '../lib/budgetsStore'
-import { semaineId, semaineLabel, semaineN1 } from '../lib/sorties'
-import { deleteSemaine, useSemaine, useSemaineData } from '../lib/sortiesStore'
+import { finSemaine, recepRaccourcis, semaineId, semaineLabel, semaineN1 } from '../lib/sorties'
+import { deleteSemaine, useParametresAchats, useSemaine, useSemaineData } from '../lib/sortiesStore'
 
 const dateLabel = ts => ts?.toDate?.()?.toLocaleDateString('fr-FR') || ''
 
@@ -51,6 +51,7 @@ export default function SortieDetail() {
   const [dialog, setDialog] = useState(null)
   const [notice, setNotice] = useState(null)
   const [tableFilters, setTableFilters] = useState({})
+  const { saisons } = useParametresAchats()
   const isDirection = user.role === 'directeurgen'
 
   // Acheteur : filtre par défaut sur ses univers (s'ils existent dans les fichiers)
@@ -102,7 +103,8 @@ export default function SortieDetail() {
       {ready ? (
         <>
           <SortiePivot key={`${semaine.fichier?.version}-${semN1?.fichier?.version}`} n={dataN.ds} n1={dataN1.ds} labelN={labelN} labelN1={labelN1}
-            defaultFilters={defaultFilters} onFiltersChange={setTableFilters} />
+            defaultFilters={defaultFilters} onFiltersChange={setTableFilters} recepRaccourcis={recepRaccourcis(semaine, saisons)}
+            finN={finSemaine(semaine.annee, semaine.semaine)} finN1={finSemaine(p.annee, p.semaine)} />
           <SortieEvolution key={semaine.id} semaine={semaine} filters={tableFilters} />
         </>
       ) : !dataN.loading && !dataN1.loading && (<>

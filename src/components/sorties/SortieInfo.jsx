@@ -206,13 +206,22 @@ export default function SortieInfo({ total, labelN, labelN1, filtre }) {
           <ul className="list-disc pl-4 space-y-0.5">
             <li>Les filtres changent le total : il ne compte que les lignes filtrées.</li>
             <li>
+              Avec un niveau <strong>Modèle, Référence ou Couleur</strong> dans les lignes, une colonne <strong>Der Recep</strong> donne la dernière
+              réception de chaque ligne (la plus récente des lignes regroupées) et son ancienneté à la fin de la semaine. En ambre : reçu il y a
+              moins de 4 semaines, un taux de sortie bas peut venir de là (le stock a eu peu de temps pour sortir).
+            </li>
+            <li>
+              Le filtre <strong>Der Recep</strong> garde les lignes dont la dernière réception tombe dans la période choisie (du … au …) ;
+              le N-1 prend la même période un an plus tôt (du 01/09/2026 au 30/09/2026 → du 01/09/2025 au 30/09/2025). Une ligne sans date est écartée.
+            </li>
+            <li>
               Les filtres se limitent les uns les autres : avec l’univers TEXTILE HOMME coché, la liste Segment ne propose que les segments du
               textile homme (et de même pour familles, marques, couleurs…) ; une marque cochée limite aussi les univers et les magasins.
               Une valeur cochée qui ne correspond plus aux autres filtres reste en haut de sa liste, en gris : décoche-la si elle ne sert plus.
             </li>
             <li>
               Le graphique sous le tableau suit la saison semaine par semaine (par défaut Automne-Hiver dès la S23 et Printemps-Été dès la S49 ; réglable avec l’engrenage de la page Statistiques Achats),
-              comparée aux mêmes semaines de l’année précédente. Il reprend en direct les filtres du tableau (sauf modèle, référence et couleur, trop détaillés pour toute une saison).
+              comparée aux mêmes semaines de l’année précédente. Il reprend en direct les filtres du tableau (sauf modèle, référence, couleur et Der Recep, trop détaillés pour toute une saison).
             </li>
             <li>La ligne de total en bas du fichier Excel est ignorée à l’import ; l’application refait ses propres totaux.</li>
             <li>Les magasins sont rapprochés de la liste des budgets : « INTERSPORT LAVAL » devient « LAVAL ».</li>

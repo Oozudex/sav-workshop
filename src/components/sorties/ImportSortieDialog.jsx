@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { BTN_PRIMARY, BTN_SECONDARY, Field, Modal, Notice } from '../admin/ui'
 import { magasinMatcher, universMatcher } from '../../lib/budgets'
 import { readWorkbook } from '../../lib/excel'
-import { DIMS, MEASURES, autoMapping, datasetTotals, findHeaderRow, missingMeasures, parseSortie } from '../../lib/sorties'
+import { DIMS, MEASURES, RECEP, autoMapping, datasetTotals, findHeaderRow, missingMeasures, parseSortie } from '../../lib/sorties'
 import { saveSemaineData } from '../../lib/sortiesStore'
 
 const SELECT = 'w-full h-8 px-2 rounded-lg border text-xs bg-white dark:bg-neutral-950 border-gray-200 dark:border-neutral-700 text-gray-900 dark:text-white'
@@ -112,7 +112,7 @@ export default function ImportSortieDialog({ target, magasins, univers, user, on
               Colonnes reconnues {missing.length ? `· ${missing.length} mesure(s) à choisir` : '· vérifier ou modifier'}
             </summary>
             <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {[...MEASURES, ...DIMS].map(f => (
+              {[...MEASURES, ...DIMS, RECEP].map(f => (
                 <label key={f.key} className="space-y-0.5">
                   <span className={`block text-[11px] font-semibold ${mapping[f.key] < 0 && MEASURES.includes(f) ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-neutral-300'}`}>{f.label}</span>
                   <select value={mapping[f.key]} onChange={e => setMapping(m => ({ ...m, [f.key]: Number(e.target.value) }))} className={SELECT}>
@@ -131,6 +131,7 @@ export default function ImportSortieDialog({ target, magasins, univers, user, on
               <Stat label="MtMrg" value={`${n0(totals.mtMrg)} €`} />
               <Stat label="QtVte" value={n0(totals.qtVte)} />
               <Stat label="QtStkFin" value={n0(totals.qtStkFin)} />
+              <Stat label="Dates de réception" value={ds.recep ? `${n0(ds.recep.filter(d => d >= 0).length)} lignes datées` : 'colonne absente'} />
             </div>
           )}
           {ds && <p className="text-[11px] text-gray-500 dark:text-neutral-400">Magasins : {ds.dims.magasin.join(', ')}{ds.skipped ? ` · ${ds.skipped} ligne(s) de total ignorée(s)` : ''}</p>}
