@@ -1,8 +1,9 @@
 // Graphique de saison sous le tableau d'une semaine, de la première semaine de la saison (réglée dans les
 // paramètres de la page, par défaut AH : S23, PE : S49) jusqu'à la semaine affichée, pour un indicateur au
 // choix, avec les filtres du tableau en direct (sauf modèle, référence et couleur, absents des résumés).
-// Deux vues : « Groupe » (N bleu canard, N-1 gris en pointillés) et « Par magasin » (une courbe N par
-// magasin, le N-1 dans l'info-bulle). S'appuie sur les résumés des semaines.
+// Trois vues : « Par magasin » (une courbe N par magasin), « Top 10 marques » (les 10 marques d'un univers
+// au plus fort CANet cumulé sur la saison, une courbe N chacune) — le N-1 dans l'info-bulle — et « Groupe »
+// (N bleu canard, N-1 gris en pointillés). S'appuie sur les résumés des semaines.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   DIMS, INDICATEURS, RECEP, RESUME_DIMS, SAISON_NOMS, formatIndicateur, indicateurs, pivot, recepActif,
@@ -127,30 +128,67 @@ export default function SortieEvolution({ semaine, filters: tableFilters = {} })
 
   // Vue par magasin : pour chaque semaine, valeur N et N-1 de chaque magasin
   const parMagasin = useMemo(() => weeks.map(w => {
+    if (vue !== 'magasin') return { n: null, n1: null }
     const byMag = id => {
       if (!data.has(id)) return null
       const p = pivot({ n: data.get(id), n1: null, levels: ['magasin'], filters })
       return new Map(p.children('').map(r => [r.label, indicateurs(r.n)[ind]]))
     }
     return { n: byMag(w.id), n1: byMag(w.idN1) }
-  }), [weeks, data, filters, ind])
-  const colorOf = useMemo(() => new Map(magasins.map((m, i) => [m, magStyle(i)])), [magasins])
+  }), [vue, weeks, data, filters, ind])
+  const magColors = useMemo(() => new Map(magasins.map((m, i) => [m, magStyle(i)])), [magasins])
   const stores = useMemo(() => {
     const set = new Set(parMagasin.flatMap(w => (w.n ? [...w.n.keys()] : [])))
     return magasins.filter(m => set.has(m))
   }, [parMagasin, magasins])
-  const shown = stores.filter(m => !hidden.has(m))
+
+  // Vue top 10 marques : univers au choix parmi ceux filtrés dans le tableau (tous sinon) ; les 10 marques
+  // au plus fort CANet N cumulé de la saison, avec les autres filtres du tableau
+  const universOptions = useMemo(() => {
+    if (filters.univers?.size) return [...filters.univers].sort((a, b) => a.localeCompare(b, 'fr'))
+    const set = new Set()
+    for (const r of data.values()) for (const v of r.dims.univers) set.add(v)
+    return [...set].sort((a, b) => a.localeCompare(b, 'fr'))
+  }, [filters.univers, data])
+  const [univ, setUniv] = useState('')
+  const univActif = universOptions.includes(univ) ? univ : universOptions[0] || ''
+  const parMarque = useMemo(() => {
+    if (vue !== 'marque' || !univActif) return { perWeek: weeks.map(() => ({ n: null, n1: null })), top: [] }
+    const f = { ...filters, univers: new Set([univActif]) }
+    const cumul = new Map()
+    const perWeek = weeks.map(w => {
+      const byBrand = (id, compte) => {
+        if (!data.has(id)) return null
+        const p = pivot({ n: data.get(id), n1: null, levels: ['marque'], filters: f })
+        return new Map(p.children('').map(r => {
+          if (compte) cumul.set(r.label, (cumul.get(r.label) || 0) + r.n[0])
+          return [r.label, indicateurs(r.n)[ind]]
+        }))
+      }
+      return { n: byBrand(w.id, true), n1: byBrand(w.idN1, false) }
+    })
+    const top = [...cumul].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([m]) => m)
+    return { perWeek, top }
+  }, [vue, univActif, weeks, data, filters, ind])
+  // Couleur d'une marque : ordre alphabétique des 10 (pas leur rang, qui bouge d'une semaine à l'autre)
+  const brandColors = useMemo(() => new Map([...parMarque.top].sort((a, b) => a.localeCompare(b, 'fr')).map((m, i) => [m, magStyle(i)])), [parMarque.top])
+
+  const parMarques = vue === 'marque'
+  const entities = parMarques ? parMarque.top : stores
+  const perWeek = parMarques ? parMarque.perWeek : parMagasin
+  const colorOf = parMarques ? brandColors : magColors
+  const shown = entities.filter(m => !hidden.has(m))
 
   const labelN = `${semaineLabel(saison.debut.annee, saison.debut.semaine)} → ${semaineLabel(semaine.annee, semaine.semaine)}`
   const p0 = semaineN1(saison.debut), p1 = semaineN1(semaine)
   const labelN1 = `${semaineLabel(p0.annee, p0.semaine)} → ${semaineLabel(p1.annee, p1.semaine)}`
   const loading = done < imported.length
-  const parMag = vue === 'magasin'
+  const multi = vue !== 'groupe' // une courbe par magasin ou par marque
 
   // Courbes à tracer : { key, label, vals[semaine], color | cls, dash, width, faded }
-  const lines = parMag
+  const lines = multi
     ? shown.map(m => ({
-      key: m, label: m, vals: parMagasin.map(w => w.n?.get(m) ?? null), color: colorOf.get(m).color, dash: colorOf.get(m).dash,
+      key: m, label: m, vals: perWeek.map(w => w.n?.get(m) ?? null), color: colorOf.get(m).color, dash: colorOf.get(m).dash,
       width: emph === m ? 3.5 : 2, faded: emph != null && emph !== m,
     }))
     : ['n1', 'n'].map(k => ({ key: k, vals: series.map(s => s[k]), cls: LINE[k], dash: LINE[k].dash, width: k === 'n' ? 2.5 : 2 }))
@@ -159,7 +197,7 @@ export default function SortieEvolution({ semaine, filters: tableFilters = {} })
   const all = lines.flatMap(l => l.vals).filter(v => v != null)
   const yt = ticks(Math.min(0, ...all), Math.max(0, ...all))
   const y0 = yt[0], y1 = yt.at(-1)
-  const right = parMag ? LABEL_W : PAD.right
+  const right = multi ? LABEL_W : PAD.right
   const plotW = Math.max(100, width - PAD.left - right), plotH = H - PAD.top - PAD.bottom
   const step = weeks.length > 1 ? plotW / (weeks.length - 1) : 0
   const x = i => PAD.left + (weeks.length > 1 ? i * step : plotW / 2)
@@ -183,8 +221,8 @@ export default function SortieEvolution({ semaine, filters: tableFilters = {} })
   const hw = hover != null ? weeks[hover] : null
   const tipStyle = hover == null ? null : x(hover) > width / 2 ? { right: width - x(hover) + 10 } : { left: x(hover) + 10 }
 
-  // Noms des magasins au bout de leur courbe (dernier point connu)
-  const endLabels = parMag ? placeLabels(lines.flatMap(l => {
+  // Noms des magasins / marques au bout de leur courbe (dernier point connu)
+  const endLabels = multi ? placeLabels(lines.flatMap(l => {
     const i = l.vals.findLastIndex(v => v != null)
     return i < 0 ? [] : [{ key: l.key, label: l.label, color: l.color, faded: l.faded, x: x(i), y: y(l.vals[i]) }]
   }), PAD.top + 4, PAD.top + plotH) : []
@@ -198,13 +236,15 @@ export default function SortieEvolution({ semaine, filters: tableFilters = {} })
         <div>
           <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Depuis le début de la saison {SAISON_NOMS[saison.saison]}</h2>
           <p className="text-[11px] text-gray-500 dark:text-neutral-400">
-            {parMag
+            {parMarques
+              ? `Les 10 marques de ${univActif || 'l’univers choisi'} au plus fort CANet depuis le début de la saison (${labelN}) ; survole une semaine pour lire aussi le N-1.`
+              : multi
               ? `Une courbe par magasin (${labelN}) ; survole une semaine pour lire aussi le N-1. Une semaine non importée laisse un trou.`
               : 'Chaque point est une semaine, comparée à la même semaine de l’année précédente. Une semaine non importée laisse un trou dans la courbe.'}
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {!parMag && <GroupLegend labelN={labelN} labelN1={labelN1} />}
+          {!multi && <GroupLegend labelN={labelN} labelN1={labelN1} />}
           <button type="button" onClick={() => setAsTable(v => !v)} className="text-xs text-gray-500 dark:text-neutral-400 underline underline-offset-2">
             {asTable ? 'Voir le graphique' : 'Voir le tableau'}
           </button>
@@ -213,13 +253,21 @@ export default function SortieEvolution({ semaine, filters: tableFilters = {} })
 
       <div className="flex flex-wrap items-center gap-2">
         <div role="group" aria-label="Vue du graphique" className="inline-flex rounded-lg border border-gray-200 dark:border-neutral-700 p-0.5">
-          {[['magasin', 'Par magasin'], ['groupe', 'Groupe N / N-1']].map(([k, label]) => (
-            <button key={k} type="button" aria-pressed={vue === k} onClick={() => { setVue(k); setHover(null); setEmph(null) }}
+          {[['magasin', 'Par magasin'], ['marque', 'Top 10 marques'], ['groupe', 'Groupe N / N-1']].map(([k, label]) => (
+            <button key={k} type="button" aria-pressed={vue === k} onClick={() => { setVue(k); setHover(null); setEmph(null); setHidden(new Set()) }}
               className={`h-7 px-2.5 rounded-md text-xs font-semibold ${vue === k ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900' : 'text-gray-600 dark:text-neutral-300'}`}>
               {label}
             </button>
           ))}
         </div>
+        {parMarques && (
+          <label className="text-xs font-semibold text-gray-700 dark:text-neutral-200">
+            Univers{' '}
+            <select value={univActif} onChange={e => { setUniv(e.target.value); setHidden(new Set()); setEmph(null) }} className={SELECT}>
+              {universOptions.map(u => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </label>
+        )}
         <label className="text-xs font-semibold text-gray-700 dark:text-neutral-200">
           Valeur{' '}
           <select value={ind} onChange={e => setInd(e.target.value)} className={SELECT}>
@@ -245,7 +293,7 @@ export default function SortieEvolution({ semaine, filters: tableFilters = {} })
       <div ref={ref} className="relative">
       {asTable ? (
         <div className="overflow-x-auto">
-          {parMag ? (
+          {multi ? (
             <table className="w-full text-xs tabular-nums">
               <thead><tr className="text-gray-500 dark:text-neutral-400">
                 <th className="text-left font-medium py-1 pr-3">Semaine</th>
@@ -255,7 +303,7 @@ export default function SortieEvolution({ semaine, filters: tableFilters = {} })
                 {weeks.map((w, i) => (
                   <tr key={w.id} className="border-t border-gray-100 dark:border-neutral-800">
                     <td className="py-1 pr-3 whitespace-nowrap">{w.label} {w.annee}</td>
-                    {shown.map(m => <td key={m} className="text-right px-2">{formatIndicateur(parMagasin[i].n?.get(m), def.fmt)}</td>)}
+                    {shown.map(m => <td key={m} className="text-right px-2">{formatIndicateur(perWeek[i].n?.get(m), def.fmt)}</td>)}
                   </tr>
                 ))}
               </tbody>
@@ -284,7 +332,7 @@ export default function SortieEvolution({ semaine, filters: tableFilters = {} })
       ) : (
         <>
           <svg width={width} height={H} role="img" className="block" onMouseMove={onMove} onMouseLeave={() => { setHover(null); setEmph(null) }}
-            aria-label={parMag ? `${def.label} par semaine et par magasin` : `${def.label} par semaine, N et N-1`}>
+            aria-label={parMarques ? `${def.label} par semaine des 10 premières marques de ${univActif}` : multi ? `${def.label} par semaine et par magasin` : `${def.label} par semaine, N et N-1`}>
             {yt.map(v => (
               <g key={v}>
                 <line x1={PAD.left} x2={PAD.left + plotW} y1={y(v)} y2={y(v)}
@@ -296,14 +344,14 @@ export default function SortieEvolution({ semaine, filters: tableFilters = {} })
               <text key={w.id} x={x(i)} y={H - 8} textAnchor="middle" className="fill-gray-500 dark:fill-neutral-400 text-[10px]">{w.label}</text>
             ))}
             {hw && <line x1={x(hover)} x2={x(hover)} y1={PAD.top} y2={PAD.top + plotH} className="stroke-gray-300 dark:stroke-neutral-600" />}
-            {/* Magasin mis en avant dessiné en dernier (au-dessus des autres) */}
+            {/* Courbe mise en avant dessinée en dernier (au-dessus des autres) */}
             {[...lines].sort((a, b) => (a.key === emph) - (b.key === emph)).map(l => (
               <g key={l.key} opacity={l.faded ? 0.15 : 1} style={l.color ? { color: l.color } : undefined}>
                 <path d={path(l.vals)} fill="none" strokeWidth={l.width} strokeDasharray={l.dash} strokeLinejoin="round" strokeLinecap="round"
                   stroke={l.color ? 'currentColor' : undefined} className={l.cls?.stroke} />
-                {parMag && <path d={path(l.vals)} fill="none" stroke="transparent" strokeWidth={12} onMouseEnter={() => setEmph(l.key)} />}
+                {multi && <path d={path(l.vals)} fill="none" stroke="transparent" strokeWidth={12} onMouseEnter={() => setEmph(l.key)} />}
                 {l.vals.map((v, i) => v != null && (
-                  <circle key={i} cx={x(i)} cy={y(v)} r={hover === i ? 4.5 : parMag ? 2.5 : 3} strokeWidth={1.5}
+                  <circle key={i} cx={x(i)} cy={y(v)} r={hover === i ? 4.5 : multi ? 2.5 : 3} strokeWidth={1.5}
                     fill={l.color ? 'currentColor' : undefined} className={`${l.cls?.fill || ''} stroke-white dark:stroke-neutral-900`} />
                 ))}
               </g>
@@ -317,7 +365,7 @@ export default function SortieEvolution({ semaine, filters: tableFilters = {} })
               </g>
             ))}
           </svg>
-          {hw && !parMag && (
+          {hw && !multi && (
             <div className="pointer-events-none absolute z-10 top-1 whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-xs shadow-lg bg-white border-gray-200 text-gray-800 dark:bg-neutral-800 dark:border-neutral-700 dark:text-neutral-100" style={tipStyle}>
               <p className="font-semibold mb-0.5">{hw.label} {hw.annee} · {def.label}</p>
               <p className="flex items-center gap-1.5 tabular-nums"><span className={`h-2 w-2 rounded-sm ${LINE.n.swatch}`} />N : {series[hover].n == null ? 'non importée' : formatIndicateur(series[hover].n, def.fmt)}</p>
@@ -325,16 +373,16 @@ export default function SortieEvolution({ semaine, filters: tableFilters = {} })
               {ecart(series[hover].n, series[hover].n1) && <p className="text-gray-500 dark:text-neutral-400 tabular-nums">Écart : {ecart(series[hover].n, series[hover].n1)}</p>}
             </div>
           )}
-          {hw && parMag && (
+          {hw && multi && (
             <div className="pointer-events-none absolute z-10 top-1 rounded-lg border px-2.5 py-1.5 text-xs shadow-lg bg-white border-gray-200 text-gray-800 dark:bg-neutral-800 dark:border-neutral-700 dark:text-neutral-100" style={tipStyle}>
               <p className="font-semibold mb-1">{hw.label} {hw.annee} · {def.label}</p>
-              {parMagasin[hover].n ? (
+              {perWeek[hover].n ? (
                 <table className="tabular-nums">
                   <thead><tr className="text-[10px] text-gray-500 dark:text-neutral-400">
                     <th /><th className="text-right font-medium pl-3">N</th><th className="text-right font-medium pl-3">N-1</th>
                   </tr></thead>
                   <tbody>
-                    {shown.map(m => ({ m, v: parMagasin[hover].n.get(m) ?? null, r: parMagasin[hover].n1?.get(m) ?? null }))
+                    {shown.map(m => ({ m, v: perWeek[hover].n.get(m) ?? null, r: perWeek[hover].n1?.get(m) ?? null }))
                       .sort((a, b) => (b.v ?? -Infinity) - (a.v ?? -Infinity))
                       .map(({ m, v, r }) => (
                         <tr key={m} className={emph && emph !== m ? 'opacity-40' : emph === m ? 'font-semibold' : ''}>
@@ -355,25 +403,27 @@ export default function SortieEvolution({ semaine, filters: tableFilters = {} })
       )}
       </div>
 
-      {parMag && stores.length > 0 && (
+      {multi && entities.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5" onMouseLeave={() => setEmph(null)}>
-          {stores.map(m => {
+          {entities.map((m, rank) => {
             const off = hidden.has(m)
             return (
               <button key={m} type="button" aria-pressed={!off} onClick={() => toggleStore(m)} onMouseEnter={() => !off && setEmph(m)}
-                title={off ? 'Afficher ce magasin' : 'Masquer ce magasin'}
+                title={`${off ? 'Afficher' : 'Masquer'} ${parMarques ? 'cette marque' : 'ce magasin'}`}
                 className={`h-7 inline-flex items-center gap-1.5 rounded-lg border px-2 text-[11px] font-semibold ${off
                   ? 'border-dashed border-gray-200 text-gray-400 dark:border-neutral-700 dark:text-neutral-500'
                   : 'border-gray-200 text-gray-700 dark:border-neutral-700 dark:text-neutral-200 hover:bg-gray-50 dark:hover:bg-neutral-800'}`}>
                 <span style={{ opacity: off ? 0.3 : 1 }}><Swatch {...colorOf.get(m)} /></span>
-                {m}
+                {parMarques && <span className="tabular-nums text-gray-400 dark:text-neutral-500">{rank + 1}.</span>}{m}
               </button>
             )
           })}
           {hidden.size > 0 && (
             <button type="button" onClick={() => setHidden(new Set())} className="text-xs underline text-gray-500 dark:text-neutral-400">Tout afficher</button>
           )}
-          <span className="text-[11px] text-gray-500 dark:text-neutral-400">Clique sur un magasin pour le masquer ou l’afficher.</span>
+          <span className="text-[11px] text-gray-500 dark:text-neutral-400">
+            {parMarques ? 'Classées par CANet cumulé de la saison. Clique sur une marque pour la masquer ou l’afficher.' : 'Clique sur un magasin pour le masquer ou l’afficher.'}
+          </span>
         </div>
       )}
     </section>
