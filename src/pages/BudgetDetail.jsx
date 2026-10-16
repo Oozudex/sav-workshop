@@ -184,6 +184,7 @@ export default function BudgetDetail() {
             {SAISONS[budget.saison]} {budget.annee}
             {budget.baseImport && ` · Base importée le ${dateLabel(budget.baseImport.at)}${budget.baseImport.fileName ? ` (${budget.baseImport.fileName})` : ''}`}
             {budget.n1Import && ` · N-1 : ${budget.n1Import.source}${dateLabel(budget.n1Import.at) ? ` le ${dateLabel(budget.n1Import.at)}` : ''}`}
+            {budget.saisieReprise && ` · Saisie reprise du N-1 de ${budget.saisieReprise.source}${dateLabel(budget.saisieReprise.at) ? ` le ${dateLabel(budget.saisieReprise.at)}` : ''}`}
           </p>
           <p className="text-xs text-gray-500 dark:text-neutral-400">
             Gardé {CONSERVATION_ANS} ans, jusqu’au {budgetEcheance(budget).split('-').reverse().join('/')}

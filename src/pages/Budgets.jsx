@@ -19,6 +19,7 @@ function NewBudgetModal({ budgets, onClose }) {
   const [saison, setSaison] = useState('AH')
   const [annee, setAnnee] = useState(year + 1)
   const [reprendre, setReprendre] = useState(true)
+  const [historique, setHistorique] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -26,11 +27,14 @@ function NewBudgetModal({ budgets, onClose }) {
   const exists = budgets.some(b => b.saison === saison && b.annee === annee)
   const prevSeason = previousSeason({ saison, annee })
   const prev = budgets.find(b => b.saison === prevSeason.saison && b.annee === prevSeason.annee)
+  // Budget passé créé pour l'historique (AH26 quand AH27 existe) : sa saisie = le N-1 importé dans AH27
+  const next = budgets.find(b => b.saison === saison && b.annee === annee + 1 && b.n1Import)
+  const isDirection = user.role === 'directeurgen'
 
   async function submit() {
     setBusy(true); setError('')
     try {
-      const id = await createBudget({ saison, annee, reprendre: !!prev && reprendre }, user)
+      const id = await createBudget({ saison, annee, reprendre: !!prev && reprendre, depuisSuivant: next && isDirection && historique ? next : null }, user)
       navigate(`/budgets/${id}`)
     } catch (err) { setError(err.message); setBusy(false) }
   }
@@ -69,6 +73,17 @@ function NewBudgetModal({ budgets, onClose }) {
           <span>Reprendre la saisie de <strong>{prev.nom}</strong> comme N-1</span>
         </label>
       )}
+      {next && !exists && (isDirection ? (
+        <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-neutral-300">
+          <input type="checkbox" checked={historique} onChange={e => setHistorique(e.target.checked)} className="mt-0.5" />
+          <span>
+            Remplir la saisie avec le <strong>N-1 importé dans {next.nom}</strong> (historique : montants, quantités et commentaires
+            de chaque marque et magasin)
+          </span>
+        </label>
+      ) : (
+        <Notice notice={{ text: `La direction peut créer ${nom} en reprenant le N-1 importé dans ${next.nom} comme saisie (historique).` }} />
+      ))}
     </Modal>
   )
 }

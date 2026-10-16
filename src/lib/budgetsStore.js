@@ -4,7 +4,7 @@
 // commentaire), avec le même id que la marque de la liste.
 import { useEffect, useMemo, useState } from 'react'
 import {
-  addDoc, collection, deleteDoc, deleteField, doc, getDocs, onSnapshot, orderBy, query, serverTimestamp,
+  addDoc, collection, deleteDoc, deleteField, doc, getDoc, getDocs, onSnapshot, orderBy, query, serverTimestamp,
   setDoc, updateDoc, where, writeBatch,
 } from 'firebase/firestore'
 import { useShallow } from 'zustand/react/shallow'
@@ -12,7 +12,7 @@ import { db } from './firebase'
 import { useAuth } from '../store/useAuth'
 import {
   DEFAULT_MAGASINS, DEFAULT_UNIVERS, budgetName, cleanMarque, linesFromBudget, mergeSegments,
-  planN1Import, previousSeason,
+  planN1Import, previousSeason, saisieFromNextN1,
 } from './budgets'
 
 const BATCH_MAX = 450
@@ -143,8 +143,9 @@ export async function findBudget(saison, annee) {
   return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() }
 }
 
-// Crée « BUDGET AH27 » ; reprend si demandé la saisie du budget N-1 comme N-1
-export async function createBudget({ saison, annee, reprendre }, user) {
+// Crée « BUDGET AH27 » ; reprend si demandé la saisie du budget N-1 comme N-1. depuisSuivant : budget de
+// la saison suivante (déjà créé) dont le N-1 importé devient la saisie de celui-ci (historique, direction)
+export async function createBudget({ saison, annee, reprendre, depuisSuivant = null }, user) {
   if (await findBudget(saison, annee)) throw new Error(`${budgetName(saison, annee)} existe déjà.`)
   const ref = await addDoc(collection(db, 'budgets'), {
     saison, annee, nom: budgetName(saison, annee), segments: [], base: {},
@@ -155,7 +156,26 @@ export async function createBudget({ saison, annee, reprendre }, user) {
     const prev = await findBudget(p.saison, p.annee)
     if (prev) await carryOverN1({ id: ref.id, segments: [] }, prev, user)
   }
+  if (depuisSuivant) await fillFromNextN1({ id: ref.id }, depuisSuivant, user)
   return ref.id
+}
+
+// Saisie d'un budget remplie avec le N-1 importé dans le budget suivant (même id de marque). Toute la
+// saisie de tous les univers : réservé à la direction (les règles limitent un acheteur à ses univers).
+export async function fillFromNextN1(budget, next, user) {
+  const snap = await getDocs(collection(db, 'budgets', next.id, 'marques'))
+  const { lines, segments } = saisieFromNextN1(snap.docs.map(d => ({ id: d.id, ...d.data() })), next.segments || [])
+  const now = serverTimestamp()
+  await runBatches(lines.map(l => b => b.set(lineRef(budget.id, l.id), {
+    ...lineIdentity(l), saisie: l.saisie, quantite: l.quantite, commentaire: l.commentaire, updatedAt: now, updatedBy: author(user),
+  }, { merge: true })))
+  // Garde les segments déjà présents (N-1 repris du budget précédent)
+  const current = (await getDoc(doc(db, 'budgets', budget.id))).data()?.segments || []
+  const known = new Set(current.map(sg => sg.id))
+  await updateDoc(doc(db, 'budgets', budget.id), {
+    segments: [...current, ...segments.filter(sg => !known.has(sg.id))], saisieReprise: { at: now, by: author(user), source: next.nom, marques: lines.length },
+  })
+  return { count: lines.length }
 }
 
 export async function deleteBudget(id) {

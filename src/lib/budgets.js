@@ -533,6 +533,24 @@ export function linesFromBudget(lines) {
   }))
 }
 
+// Historique : budget créé après le suivant (AH26 après AH27). Le N-1 importé dans le suivant devient sa
+// saisie, marque par marque (même id) : n1 → saisie, quantiteN1 → quantite, commentaireN1 → commentaire.
+// Segments : ceux des lignes reprises, dans l'ordre du budget suivant.
+export function saisieFromNextN1(lines, nextSegments = []) {
+  const reprises = lines.filter(l => Object.values({ ...(l.n1 || {}), ...(l.quantiteN1 || {}) }).some(v => typeof v === 'number'))
+    .map(l => ({
+      id: l.id, univers: l.univers, segId: l.segId, segment: l.segment || '', nom: l.nom || '',
+      saisie: { ...(l.n1 || {}) }, quantite: { ...(l.quantiteN1 || {}) }, commentaire: l.commentaireN1 || '',
+    }))
+  const ids = new Set(reprises.map(l => l.segId))
+  const segments = nextSegments.filter(sg => ids.has(sg.id))
+  for (const l of reprises) {
+    if (segments.some(sg => sg.id === l.segId)) continue
+    segments.push({ id: l.segId, univers: l.univers, nom: l.segment })
+  }
+  return { lines: reprises, segments }
+}
+
 // Rapprochement des lignes N-1 avec la liste des marques : marques trouvées, marques à ajouter
 // à la liste et segments à ajouter au budget (absents de la base)
 export function planN1Import(lines, brands, segments = []) {

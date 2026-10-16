@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   FILTRE_SANS_ACHETEUR, addTotals, budgetRank, fournisseurResolver, coefMarque, computeAdapte, fournisseurKey, noteMarque, withAdapte, evolution, formatPct, groupeRatio, groupeTotal, objectif, brandsBySegment, budgetName, buyerFilterTest, defaultBuyerFilter, filtreAcheteur, canEditUnivers, computeTotals, segmentsCatalog, findN1Sheet, linesFromBudget, magasinMatcher, mergeSegments, n1Columns,
-  parseBaseSheet, parseN1Sheet, planN1Import, previousSeason, segmentId, sortSegments, mergeCommandes, parseCommandeSheet, planCommande, cibleCommande, CIBLE_IGNORER, CIBLE_NOUVELLE,
+  parseBaseSheet, parseN1Sheet, planN1Import, previousSeason, segmentId, sortSegments, mergeCommandes, parseCommandeSheet, saisieFromNextN1, planCommande, cibleCommande, CIBLE_IGNORER, CIBLE_NOUVELLE,
 } from '../../src/lib/budgets.js'
 
 const MAGASINS = [
@@ -285,6 +285,21 @@ describe('commandes : déclinaisons de marque', () => {
     assert.equal(vers('h').aChoisir, 0)
     assert.deepEqual(vers(CIBLE_NOUVELLE).items.find(i => i.nouvelle).identity.nom, 'ENERGETICS')
     assert.equal(vers(CIBLE_IGNORER).items.length, 2)
+  })
+})
+
+describe('historique : saisie reprise du N-1 du budget suivant', () => {
+  it('le N-1 de AH27 devient la saisie de AH26, même marque, segments dans l’ordre de AH27', () => {
+    const lines = [
+      { id: 'm1', univers: 'U', segId: 's2', segment: 'B', nom: 'NIKE', n1: { cht: 100 }, quantiteN1: { cht: 4 }, commentaireN1: 'ok', saisie: { cht: 999 } },
+      { id: 'm2', univers: 'U', segId: 's1', segment: 'A', nom: 'PUMA', n1: { lf: 50 } },
+      { id: 'm3', univers: 'U', segId: 's3', segment: 'C', nom: 'VIDE', saisie: { cht: 5 } }, // pas de N-1 : pas reprise
+      { id: 'm4', univers: 'V', segId: 's9', segment: '', nom: 'ASICS', n1: { cht: 10 } }, // segment absent du budget suivant
+    ]
+    const r = saisieFromNextN1(lines, [{ id: 's1', univers: 'U', nom: 'A' }, { id: 's2', univers: 'U', nom: 'B' }, { id: 's3', univers: 'U', nom: 'C' }])
+    assert.deepEqual(r.lines.map(l => [l.id, l.saisie, l.quantite, l.commentaire]),
+      [['m1', { cht: 100 }, { cht: 4 }, 'ok'], ['m2', { lf: 50 }, {}, ''], ['m4', { cht: 10 }, {}, '']])
+    assert.deepEqual(r.segments.map(sg => sg.id), ['s1', 's2', 's9'])
   })
 })
 
