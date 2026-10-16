@@ -69,6 +69,27 @@ export async function deleteSemaine(id) {
   await deleteDoc(doc(db, COLL, id))
 }
 
+// Range une semaine importée dans une autre semaine (mauvaise semaine choisie) : copie le fichier et ses
+// lignes vers la nouvelle semaine, puis supprime l'ancienne (rien n'est perdu si la copie échoue).
+// Refusé si la semaine visée a déjà un fichier importé.
+export async function moveSemaine(from, { annee, semaine }, user) {
+  const id = semaineId(annee, semaine)
+  if (id === from.id) return id
+  const ref = doc(db, COLL, id)
+  const target = await getDoc(ref)
+  if (target.data()?.fichier) throw new Error(`${semaineNom(annee, semaine)} a déjà un fichier importé : supprime-la d’abord.`)
+  const parts = await getDocs(collection(db, COLL, from.id, 'parts'))
+  for (const p of parts.docs) await setDoc(doc(db, COLL, id, 'parts', p.id), p.data())
+  await setDoc(ref, {
+    annee, semaine, nom: semaineNom(annee, semaine),
+    createdAt: from.createdAt || serverTimestamp(), createdBy: from.createdBy || author(user),
+    ...(from.fichier && { fichier: from.fichier }),
+    deplacee: { at: serverTimestamp(), by: author(user), de: from.nom },
+  })
+  await deleteSemaine(from.id)
+  return id
+}
+
 // Lignes d'une semaine (gardées en mémoire tant que l'import ne change pas)
 const cache = new Map()
 async function loadSemaineData(id, fichier) {

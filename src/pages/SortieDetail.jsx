@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
+import ChangeSemaineDialog from '../components/sorties/ChangeSemaineDialog'
 import ImportSortieDialog from '../components/sorties/ImportSortieDialog'
 import SortieInfo from '../components/sorties/SortieInfo'
 import SortiePivot from '../components/sorties/SortiePivot'
@@ -78,9 +79,12 @@ export default function SortieDetail() {
           <h1 className="text-lg font-bold text-gray-900 dark:text-white">{semaine.nom}</h1>
           <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">Comparée à la même semaine de l’année précédente : {labelN1}.</p>
         </div>
-        {isDirection && (
-          <button type="button" onClick={remove} className="h-8 px-3 rounded-lg text-xs font-semibold text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10">Supprimer</button>
-        )}
+        <div className="flex items-center gap-1">
+          {user.isAdmin && <button type="button" onClick={() => setDialog('move')} className={BTN_SECONDARY}>Changer de semaine</button>}
+          {isDirection && (
+            <button type="button" onClick={remove} className="h-8 px-3 rounded-lg text-xs font-semibold text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10">Supprimer</button>
+          )}
+        </div>
       </div>
       {notice && <Notice notice={notice} onClose={() => setNotice(null)} />}
 
@@ -103,7 +107,15 @@ export default function SortieDetail() {
         </div>
       </>)}
 
-      {dialog && (
+      {dialog === 'move' && (
+        <ChangeSemaineDialog semaine={semaine} user={user} onClose={() => setDialog(null)}
+          onDone={to => {
+            setDialog(null)
+            navigate(`/stats-achats/sorties/${to}`, { replace: true })
+            setNotice({ tone: 'ok', text: `${semaine.nom} a été rangée dans la bonne semaine.` })
+          }} />
+      )}
+      {(dialog === 'n' || dialog === 'n1') && (
         <ImportSortieDialog target={dialog === 'n' ? { ...semaine, label: `la semaine ${labelN}` } : { ...p, label: `le N-1 (${labelN1})` }}
           magasins={magasins} univers={univers} user={user} onClose={() => setDialog(null)}
           onDone={() => setNotice({ tone: 'ok', text: `Import enregistré (${dialog === 'n' ? labelN : labelN1}).` })} />
