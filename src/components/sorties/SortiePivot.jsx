@@ -1,8 +1,9 @@
 // Tableau croisé du taux de sortie (comme un TCD Excel) : lignes sur un ou plusieurs axes dans l'ordre
 // choisi (Magasin › Univers › Marque…), filtres sur les valeurs de chaque axe, 15 colonnes : le libellé,
-// puis CANet, MtMrg, Marge %, QtRecep, QtVte, QtStkFin et taux de sortie pour N-1 et pour N.
+// puis CANet, MtMrg, Marge %, QtRecep, QtVte, QtStkFin et taux de sortie pour N (à gauche) et pour N-1 (à droite).
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
-import { DIMS, dimLabel, dimValues, indicateurs, pivot } from '../../lib/sorties'
+import { DIMS, classement, dimLabel, dimValues, indicateurs, pivot } from '../../lib/sorties'
+import { RANG, rangNuance, rangTexte } from './rang'
 import SortieInfo from './SortieInfo'
 
 const PAGE = 200
@@ -52,8 +53,8 @@ const ecart = (v, r, f) => {
   return f === 'pct' ? `${t} pt` : `${t} %`
 }
 // Hausse / baisse par rapport à N-1 : fond teinté, texte coloré et flèche (lisible sans les couleurs)
-const UP = { cls: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300 font-semibold', arrow: '▲', label: 'en hausse' }
-const DOWN = { cls: 'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300 font-semibold', arrow: '▼', label: 'en baisse' }
+const UP = { cls: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300 font-semibold', text: 'text-emerald-700 dark:text-emerald-300', arrow: '▲', label: 'en hausse' }
+const DOWN = { cls: 'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300 font-semibold', text: 'text-red-600 dark:text-red-400', arrow: '▼', label: 'en baisse' }
 const SELECT = 'h-8 px-2 rounded-lg border text-xs bg-white dark:bg-neutral-950 border-gray-200 dark:border-neutral-700 text-gray-900 dark:text-white'
 const CHIP = 'h-7 inline-flex items-center gap-1 rounded-lg border px-2 text-xs font-semibold'
 
@@ -105,19 +106,26 @@ function FilterButton({ dim, values, selected, onChange }) {
   )
 }
 
-// Cellules d'une période ; en N, comparaison avec N-1 : vert ▲ en hausse, rouge ▼ en baisse
-function Cells({ s, ref1, n1 = false, total = false }) {
+// Cellules d'une période ; en N, comparaison avec N-1 : vert ▲ en hausse, rouge ▼ en baisse.
+// rang : classement du taux de sortie parmi les lignes du même niveau (fond bleu → jaune → orange) ; sur cette
+// case, l'évolution N-1 n'est plus donnée que par la flèche colorée.
+function Cells({ s, ref1, n1 = false, total = false, rang = null }) {
   const v = indicateurs(s)
   const r = ref1 ? indicateurs(ref1) : null
   const P = PERIOD[n1 ? 'n1' : 'n']
+  const plain = `${total ? P.total : P.cell} ${P.text}`
   return COLS.map((c, i) => {
     let dir = null
     if (!n1 && c.compare && r && v[c.key] && r[c.key]
       && Math.abs(v[c.key] - r[c.key]) > Math.abs(r[c.key]) * 0.0005) dir = v[c.key] > r[c.key] ? UP : DOWN
+    const rk = c.key === 'taux' ? rang : null
+    const cls = rk ? `${rangNuance(rk.t).cls || plain} font-semibold` : dir ? dir.cls : plain
+    const title = [rk && `Classement : ${rangTexte(rk)}`, dir && `N-1 : ${fmt(r[c.key], c.fmt)} · ${ecart(v[c.key], r[c.key], c.fmt)}`].filter(Boolean).join(' · ')
     return (
-      <td key={c.key} title={dir ? `N-1 : ${fmt(r[c.key], c.fmt)} · ${ecart(v[c.key], r[c.key], c.fmt)}` : undefined}
-        className={`py-1.5 px-2 text-right text-xs tabular-nums whitespace-nowrap ${total ? 'py-2' : ''} ${dir ? dir.cls : `${total ? P.total : P.cell} ${P.text}`} ${i === 0 ? P.edge : ''}`}>
-        {dir && <><span aria-hidden="true" className="mr-1 text-[9px]">{dir.arrow}</span><span className="sr-only">{dir.label}, </span></>}
+      <td key={c.key} title={title || undefined}
+        className={`py-1.5 px-2 text-right text-xs tabular-nums whitespace-nowrap ${total ? 'py-2' : ''} ${cls} ${i === 0 ? P.edge : ''}`}>
+        {dir && <><span aria-hidden="true" className={`mr-1 text-[9px] ${rk ? dir.text : ''}`}>{dir.arrow}</span><span className="sr-only">{dir.label}, </span></>}
+        {rk && <span className="sr-only">{rangTexte(rk)}, </span>}
         {fmt(v[c.key], c.fmt)}
       </td>
     )
@@ -152,9 +160,12 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
 
   function renderRows(path) {
     const rows = children(path)
+    // Classement du taux de sortie entre les lignes de ce niveau, en N et en N-1
+    const rangN = classement(rows.map(r => indicateurs(r.n).taux))
+    const rangN1 = classement(rows.map(r => indicateurs(r.n1).taux))
     const limit = more[path] || PAGE
     return <>
-      {rows.slice(0, limit).map(r => {
+      {rows.slice(0, limit).map((r, idx) => {
         const canOpen = r.depth < levels.length - 1
         const isOpen = open.has(r.path)
         return (
@@ -169,8 +180,8 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
                   </button>
                 ) : <span className="block truncate max-w-[18rem]" title={r.label}>{r.label}</span>}
               </th>
-              <Cells s={r.n1} n1 />
-              <Cells s={r.n} ref1={r.n1} />
+              <Cells s={r.n} ref1={r.n1} rang={rangN[idx]} />
+              <Cells s={r.n1} n1 rang={rangN1[idx]} />
             </tr>
             {canOpen && isOpen && renderRows(r.path)}
           </Fragment>
@@ -234,11 +245,11 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
                 className={`${th} sticky left-0 z-20 bg-white dark:bg-neutral-900 text-left text-gray-500 dark:text-neutral-400 min-w-[12rem] border-b border-gray-200 dark:border-neutral-700`}>
                 {levels.length ? levels.map(dimLabel).join(' › ') : 'Total'}{arrow('label', 'n')}
               </th>
-              <th colSpan={7} scope="colgroup" className={`py-1.5 text-xs font-bold text-center ${PERIOD.n1.group} ${PERIOD.n1.edge}`}>N-1 · {labelN1}</th>
               <th colSpan={7} scope="colgroup" className={`py-1.5 text-xs font-bold text-center ${PERIOD.n.group} ${PERIOD.n.edge}`}>N · {labelN}</th>
+              <th colSpan={7} scope="colgroup" className={`py-1.5 text-xs font-bold text-center ${PERIOD.n1.group} ${PERIOD.n1.edge}`}>N-1 · {labelN1}</th>
             </tr>
             <tr>
-              {['n1', 'n'].map(period => COLS.map((c, i) => (
+              {['n', 'n1'].map(period => COLS.map((c, i) => (
                 <th key={`${period}-${c.key}`} scope="col" onClick={() => sortBy(c.key, period)} title="Trier"
                   className={`${th} text-right border-b border-gray-200 dark:border-neutral-700 ${i === 0 ? PERIOD[period].edge : ''} ${PERIOD[period].head}`}>
                   {c.label}{arrow(c.key, period)}
@@ -252,18 +263,26 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
               <th scope="row" className="sticky left-0 z-10 bg-white dark:bg-neutral-900 py-2 pl-2 pr-2 text-left text-xs text-gray-900 dark:text-white border-t border-gray-300 dark:border-neutral-600">
                 Total{activeFilters.length ? ' (filtré)' : ''}
               </th>
-              <Cells s={p.total.n1} n1 total />
               <Cells s={p.total.n} ref1={p.total.n1} total />
+              <Cells s={p.total.n1} n1 total />
             </tr>
           </tfoot>
         </table>
       </div>
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-600 dark:text-neutral-300" aria-label="Légende des couleurs">
-        <li className="inline-flex items-center gap-1.5"><span aria-hidden="true" className={`h-2.5 w-2.5 rounded-sm ${PERIOD.n1.dot}`} />N-1 · {labelN1} (référence)</li>
         <li className="inline-flex items-center gap-1.5"><span aria-hidden="true" className={`h-2.5 w-2.5 rounded-sm ${PERIOD.n.dot}`} />N · {labelN} (semaine analysée)</li>
+        <li className="inline-flex items-center gap-1.5"><span aria-hidden="true" className={`h-2.5 w-2.5 rounded-sm ${PERIOD.n1.dot}`} />N-1 · {labelN1} (référence)</li>
         <li><span className={`px-1.5 py-0.5 rounded ${UP.cls}`}>▲ En hausse par rapport à N-1</span></li>
         <li><span className={`px-1.5 py-0.5 rounded ${DOWN.cls}`}>▼ En baisse par rapport à N-1</span></li>
-        <li>Survole une case pour voir la valeur N-1 et l’écart.</li>
+        <li className="inline-flex items-center gap-1">
+          Taux de sortie, classement entre lignes du même niveau :
+          <span className={`px-1.5 py-0.5 rounded font-semibold ${RANG[4].cls}`}>meilleurs</span>
+          <span className={`px-1.5 py-0.5 rounded font-semibold ${RANG[3].cls}`}>…</span>
+          <span className={`px-1.5 py-0.5 rounded font-semibold ${RANG[2].cls}`}>moyenne</span>
+          <span className={`px-1.5 py-0.5 rounded font-semibold ${RANG[1].cls}`}>…</span>
+          <span className={`px-1.5 py-0.5 rounded font-semibold ${RANG[0].cls}`}>moins bons</span>
+        </li>
+        <li>Survole une case pour voir l’écart avec N-1 et le classement.</li>
       </ul>
       <p className="text-[11px] text-gray-500 dark:text-neutral-400">Clique sur un en-tête de colonne pour trier.</p>
     </div>

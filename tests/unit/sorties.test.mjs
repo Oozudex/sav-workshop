@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   autoMapping, chunkBytes, datasetTotals, dimValues, findHeaderRow, gunzipJson, gzipJson, indicateurs, isoWeek, joinBytes,
-  matchSemaine, missingMeasures, parseSortie, pivot, semaineId, semaineN1, semaineNom,
+  classement, matchSemaine, missingMeasures, parseSortie, pivot, semaineId, semaineN1, semaineNom,
 } from '../../src/lib/sorties.js'
 
 const HEADER = ['Magasin', 'Univers', 'Segment', 'Famille', 'Sous-famille', 'Marque', 'Fournisseur', 'Modèle', 'Référence', 'Couleur',
@@ -85,6 +85,14 @@ describe('taux de sortie : tableau croisé', () => {
     assert.equal(i.taux, 0.4) // 4 / (4 + 6)
     assert.equal(indicateurs([600, 60, 5, 5, 0]).taux, 1) // tout vendu
     assert.equal(indicateurs([0, 0, 5, 0, 0]).taux, null)
+  })
+  it('classe les lignes sœurs de la meilleure à la moins bonne', () => {
+    const c = classement([0.6, 0.7, null, 0.8, 0.7])
+    assert.deepEqual(c.map(x => x?.pos ?? null), [4, 2, null, 1, 2])
+    assert.deepEqual(c.map(x => x?.t ?? null), [0, 0.5, null, 1, 0.5])
+    assert.equal(c[0].k, 4)
+    assert.deepEqual(classement([0.5, null]), [null, null])
+    assert.deepEqual(classement([0.5, 0.5]).map(x => x.t), [0.5, 0.5])
   })
   it('regroupe sur plusieurs niveaux et rapproche N et N-1', () => {
     const p = pivot({ n, n1, levels: ['magasin', 'univers'] })

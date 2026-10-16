@@ -178,6 +178,21 @@ export function indicateurs(s) {
   }
 }
 
+// Classement de lignes sœurs (ex. les magasins) sur un indicateur, indépendamment de l'évolution N-1 :
+// pour chaque valeur, { pos, k, t } avec pos = 1 pour la meilleure (ex aequo : même rang), k = nombre de
+// lignes classées et t de 1 (meilleure) à 0 (moins bonne), ex aequo au milieu de leurs places. null : valeur absente ou moins de 2 lignes.
+export function classement(values) {
+  const ok = values.filter(v => v != null)
+  const k = ok.length
+  if (k < 2) return values.map(() => null)
+  return values.map(v => {
+    if (v == null) return null
+    const better = ok.filter(x => x > v).length, worse = ok.filter(x => x < v).length
+    const egal = k - better - worse - 1 // autres lignes ex aequo
+    return { pos: better + 1, k, t: (worse + egal / 2) / (k - 1) }
+  })
+}
+
 // Valeurs distinctes d'un axe dans les deux semaines (triées)
 export function dimValues(datasets, key) {
   const set = new Set()

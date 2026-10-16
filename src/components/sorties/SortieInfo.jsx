@@ -1,6 +1,7 @@
 // Explication des calculs du taux de sortie (point info, comme « Comment est calculé le budget adapté ? »),
 // avec des exemples et les chiffres du tableau affiché (total N et N-1, filtres compris).
-import { indicateurs } from '../../lib/sorties'
+import { classement, indicateurs } from '../../lib/sorties'
+import { RANG, rangNuance, rangTexte } from './rang'
 
 const eur = v => `${Math.round(v).toLocaleString('fr-FR')} €`
 const qte = v => Math.round(v).toLocaleString('fr-FR')
@@ -34,6 +35,9 @@ function ExTable({ head, rows, foot }) {
 const ex = (caNet, mtMrg, qtVte, qtStkFin) => indicateurs([caNet, mtMrg, 0, qtVte, qtStkFin])
 const REFS = [['Réf. A', 30, 70], ['Réf. B', 45, 5], ['Réf. C', 0, 20], ['Réf. D', 12, 0]]
 const LAVAL = ex(600, 228, 2, 8), SARAN = ex(5400, 1944, 90, 10), GROUPE = ex(6000, 2172, 92, 18)
+// Exemple du classement : taux de sortie N-1 et N de 5 magasins
+const MAGS = [['SARAN', 0.62, 0.72], ['VITRE', 0.66, 0.70], ['CHECY', 0.70, 0.66], ['ST BERTHEVIN', 0.55, 0.64], ['CHATEAU GONTIER', 0.58, 0.60]]
+const MAGS_RANG = classement(MAGS.map(m => m[2]))
 
 // total : { n, n1 } sommes du tableau affiché (pivot.total)
 export default function SortieInfo({ total, labelN, labelN1, filtre }) {
@@ -45,13 +49,13 @@ export default function SortieInfo({ total, labelN, labelN1, filtre }) {
   const H = 'font-semibold text-gray-900 dark:text-white'
   return (
     <details className="rounded-xl border px-4 py-2.5 text-xs leading-relaxed border-teal-200 bg-teal-50/50 dark:border-teal-500/30 dark:bg-teal-500/5 text-gray-700 dark:text-neutral-300">
-      <summary className="cursor-pointer font-semibold text-teal-700 dark:text-teal-300">ⓘ Comment sont calculés la marge, le taux de sortie et les couleurs ?</summary>
+      <summary className="cursor-pointer font-semibold text-teal-700 dark:text-teal-300">ⓘ Comment sont calculés la marge, le taux de sortie, les couleurs et le classement ?</summary>
       <div className="mt-3 space-y-4 max-w-3xl">
         <p>
           Le fichier importé donne, pour chaque <strong>magasin × référence × couleur</strong>, cinq chiffres : <strong>CANet</strong> (chiffre d’affaires TTC),
           <strong> MtMrg</strong> (marge en €), <strong>QtRecep</strong> (pièces reçues), <strong>QtVte</strong> (pièces vendues) et <strong>QtStkFin</strong> (pièces
-          en stock à la fin). Ces colonnes sont affichées telles quelles. L’application calcule trois choses à partir d’elles : la marge %, le taux de sortie
-          et la comparaison avec N-1.
+          en stock à la fin). Ces colonnes sont affichées telles quelles. L’application calcule à partir d’elles la marge %, le taux de sortie,
+          la comparaison avec N-1 et le classement des lignes entre elles.
         </p>
 
         <section>
@@ -116,6 +120,7 @@ export default function SortieInfo({ total, labelN, labelN1, filtre }) {
             <li>Seulement sur <strong>CANet, MtMrg, Marge %, QtVte et Taux de sortie</strong>, où une hausse est une bonne nouvelle.</li>
             <li><strong>QtRecep et QtStkFin restent sans couleur</strong> : recevoir ou stocker plus n’est ni bien ni mal en soi.</li>
             <li>Pas de couleur si N ou N-1 vaut 0 ou est vide, ni pour un écart minuscule (moins de 0,05 %).</li>
+            <li>Sur le <strong>taux de sortie</strong>, le fond sert au classement (étape 6) : l’évolution n’y est donnée que par la flèche ▲ / ▼ colorée.</li>
           </ul>
           <p className="mt-1">En survolant une case colorée, on voit la valeur N-1 et l’écart :</p>
           <ExTable head={['Exemple', 'N-1', 'N', 'Écart affiché']}
@@ -132,6 +137,34 @@ export default function SortieInfo({ total, labelN, labelN1, filtre }) {
               taux de sortie {pct(r.taux)} → {pct(n.taux)} ({evolPt(n.taux, r.taux)}).
             </p>
           )}
+        </section>
+
+        <section>
+          <p className={H}>6. Le classement du taux de sortie : du bleu à l’orange</p>
+          <p>
+            Progresser par rapport à N-1 ne suffit pas : un magasin qui gagne 2 points mais dont le taux reste en dessous de tous les autres
+            est quand même le moins bon. Le fond de la case <strong>Taux de sortie</strong> classe donc les lignes <strong>entre elles</strong>, au même
+            niveau (les magasins entre eux, les marques d’un magasin entre elles…), <strong>sans regarder N-1</strong> :
+          </p>
+          <ul className="list-disc pl-4 space-y-0.5">
+            <li><span className={`px-1 rounded font-semibold ${RANG[4].cls}`}>bleu foncé</span> : parmi les meilleurs taux, <span className={`px-1 rounded font-semibold ${RANG[3].cls}`}>bleu clair</span> : plutôt meilleur ;</li>
+            <li><span className={`px-1 rounded font-semibold ${RANG[2].cls}`}>jaune</span> : dans la moyenne ;</li>
+            <li><span className={`px-1 rounded font-semibold ${RANG[1].cls}`}>orange clair</span> : plutôt moins bon, <span className={`px-1 rounded font-semibold ${RANG[0].cls}`}>orange foncé</span> : parmi les moins bons.</li>
+          </ul>
+          <p className="mt-1">
+            La nuance dépend de la <strong>place</strong> dans le classement, découpé en 5 parts égales : le premier est toujours bleu foncé et le dernier
+            orange foncé, même si les taux sont proches. N et N-1 sont classés chacun de leur côté. Le total n’est pas classé.
+          </p>
+          <ExTable head={['Exemple · 5 magasins', 'Taux N-1', 'Taux N', 'Évolution', 'Classement N']}
+            rows={MAGS.map(([m, a, b], i) => [
+              m, pct(a), pct(b),
+              <span key="e" className={`font-semibold ${b > a ? UP : DOWN}`}>{b > a ? '▲' : '▼'} {evolPt(b, a)}</span>,
+              <span key="r" className={`px-1.5 py-0.5 rounded ${rangNuance(MAGS_RANG[i].t).cls}`}>{rangTexte(MAGS_RANG[i])}</span>,
+            ])} />
+          <p>
+            CHATEAU GONTIER progresse (▲ vert, +2 points) mais a le plus faible taux de la semaine : il est en orange foncé. À l’inverse, CHECY
+            recule (▼ rouge) mais reste dans la moyenne (jaune). Survole une case de taux pour lire sa place (« 3e sur 10 »).
+          </p>
         </section>
 
         <section>
