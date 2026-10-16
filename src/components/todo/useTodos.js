@@ -1,7 +1,8 @@
 // Todo list d'un rayon d'un magasin : tâches en direct, tâches automatiques (OP, atelier, récurrentes)
 // créées une seule fois, mot du soir, et actions (ajouter, cocher, assigner, supprimer).
 // perso : liste personnelle d'un acheteur ou de la direction (users/{uid}/todos_perso), avec ses
-// tâches récurrentes, sans tâches automatiques des magasins ni mot du soir.
+// tâches récurrentes, sans tâches automatiques des magasins ni mot du soir ; un acheteur y a aussi
+// les budgets en fin de conservation à exporter.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   addDoc, arrayUnion, collection, deleteDoc, doc, getDocs, onSnapshot, query, runTransaction, serverTimestamp,
@@ -12,7 +13,7 @@ import { useAuth } from '../../store/useAuth'
 import { currentStatusSince } from '../../lib/ticketStats'
 import {
   HISTORIQUE_JOURS, MOT_COLLECTION, RECURRENCE_COLLECTION, RECURRENCE_PERSO_COLLECTION, TODO_COLLECTION, TODO_PERSO_COLLECTION, addDays, atelierTodoSpecs, autoObsolete,
-  baliseTodoSpecs, opTodoSpecs, recurrenceSpecs, toMs, transfertTodoSpecs, ymd,
+  baliseTodoSpecs, budgetExportTodoSpecs, opTodoSpecs, recurrenceSpecs, toMs, transfertTodoSpecs, ymd,
 } from '../../lib/todos'
 import { TRANSFER_ACTIVE_STATUSES } from '../../lib/transferts'
 import { BALISE_TRANSFERT_COLLECTION, DEMANDE_ACTIVES } from '../../lib/balises'
@@ -21,6 +22,7 @@ export const motDocId = (magasinId, rayon) => `${magasinId}_${rayon}`
 
 export function useTodos(magasinId, rayon, { perso = false } = {}) {
   const user = useAuth(s => s.user)
+  const role = useAuth(s => s.profile?.role)
   const uid = user?.uid
   const today = ymd(new Date())
   const [todos, setTodos] = useState(null)
@@ -30,6 +32,7 @@ export function useTodos(magasinId, rayon, { perso = false } = {}) {
   const [tickets, setTickets] = useState(null)
   const [transferts, setTransferts] = useState(null)
   const [balises, setBalises] = useState(null)
+  const [budgets, setBudgets] = useState(null)
   const [error, setError] = useState(false)
   const ready = perso ? !!uid : !!magasinId && !!rayon
   const magasin = ready && !perso // liste d'un rayon : tâches automatiques et mot du soir
@@ -95,14 +98,26 @@ export function useTodos(magasinId, rayon, { perso = false } = {}) {
       s => setBalises(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => setBalises([]))
   }, [magasin, rayon])
 
+  // Liste perso d'un acheteur : budgets (fin de conservation, export à faire)
+  const acheteur = ready && perso && role === 'acheteur'
+  useEffect(() => {
+    if (!acheteur) { setBudgets([]); return }
+    return onSnapshot(collection(db, 'budgets'), s => setBudgets(s.docs.map(d => {
+      const b = d.data()
+      const at = b.export?.at?.toDate?.()
+      return { id: d.id, nom: b.nom, annee: b.annee, exportAt: at ? ymd(at) : null }
+    })), () => setBudgets([]))
+  }, [acheteur])
+
   // Tâches automatiques attendues aujourd'hui
-  const specs = useMemo(() => (ops && tickets && transferts && balises && recurrences ? [
+  const specs = useMemo(() => (ops && tickets && transferts && balises && budgets && recurrences ? [
     ...opTodoSpecs(ops, { magasinId, rayon, today }),
     ...atelierTodoSpecs(tickets, { magasinId, today }),
     ...transfertTodoSpecs(transferts, { magasinId }),
     ...baliseTodoSpecs(balises, { magasinId }),
+    ...budgetExportTodoSpecs(budgets, { today }),
     ...recurrenceSpecs(recurrences, { today }),
-  ] : null), [ops, tickets, transferts, balises, recurrences, magasinId, rayon, today])
+  ] : null), [ops, tickets, transferts, balises, budgets, recurrences, magasinId, rayon, today])
 
   // Synchronisation : création unique des tâches automatiques, retrait de celles devenues inutiles,
   // nettoyage des tâches terminées depuis plus de 30 jours

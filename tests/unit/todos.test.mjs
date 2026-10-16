@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   addDays, atelierTodoSpecs, autoObsolete, joursLabel, motRecent, opTodoSpecs, recurrenceSpecs,
-  sortTodos, todoAutoId, weekdayIndex, transfertTodoSpecs, classement, tigreDeLaSemaine, lundi, todoPerso,
+  sortTodos, todoAutoId, weekdayIndex, transfertTodoSpecs, classement, tigreDeLaSemaine, lundi, todoPerso, budgetExportTodoSpecs,
 } from '../../src/lib/todos.js'
 
 describe('dates', () => {
@@ -138,5 +138,26 @@ describe('liste personnelle', () => {
     assert.equal(todoPerso(null), false)
     assert.equal(todoPerso({ role: 'directeurgen', isAdmin: true }, { equipes: true }), false)
     assert.equal(todoPerso({ role: 'acheteur' }, { equipes: true }), true)
+  })
+})
+
+describe('budgets à exporter (fin de conservation)', () => {
+  const b = (exportAt = null) => ({ id: 'b1', nom: 'BUDGET AH27', annee: 2027, exportAt })
+
+  it('rappelle aux acheteurs d’exporter un budget à partir du 1er octobre de sa 5e année', () => {
+    assert.deepEqual(budgetExportTodoSpecs([b()], { today: '2032-09-30' }), [])
+    const [t] = budgetExportTodoSpecs([b()], { today: '2032-10-01' })
+    assert.equal(t.titre, 'Exporter BUDGET AH27 (Excel) : gardé 5 ans, il arrive à échéance le 31/12/2032')
+    assert.equal(t.echeance, '2032-12-31')
+    assert.deepEqual(t.auto, { type: 'budget_export', refId: 'b1' })
+    assert.equal(budgetExportTodoSpecs([b()], { today: '2033-02-01' }).length, 1)
+  })
+
+  it('la tâche disparaît dès qu’un export est fait pendant le rappel (pas un export plus ancien)', () => {
+    assert.equal(budgetExportTodoSpecs([b('2028-01-10')], { today: '2032-11-01' }).length, 1)
+    assert.deepEqual(budgetExportTodoSpecs([b('2032-10-15')], { today: '2032-11-01' }), [])
+    const t = { id: 'budget_export_b1', auto: { type: 'budget_export', refId: 'b1' }, fait: false }
+    assert.equal(autoObsolete(t, new Set()), true)
+    assert.equal(autoObsolete({ ...t, fait: true }, new Set()), false)
   })
 })

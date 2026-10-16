@@ -13,9 +13,11 @@ import { Legend, SplitBar, TONE } from '../components/budgets/tones'
 import { ImportBaseDialog, ImportCommandeDialog, ImportN1Dialog } from '../components/budgets/ImportDialogs'
 import { BTN_PRIMARY, BTN_SECONDARY, EmptyState, Notice } from '../components/admin/ui'
 import {
-  FILTRE_SANS_ACHETEUR, SAISONS, addTotals, buyerFilterTest, canEditUnivers, defaultBuyerFilter, formatBudget, formatQte, objectif,
+  CONSERVATION_ANS, FILTRE_SANS_ACHETEUR, SAISONS, addTotals, budgetEcheance, buyerFilterTest, canEditUnivers, defaultBuyerFilter,
+  exportAFaire, formatBudget, formatQte, objectif,
 } from '../lib/budgets'
-import { carryOverN1, deleteBudget, useAcheteurs, useBudgetUser } from '../lib/budgetsStore'
+import { ymd } from '../lib/todos'
+import { carryOverN1, deleteBudget, markExport, useAcheteurs, useBudgetUser } from '../lib/budgetsStore'
 import { useBudgetModel } from '../lib/useBudgetModel'
 import { budgetWorkbook, exportFileName, reimportColumn } from '../lib/budgetExport'
 import { downloadWorkbook } from '../lib/excel'
@@ -159,6 +161,7 @@ export default function BudgetDetail() {
     try {
       const sheets = budgetWorkbook({ budget, segments, magasins, totals, brandsBySeg, adapte, fournisseur, fiche, hasGroupe, groupeMontant, reglages })
       await downloadWorkbook(sheets, exportFileName(budget))
+      await markExport(budget.id, user)
       setNotice({ tone: 'ok', text: `Export téléchargé. L’an prochain, il se réimporte comme N-1 : onglet « BUDGET PAR MARQUES », colonne « ${reimportColumn(budget)} ».` })
     } catch (err) { setNotice({ text: `Export impossible : ${err.message}` }) }
     setBusy(false)
@@ -182,6 +185,10 @@ export default function BudgetDetail() {
             {budget.baseImport && ` · Base importée le ${dateLabel(budget.baseImport.at)}${budget.baseImport.fileName ? ` (${budget.baseImport.fileName})` : ''}`}
             {budget.n1Import && ` · N-1 : ${budget.n1Import.source}${dateLabel(budget.n1Import.at) ? ` le ${dateLabel(budget.n1Import.at)}` : ''}`}
           </p>
+          <p className="text-xs text-gray-500 dark:text-neutral-400">
+            Gardé {CONSERVATION_ANS} ans, jusqu’au {budgetEcheance(budget).split('-').reverse().join('/')}
+            {budget.export?.at && ` · Dernier export le ${dateLabel(budget.export.at)}${budget.export.by?.nom ? ` par ${budget.export.by.nom}` : ''}`}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => setDialog('base')} className={budget.baseImport ? BTN_SECONDARY : BTN_PRIMARY}>
@@ -201,6 +208,9 @@ export default function BudgetDetail() {
       </div>
 
       {notice && <Notice notice={notice} onClose={() => setNotice(null)} />}
+      {exportAFaire(budget, budget.export?.at?.toDate ? ymd(budget.export.at.toDate()) : null, ymd(new Date())) && (
+        <Notice notice={{ text: `${budget.nom} arrive à la fin de ses ${CONSERVATION_ANS} ans de conservation (${budgetEcheance(budget).split('-').reverse().join('/')}) : fais un export Excel pour le garder.` }} />
+      )}
       {isAcheteur && !user.univers.length && (
         <Notice notice={{ text: 'Aucun univers ne t’est attribué : le budget est en lecture seule. La direction attribue les univers dans Admin › Comptes.' }} />
       )}

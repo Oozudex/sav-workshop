@@ -171,6 +171,11 @@ export function setGroupe(budgetId, groupe, user) {
   })
 }
 
+// Export Excel fait : date gardée sur le budget (le rappel « Exporter » de fin de conservation disparaît)
+export function markExport(budgetId, user) {
+  return updateDoc(doc(db, 'budgets', budgetId), { export: { at: serverTimestamp(), by: author(user) } })
+}
+
 // Base importée : remplace le budget de base, garde les segments venus du N-1 et toute la saisie
 export function saveBase(budget, parsed, fileName, user) {
   return updateDoc(doc(db, 'budgets', budget.id), {

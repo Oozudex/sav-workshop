@@ -5,6 +5,7 @@ import { opRayons } from './opSearch.js'
 import { GLOBAL_ROLES } from './constants.js'
 import { transferNextStep, transferSides } from './transferts.js'
 import { etapeDemande } from './balises.js'
+import { budgetEcheance, exportAFaire } from './budgets.js'
 
 export const TODO_COLLECTION = 'todos'
 export const RECURRENCE_COLLECTION = 'todo_recurrences'
@@ -180,6 +181,20 @@ export function recurrenceSpecs(recurrences, { today }) {
     }))
 }
 
+// Acheteurs : budgets en fin de conservation (5 ans) à exporter avant leur échéance ; la tâche disparaît
+// dès qu'un export est fait. budgets : [{ id, nom, annee, exportAt ('YYYY-MM-DD' ou null) }]
+export function budgetExportTodoSpecs(budgets, { today }) {
+  return budgets.filter(b => exportAFaire(b, b.exportAt, today)).map(b => {
+    const echeance = budgetEcheance(b)
+    return {
+      id: safe(`budget_export_${b.id}`),
+      titre: `Exporter ${b.nom} (Excel) : gardé 5 ans, il arrive à échéance le ${echeance.split('-').reverse().join('/')}`,
+      echeance,
+      auto: { type: 'budget_export', refId: b.id },
+    }
+  })
+}
+
 // Jours d'une récurrence en clair : « lun., mer. et ven. », « tous les jours »
 export function joursLabel(jours = []) {
   const sorted = [...jours].sort((a, b) => a - b)
@@ -214,7 +229,7 @@ export function motRecent(mot, now = Date.now()) {
 
 // Tâche automatique dont la raison a disparu (ticket rendu, OP supprimée) et pas encore cochée
 export function autoObsolete(todo, specIds) {
-  return !!todo.auto && ['op_debut', 'op_fin', 'atelier', 'transfert', 'balise'].includes(todo.auto.type) && !todo.fait && !specIds.has(todo.id)
+  return !!todo.auto && ['op_debut', 'op_fin', 'atelier', 'transfert', 'balise', 'budget_export'].includes(todo.auto.type) && !todo.fait && !specIds.has(todo.id)
 }
 
 // ── Tigre de la semaine ─────────────────────────────────────────────────────

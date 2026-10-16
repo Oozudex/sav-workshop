@@ -20,6 +20,26 @@ export function previousSeason({ saison, annee }) {
   return { saison, annee: annee - 1 }
 }
 
+// ── Conservation ────────────────────────────────────────────────────────────────
+// Un budget est gardé 5 ans après sa saison : BUDGET AH27 jusqu'au 31/12/2032. À partir du 1er octobre de
+// cette dernière année, les acheteurs ont une tâche « Exporter » dans leur todo, jusqu'à ce qu'un export
+// Excel du budget soit fait (budgets/{id}.export, daté de ce rappel ou après).
+export const CONSERVATION_ANS = 5
+
+export function budgetEcheance({ annee }) {
+  return `${annee + CONSERVATION_ANS}-12-31`
+}
+
+export function rappelExportDebut({ annee }) {
+  return `${annee + CONSERVATION_ANS}-10-01`
+}
+
+// exportAt : date de l'export ('YYYY-MM-DD'), null si jamais exporté
+export function exportAFaire(budget, exportAt, today) {
+  const debut = rappelExportDebut(budget)
+  return today >= debut && !(exportAt && exportAt >= debut)
+}
+
 // ── Listes par défaut (proposées tant que les listes sont vides) ────────────────
 
 export const DEFAULT_UNIVERS = [
