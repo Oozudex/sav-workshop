@@ -295,10 +295,11 @@ export function parseN1Sheet(rows, { univers, matchMagasin, column }) {
 }
 
 // ── Commandes fournisseur (export MesAchats « CDE ENERGETICS AH27 ») ────────────
-// Une ligne par modèle × couleur : Univers, Segment, Marque, PAJA (prix d'achat), % Remise, PA net saisi,
-// Total, puis une colonne de pièces par magasin (« SB 414/0 » : code du magasin dans Budgets › Magasins).
-// Regroupée par marque du budget : quantité = pièces commandées, montant = pièces × PA net
-// (PA net saisi s'il est rempli, sinon PAJA moins la remise).
+// Une ligne par modèle × couleur : Univers, Segment, Famille, SousFamille, Marque, Gamme, PAJA (prix d'achat),
+// % Remise, PA net saisi, Total, puis une colonne de pièces par magasin (« SB 414/0 » : code du magasin dans
+// Budgets › Magasins). Montant = pièces × PA net (PA net saisi s'il est rempli, sinon PAJA moins la remise).
+// Les lignes sont regroupées par segment, marque et contexte (famille, sous-famille, gamme, nom du fichier) :
+// le contexte choisit la déclinaison de la marque dans le budget (« ENERGETICS FEMME », « NIKE Q3 »…).
 
 const STORE_CODE = /\d+\s*\/\s*\d+$/
 
@@ -309,7 +310,10 @@ function remiseRate(v) {
   return r >= 1 ? r / 100 : r
 }
 
-export function parseCommandeSheet(rows, { univers, matchMagasin }) {
+const mots = v => normLabel(v).split(/[^A-Z0-9]+/).filter(Boolean)
+
+// fichier : nom du fichier, ajouté au contexte (« CDE NIKE Q3 AH27 » → déclinaison « NIKE Q3 »)
+export function parseCommandeSheet(rows, { univers, matchMagasin, fichier = '' }) {
   const h = rows.findIndex(r => {
     const c = r.map(normLabel)
     return c.includes('UNIVERS') && c.includes('MARQUE') && c.some(x => x === 'PAJA' || x.startsWith('PA NET'))
@@ -321,7 +325,9 @@ export function parseCommandeSheet(rows, { univers, matchMagasin }) {
   const colRemise = header.findIndex(c => c.includes('REMISE')), colPaNet = header.findIndex(c => c.startsWith('PA NET'))
   const colTotal = col('TOTAL'), colModele = header.findIndex(c => c.startsWith('LIBELLE MODELE'))
   const colCouleur = header.findIndex(c => c.startsWith('LIBELLE COULEUR'))
-  const known = new Set([colUnivers, colSegment, colMarque, colPaja, colRemise, colPaNet, colTotal])
+  const colFamille = col('FAMILLE'), colSousFamille = header.findIndex(c => c.replace(/[\s-]/g, '') === 'SOUSFAMILLE')
+  const colGamme = col('GAMME')
+  const known = new Set([colUnivers, colSegment, colMarque, colPaja, colRemise, colPaNet, colTotal, colFamille, colSousFamille, colGamme])
 
   const storeCols = [], unknownMagasins = []
   rows[h].forEach((label, j) => {
@@ -333,6 +339,7 @@ export function parseCommandeSheet(rows, { univers, matchMagasin }) {
   if (!storeCols.length) return { error: 'Aucune colonne magasin reconnue (« SB 414/0 »…) : vérifie les codes dans l’onglet Magasins des budgets.' }
 
   const matchUnivers = universMatcher(univers)
+  const cell = (row, j) => (j >= 0 ? cleanText(row[j]) : '')
   const unknownUnivers = new Set(), ecartsTotal = [], sansPrix = []
   const lines = new Map()
   let lignes = 0
@@ -343,11 +350,13 @@ export function parseCommandeSheet(rows, { univers, matchMagasin }) {
     const u = matchUnivers(uLabel)
     if (!u) { unknownUnivers.add(uLabel); continue }
     lignes++
-    let segment = colSegment >= 0 ? cleanText(row[colSegment]) : ''
+    let segment = cell(row, colSegment)
     if (normLabel(segment) === normLabel(u)) segment = ''
     const segId = segmentId(u, segment)
-    const key = marqueKey(segId, marque)
-    const line = lines.get(key) ?? { segId, univers: u, segment, nom: marque, saisie: {}, quantite: {}, lignes: 0 }
+    const famille = cell(row, colFamille), sousFamille = cell(row, colSousFamille), gamme = cell(row, colGamme)
+    const contexte = [...new Set([famille, sousFamille, gamme, fichier].flatMap(mots))].join(' ')
+    const key = `${marqueKey(segId, marque)}|${contexte}`
+    const line = lines.get(key) ?? { key, segId, univers: u, segment, nom: marque, famille, contexte, saisie: {}, quantite: {}, lignes: 0 }
     line.lignes++
     lines.set(key, line)
 
@@ -373,16 +382,16 @@ export function parseCommandeSheet(rows, { univers, matchMagasin }) {
   }
 }
 
-// Plusieurs fichiers de commande lus ensemble : une même marque s'additionne
+const addValues = (a, b) => { for (const [k, v] of Object.entries(b)) a[k] = Math.round(((a[k] || 0) + v) * 100) / 100 }
+
+// Plusieurs fichiers de commande lus ensemble : un même groupe (segment, marque, contexte) s'additionne
 export function mergeCommandes(results) {
   const lines = new Map()
-  const add = (a, b) => { for (const [k, v] of Object.entries(b)) a[k] = Math.round(((a[k] || 0) + v) * 100) / 100 }
   for (const r of results) {
     for (const l of r.lines) {
-      const key = marqueKey(l.segId, l.nom)
-      const cur = lines.get(key)
-      if (!cur) { lines.set(key, { ...l, saisie: { ...l.saisie }, quantite: { ...l.quantite } }); continue }
-      add(cur.saisie, l.saisie); add(cur.quantite, l.quantite); cur.lignes += l.lignes
+      const cur = lines.get(l.key)
+      if (!cur) { lines.set(l.key, { ...l, saisie: { ...l.saisie }, quantite: { ...l.quantite } }); continue }
+      addValues(cur.saisie, l.saisie); addValues(cur.quantite, l.quantite); cur.lignes += l.lignes
     }
   }
   const all = k => [...new Set(results.flatMap(r => r[k]))]
@@ -392,36 +401,104 @@ export function mergeCommandes(results) {
   }
 }
 
-// Ce qu'une commande écrit dans le budget, marque par marque, dans les magasins du fichier (magIds) :
-// remplace la saisie (montants et quantités ; un magasin sans pièce est vidé) ou s'y ajoute (ajouter).
+export const CIBLE_NOUVELLE = 'nouvelle'
+export const CIBLE_IGNORER = 'ignorer'
+
+// Ligne de marque du budget qui reçoit un groupe de la commande, parmi les marques du segment :
+// la déclinaison dont la fin du nom (« FEMME », « Q3 »…) est dans le contexte, sinon la marque exacte ;
+// '' si plusieurs déclinaisons existent sans que le contexte permette de choisir ; CIBLE_NOUVELLE si
+// la marque n'existe pas encore dans le segment.
+export function cibleCommande(line, segBrands) {
+  const marque = normLabel(line.nom)
+  const contexte = new Set(line.contexte.split(' '))
+  const candidates = segBrands.filter(b => normLabel(b.nom) === marque || normLabel(b.nom).startsWith(`${marque} `))
+  let best = [], bestScore = 0
+  for (const b of candidates) {
+    const suffixe = mots(normLabel(b.nom).slice(marque.length))
+    if (!suffixe.length || !suffixe.every(w => contexte.has(w))) continue
+    if (suffixe.length > bestScore) { best = [b]; bestScore = suffixe.length } else if (suffixe.length === bestScore) best.push(b)
+  }
+  if (best.length === 1) return best[0].id
+  if (best.length > 1) return ''
+  const exacte = candidates.find(b => normLabel(b.nom) === marque)
+  if (exacte) return exacte.id
+  return candidates.length ? '' : CIBLE_NOUVELLE
+}
+
+// Ce qu'une commande écrit dans le budget. Lignes affichées (rows) : un groupe par segment, marque et
+// ligne de budget proposée, avec le choix de l'utilisateur (choix : { [row.key]: id | CIBLE_NOUVELLE |
+// CIBLE_IGNORER }). Écritures (items), une par ligne de budget, dans les magasins du fichier (magIds) :
+// remplacement de la saisie (montants et quantités ; un magasin sans pièce est vidé) ou ajout (ajouter).
 // Les univers que l'utilisateur ne peut pas modifier sont écartés (horsDroits). Valeur null : à effacer.
-export function planCommande(commande, { brands, segments, budgetLines, user, ajouter = false }) {
+export function planCommande(commande, { brands, segments, budgetLines, user, ajouter = false, choix = {} }) {
   const permis = commande.lines.filter(l => canEditUnivers(user, l.univers))
   const horsDroits = [...new Set(commande.lines.filter(l => !canEditUnivers(user, l.univers)).map(l => l.univers))]
-  const { matched, missing, newSegments } = planN1Import(permis, brands, segments)
-  const byId = new Map(budgetLines.map(l => [l.id, l]))
-  const items = [...matched.map(m => ({ id: m.id, line: m.line, brand: brands.find(b => b.id === m.id) })),
-    ...missing.map(line => ({ id: null, line, brand: null }))]
-    .map(({ id, line, brand }) => {
-      const cur = (id && byId.get(id)) || {}
-      const values = k => Object.fromEntries(commande.magIds.flatMap(m => {
-        const v = line[k][m]
-        if (!ajouter) return [[m, v || null]]
-        if (!v) return []
-        return [[m, Math.round(((cur[k]?.[m] || 0) + v) * 100) / 100]]
-      }))
-      const saisie = values('saisie'), quantite = values('quantite')
-      const avant = sumValues(cur.saisie)
-      const apres = sumValues({ ...(cur.saisie || {}), ...saisie })
-      const identity = brand || line
-      return {
-        id, line, nouvelle: !id, identity: { univers: identity.univers, segId: identity.segId, segment: identity.segment || '', nom: identity.nom },
-        saisie, quantite, avant, apres, commande: sumValues(line.saisie), pieces: sumValues(line.quantite),
-      }
-    })
-  items.sort((a, b) => a.line.univers.localeCompare(b.line.univers, 'fr') || (a.line.segment || '').localeCompare(b.line.segment || '', 'fr')
-    || a.line.nom.localeCompare(b.line.nom, 'fr'))
-  return { items, horsDroits, newSegments }
+  const bySeg = new Map()
+  for (const b of brands) bySeg.set(b.segId, [...(bySeg.get(b.segId) || []), b])
+  for (const list of bySeg.values()) list.sort((a, b) => a.nom.localeCompare(b.nom, 'fr'))
+  const brandById = new Map(brands.map(b => [b.id, b]))
+
+  // Lignes affichées : groupes du fichier qui vont vers la même ligne de budget proposée
+  const rowsByKey = new Map()
+  for (const l of permis) {
+    const auto = cibleCommande(l, bySeg.get(l.segId) || [])
+    const key = `${marqueKey(l.segId, l.nom)}|${auto}`
+    const row = rowsByKey.get(key) ?? {
+      key, auto, segId: l.segId, univers: l.univers, segment: l.segment, nom: l.nom, familles: [], options: bySeg.get(l.segId) || [],
+      saisie: {}, quantite: {}, lignes: 0,
+    }
+    if (l.famille && !row.familles.includes(l.famille)) row.familles.push(l.famille)
+    addValues(row.saisie, l.saisie); addValues(row.quantite, l.quantite); row.lignes += l.lignes
+    rowsByKey.set(key, row)
+  }
+  const rows = [...rowsByKey.values()].map(r => ({
+    ...r, cible: choix[r.key] ?? r.auto, commande: sumValues(r.saisie), pieces: sumValues(r.quantite),
+  }))
+  rows.sort((a, b) => a.univers.localeCompare(b.univers, 'fr') || (a.segment || '').localeCompare(b.segment || '', 'fr')
+    || a.nom.localeCompare(b.nom, 'fr') || a.familles.join().localeCompare(b.familles.join(), 'fr'))
+
+  // Écritures : une par ligne de budget visée (nouvelle marque : une par segment et nom)
+  const byTarget = new Map()
+  for (const r of rows) {
+    if (!r.cible || r.cible === CIBLE_IGNORER) continue
+    const tKey = r.cible === CIBLE_NOUVELLE ? `new|${marqueKey(r.segId, r.nom)}` : r.cible
+    const brand = r.cible === CIBLE_NOUVELLE ? null : brandById.get(r.cible)
+    const t = byTarget.get(tKey) ?? {
+      id: brand?.id || null, nouvelle: !brand, saisieCmd: {}, quantiteCmd: {},
+      identity: brand
+        ? { univers: brand.univers, segId: brand.segId, segment: brand.segment || '', nom: brand.nom }
+        : { univers: r.univers, segId: r.segId, segment: r.segment || '', nom: r.nom },
+    }
+    addValues(t.saisieCmd, r.saisie); addValues(t.quantiteCmd, r.quantite)
+    byTarget.set(tKey, t)
+    r.tKey = tKey
+  }
+  const lineById = new Map(budgetLines.map(l => [l.id, l]))
+  const items = [...byTarget.entries()].map(([tKey, t]) => {
+    const cur = (t.id && lineById.get(t.id)) || {}
+    const values = (k, cmd) => Object.fromEntries(commande.magIds.flatMap(m => {
+      const v = cmd[m]
+      if (!ajouter) return [[m, v || null]]
+      if (!v) return []
+      return [[m, Math.round(((cur[k]?.[m] || 0) + v) * 100) / 100]]
+    }))
+    const saisie = values('saisie', t.saisieCmd), quantite = values('quantite', t.quantiteCmd)
+    return {
+      tKey, id: t.id, nouvelle: t.nouvelle, identity: t.identity, saisie, quantite,
+      avant: sumValues(cur.saisie), apres: sumValues({ ...(cur.saisie || {}), ...saisie }),
+    }
+  })
+  const itemByKey = new Map(items.map(i => [i.tKey, i]))
+  for (const r of rows) r.item = r.tKey ? itemByKey.get(r.tKey) : null
+
+  const segIds = new Set(segments.map(s => s.id))
+  const newSegments = []
+  for (const it of items) {
+    if (segIds.has(it.identity.segId)) continue
+    segIds.add(it.identity.segId)
+    newSegments.push({ id: it.identity.segId, univers: it.identity.univers, nom: it.identity.segment })
+  }
+  return { rows, items, horsDroits, newSegments, aChoisir: rows.filter(r => !r.cible).length }
 }
 
 // ── Marques ─────────────────────────────────────────────────────────────────────

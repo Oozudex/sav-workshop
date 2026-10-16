@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   FILTRE_SANS_ACHETEUR, addTotals, budgetRank, fournisseurResolver, coefMarque, computeAdapte, fournisseurKey, noteMarque, withAdapte, evolution, formatPct, groupeRatio, groupeTotal, objectif, brandsBySegment, budgetName, buyerFilterTest, defaultBuyerFilter, filtreAcheteur, canEditUnivers, computeTotals, segmentsCatalog, findN1Sheet, linesFromBudget, magasinMatcher, mergeSegments, n1Columns,
-  parseBaseSheet, parseN1Sheet, planN1Import, previousSeason, segmentId, sortSegments, mergeCommandes, parseCommandeSheet, planCommande,
+  parseBaseSheet, parseN1Sheet, planN1Import, previousSeason, segmentId, sortSegments, mergeCommandes, parseCommandeSheet, planCommande, cibleCommande, CIBLE_IGNORER, CIBLE_NOUVELLE,
 } from '../../src/lib/budgets.js'
 
 const MAGASINS = [
@@ -231,10 +231,60 @@ describe('commandes fournisseur', () => {
   it('ajoute les marques et segments absents, écarte les univers de l’acheteur qui ne sont pas les siens', () => {
     const acheteur = { role: 'acheteur', univers: ['RANDONNEE', 'BAGAGERIE'] }
     const p = planCommande(r, { brands, segments, budgetLines, user: acheteur })
-    assert.deepEqual(p.items.map(i => [i.line.univers, i.nouvelle]), [['BAGAGERIE', true], ['RANDONNEE', false]])
+    assert.deepEqual(p.items.map(i => [i.identity.univers, i.nouvelle]), [['BAGAGERIE', true], ['RANDONNEE', false]])
     assert.deepEqual(p.items[0].identity, { univers: 'BAGAGERIE', segId: segmentId('BAGAGERIE'), segment: '', nom: 'ENERGETICS' })
     assert.deepEqual(p.horsDroits, ['ACCESSOIRE TEXTILE'])
     assert.deepEqual(p.newSegments.map(s => s.id), [segmentId('BAGAGERIE')])
+  })
+})
+
+describe('commandes : déclinaisons de marque', () => {
+  const seg = segmentId('TRAINING', 'HABILLEMENT')
+  const b = (id, nom) => ({ id, univers: 'TRAINING', segId: seg, segment: 'HABILLEMENT', nom })
+  const variantes = [b('f', 'ENERGETICS FEMME'), b('h', 'ENERGETICS HOMME'), b('fi', 'ENERGETICS FILLE'), b('n', 'NIKE Q3'), b('n4', 'NIKE Q4'),
+    b('p', 'PUMA'), b('pt', 'PUMA OP TOP'), b('x', 'ENERGETICS-X')]
+  const l = (nom, contexte) => ({ nom, contexte })
+
+  it('choisit la déclinaison qui correspond à la famille ou au nom du fichier', () => {
+    assert.equal(cibleCommande(l('ENERGETICS', 'FEMME COLLANT GAMME 0 CDE ENERGETICS AH27'), variantes), 'f')
+    assert.equal(cibleCommande(l('ENERGETICS', 'FILLE SHORT'), variantes), 'fi')
+    assert.equal(cibleCommande(l('NIKE', 'HOMME SHORT CDE NIKE Q3 AH27'), variantes), 'n')
+  })
+
+  it('sinon la marque seule, sinon à choisir, sinon une nouvelle marque', () => {
+    assert.equal(cibleCommande(l('PUMA', 'HOMME SHORT'), variantes), 'p')
+    assert.equal(cibleCommande(l('PUMA', 'OP TOP HOMME'), variantes), 'pt')
+    assert.equal(cibleCommande(l('ENERGETICS', 'GARCON SHORT'), variantes), '')
+    assert.equal(cibleCommande(l('NIKE', 'HOMME'), variantes), '')
+    assert.equal(cibleCommande(l('ADIDAS', 'HOMME'), variantes), CIBLE_NOUVELLE)
+  })
+
+  const HEAD = ['Libellé modèle', 'Libellé Couleur', 'Univers', 'Segment', 'Famille', 'SousFamille', 'Marque', 'Gamme', 'PAJA', 'Total', 'CHT 274/0', 'LF 458/0']
+  const row = (mod, fam, cht, lf) => [mod, 'NOIR', 'RANDONNEE', 'HABILLEMENT', fam, 'SHORT', 'ENERGETICS', 'Gamme 0', 10, cht + lf, cht, lf]
+  const cde = parseCommandeSheet([HEAD, row('A', 'FEMME', 12, 0), row('B', 'FEMME', 6, 6), row('C', 'HOMME', 0, 24), row('D', 'GARCON', 12, 0)],
+    { univers: UNIVERS, matchMagasin, fichier: 'CDE ENERGETICS AH27' })
+  const segR = segmentId('RANDONNEE', 'HABILLEMENT')
+  const br = (id, nom) => ({ id, univers: 'RANDONNEE', segId: segR, segment: 'HABILLEMENT', nom })
+  const brands = [br('f', 'ENERGETICS FEMME'), br('h', 'ENERGETICS HOMME')]
+  const opts = { brands, segments: [{ id: segR }], budgetLines: [], user: { role: 'directeurgen' } }
+
+  it('sépare le fichier par famille et répartit sur les déclinaisons', () => {
+    assert.deepEqual(cde.lines.map(x => [x.famille, x.contexte]), [
+      ['FEMME', 'FEMME SHORT GAMME 0 CDE ENERGETICS AH27'], ['HOMME', 'HOMME SHORT GAMME 0 CDE ENERGETICS AH27'], ['GARCON', 'GARCON SHORT GAMME 0 CDE ENERGETICS AH27'],
+    ])
+    const p = planCommande(cde, opts)
+    assert.deepEqual(p.rows.map(r => [r.familles.join(), r.cible, r.pieces]), [['FEMME', 'f', 24], ['GARCON', '', 12], ['HOMME', 'h', 24]])
+    assert.equal(p.aChoisir, 1)
+    assert.deepEqual(p.items.map(i => [i.id, i.quantite]), [['f', { cht: 18, lf: 6 }], ['h', { cht: null, lf: 24 }]])
+  })
+
+  it('applique le choix de l’utilisateur (une ligne existante, une nouvelle marque ou rien)', () => {
+    const garcon = planCommande(cde, opts).rows.find(r => r.familles[0] === 'GARCON').key
+    const vers = cible => planCommande(cde, { ...opts, choix: { [garcon]: cible } })
+    assert.deepEqual(vers('h').items.find(i => i.id === 'h').quantite, { cht: 12, lf: 24 })
+    assert.equal(vers('h').aChoisir, 0)
+    assert.deepEqual(vers(CIBLE_NOUVELLE).items.find(i => i.nouvelle).identity.nom, 'ENERGETICS')
+    assert.equal(vers(CIBLE_IGNORER).items.length, 2)
   })
 })
 
