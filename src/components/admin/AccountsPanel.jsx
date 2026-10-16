@@ -5,7 +5,8 @@ import { httpsCallable } from 'firebase/functions'
 import { db, functions } from '../../lib/firebase'
 import { ACHETEUR_SERVICES, DIRECTION_ROLES } from '../../lib/constants'
 import { EMAIL_RE, accountError, afterCreateMessage, createAuthAccount } from '../../lib/accounts'
-import { useBudgetUnivers } from '../../lib/budgetsStore'
+import { useBudgetUnivers, useBudgets } from '../../lib/budgetsStore'
+import { segmentsAuChoix, segmentsCatalog, universLabel } from '../../lib/budgets'
 import { UniversChoice } from '../UniversUI'
 import {
   Avatar, BTN_PRIMARY, BTN_SECONDARY, EmptyState, Field, IconButton, INVALID, LABEL, Modal, Notice, ResendButton, Section, Tag,
@@ -34,7 +35,7 @@ function useUsers(roles, enabled, order = true) {
 }
 
 /* ── Fenêtre de création / modification d'un compte ─────────────────────── */
-function AccountModal({ kind, account, me, magasins, admins, universList, onClose, onDone }) {
+function AccountModal({ kind, account, me, magasins, admins, universList, segmentsParUnivers, acheteurs, onClose, onDone }) {
   const editing = !!account
   const isSelf = account?.id === me
   const [form, setForm] = useState({
@@ -43,6 +44,7 @@ function AccountModal({ kind, account, me, magasins, admins, universList, onClos
     role: account?.role || 'directeurgen',
     rayons: (account?.rayons || []).filter(r => ACHETEUR_SERVICES.some(s => s.rayon === r)),
     univers: account?.univers || [],
+    universSegments: account?.universSegments || {},
     magasinId: account?.magasinId || '',
   })
   const [tried, setTried] = useState(false)
@@ -67,7 +69,11 @@ function AccountModal({ kind, account, me, magasins, admins, universList, onClos
     setBusy(true)
     try {
       const nom = form.nom.trim()
-      const extra = kind === 'acheteur' ? { rayons: form.rayons, univers: form.univers }
+      // Segments retenus seulement pour un univers coché et pas tous ses segments au choix (« Les deux » = rien)
+      const universSegments = Object.fromEntries(Object.entries(form.universSegments).filter(([u, l]) =>
+        form.univers.includes(u) && l.length && l.length < segmentsAuChoix(segmentsParUnivers.get(u) || []).length))
+      const acheteur = { rayons: form.rayons, univers: form.univers, universSegments }
+      const extra = kind === 'acheteur' ? acheteur
         : kind === 'directeurmag' ? { magasinId: form.magasinId }
           : { role: isSelf ? account.role : form.role }
       if (editing) {
@@ -80,7 +86,7 @@ function AccountModal({ kind, account, me, magasins, admins, universList, onClos
           displayName: nom, email,
           role: kind === 'direction' ? form.role : kind,
           magasinId: kind === 'directeurmag' ? form.magasinId : null,
-          ...(kind === 'acheteur' ? { rayons: form.rayons, univers: form.univers } : {}),
+          ...(kind === 'acheteur' ? acheteur : {}),
           isActive: true, createdAt: serverTimestamp(), createdBy: me,
         })
         onDone(await afterCreateMessage(kind === 'direction' ? DIRECTION_LABELS[form.role] : KIND_LABELS[kind], email))
@@ -133,7 +139,9 @@ function AccountModal({ kind, account, me, magasins, admins, universList, onClos
         )}
 
         {kind === 'acheteur' && <>
-          <UniversPicker list={universList} value={form.univers} onChange={v => set('univers', v)} />
+          <UniversPicker list={universList} value={form.univers} onChange={v => set('univers', v)}
+            segmentsParUnivers={segmentsParUnivers} segments={form.universSegments} onSegments={v => set('universSegments', v)}
+            autres={acheteurs.filter(a => a.id !== account?.id && a.isActive !== false)} />
           <ServicesPicker value={form.rayons} onChange={v => set('rayons', v)} />
         </>}
 
@@ -176,8 +184,9 @@ function PickerHeader({ title, hint, count, actions }) {
   )
 }
 
-// Univers attitrés : marques et saisie des budgets, « Mes univers » des pages B2B et Services
-function UniversPicker({ list, value, onChange }) {
+// Univers attitrés : marques et saisie des budgets, « Mes univers » des pages B2B et Services. Un univers
+// partagé entre deux acheteurs (TEXTILE : LOISIR / MULTISPORT) se limite à un segment ou garde les deux.
+function UniversPicker({ list, value, onChange, segmentsParUnivers, segments, onSegments, autres }) {
   const all = list.length > 0 && list.every(u => value.includes(u.nom))
   return (
     <section className="space-y-3 rounded-2xl border border-gray-200 dark:border-neutral-800 p-3 sm:p-4">
@@ -189,7 +198,44 @@ function UniversPicker({ list, value, onChange }) {
           </button>
         )} />
       <UniversChoice names={list.map(u => u.nom)} value={value} onChange={onChange} label="Univers de l’acheteur" />
+      <SegmentsChoice univers={value} segmentsParUnivers={segmentsParUnivers} value={segments} onChange={onSegments} autres={autres} />
     </section>
+  )
+}
+
+// Pour chaque univers coché qui a LOISIR et MULTISPORT : l'un, l'autre ou les deux
+function SegmentsChoice({ univers, segmentsParUnivers, value, onChange, autres }) {
+  const rows = univers.map(u => ({ u, choix: segmentsAuChoix(segmentsParUnivers.get(u) || []) })).filter(r => r.choix.length)
+  if (!rows.length) return null
+  const pick = (u, l) => onChange({ ...value, [u]: l })
+  return (
+    <div className="space-y-2 rounded-xl bg-gray-50 dark:bg-neutral-800/40 p-3">
+      <p className="text-[11px] text-gray-600 dark:text-neutral-300">
+        Ces univers sont partagés par segment : choisis ce que gère cet acheteur.
+      </p>
+      {rows.map(({ u, choix }) => {
+        const cur = (value[u] || []).filter(x => choix.includes(x))
+        const deux = !cur.length || cur.length === choix.length
+        const chez = autres.filter(a => (a.univers || []).includes(u)).map(a => `${a.displayName || a.email} (${a.universSegments?.[u]?.join(', ') || 'les deux'})`)
+        const opts = [...choix.map(c => [c, [c], !deux && cur[0] === c]), ['Les deux', [], deux]]
+        return (
+          <div key={u} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="text-xs font-semibold text-gray-900 dark:text-white w-44">{u}</span>
+            <div role="radiogroup" aria-label={`Segments de ${u}`} className="inline-flex gap-1">
+              {opts.map(([label, l, on]) => (
+                <button key={label} type="button" role="radio" aria-checked={on} onClick={() => pick(u, l)}
+                  className={`h-7 px-2.5 rounded-lg text-xs font-semibold border ${on
+                    ? 'bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900 dark:border-white'
+                    : 'border-gray-200 text-gray-700 hover:bg-white dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800'}`}>
+                  {label === 'Les deux' ? label : label.charAt(0) + label.slice(1).toLowerCase()}
+                </button>
+              ))}
+            </div>
+            {chez.length > 0 && <span className="text-[11px] text-gray-500 dark:text-neutral-400">Aussi chez : {chez.join(' · ')}</span>}
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -252,11 +298,14 @@ function AccountRow({ account, dark, tags, isMe, onEdit, onDelete, onResetDouble
 const serviceLabel = r => ACHETEUR_SERVICES.find(s => s.rayon === r)?.label
 
 // « 3 univers » (liste complète au survol), « Tous les univers » ou « Aucun univers »
-function UniversTag({ univers = [], total }) {
+function UniversTag({ acheteur, total }) {
+  const univers = acheteur.univers || []
   if (!univers.length) return <Tag dot="bg-amber-400">Aucun univers</Tag>
-  const label = total && univers.length >= total ? 'Tous les univers'
-    : univers.length <= 2 ? univers.join(' · ') : `${univers.length} univers`
-  return <span title={univers.join(', ')}><Tag dot="bg-violet-500">{label}</Tag></span>
+  const labels = univers.map(u => universLabel(acheteur, u))
+  const partiel = univers.some(u => acheteur.universSegments?.[u]?.length)
+  const label = total && univers.length >= total && !partiel ? 'Tous les univers'
+    : univers.length <= 2 ? labels.join(' · ') : `${univers.length} univers`
+  return <span title={labels.join(', ')}><Tag dot="bg-violet-500">{label}</Tag></span>
 }
 
 /* ── Panneau ───────────────────────────────────────────────────────────── */
@@ -265,6 +314,13 @@ export default function AccountsPanel({ me, isAdmin, magasins }) {
   const acheteurs = useUsers(['acheteur'], true)
   const directeurs = useUsers(['directeurmag'], true)
   const { list: universList } = useBudgetUnivers()
+  const { list: budgets } = useBudgets()
+  // Segments de chaque univers (tous budgets) : choix LOISIR / MULTISPORT des univers partagés
+  const segmentsParUnivers = useMemo(() => {
+    const m = new Map()
+    for (const sg of segmentsCatalog(budgets)) m.set(sg.univers, [...(m.get(sg.univers) || []), sg.nom || ''])
+    return m
+  }, [budgets])
   const [q, setQ] = useState('')
   const [modal, setModal] = useState(null) // { kind, account? }
   const [notice, setNotice] = useState(null)
@@ -322,7 +378,7 @@ export default function AccountsPanel({ me, isAdmin, magasins }) {
       row: a => (
         <AccountRow key={a.id} account={a} isMe={a.id === me}
           tags={<>
-            <UniversTag univers={a.univers} total={universList.length} />
+            <UniversTag acheteur={a} total={universList.length} />
             {(a.rayons || []).filter(serviceLabel).map(r => <Tag key={r}>{serviceLabel(r)}</Tag>)}
           </>}
           onEdit={() => setModal({ kind: 'acheteur', account: a })}
@@ -370,6 +426,7 @@ export default function AccountsPanel({ me, isAdmin, magasins }) {
 
       {modal && (
         <AccountModal kind={modal.kind} account={modal.account} me={me} magasins={magasins} admins={admins} universList={universList}
+          segmentsParUnivers={segmentsParUnivers} acheteurs={acheteurs}
           onClose={() => setModal(null)} onDone={setNotice} />
       )}
     </div>

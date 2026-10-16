@@ -93,8 +93,9 @@ export function useBudgetUser() {
   const { user, profile } = useAuth(useShallow(s => ({ user: s.user, profile: s.profile })))
   return useMemo(() => ({
     uid: user?.uid, displayName: profile?.displayName || user?.email || '',
-    role: profile?.role || null, univers: profile?.univers || [], isAdmin: profile?.isAdmin === true,
-  }), [user?.uid, user?.email, profile?.displayName, profile?.role, profile?.univers, profile?.isAdmin])
+    role: profile?.role || null, univers: profile?.univers || [], universSegments: profile?.universSegments || {},
+    isAdmin: profile?.isAdmin === true,
+  }), [user?.uid, user?.email, profile?.displayName, profile?.role, profile?.univers, profile?.universSegments, profile?.isAdmin])
 }
 
 const author = user => ({ uid: user?.uid || null, nom: user?.displayName || '' })

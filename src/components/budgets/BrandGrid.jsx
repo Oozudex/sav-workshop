@@ -64,7 +64,7 @@ export default function BrandGrid({ budgetId, seg, magasins, totals, hasGroupe, 
         <Reste objectif={objectif(total, hasGroupe)} saisie={sum('saisie')} />
         {readOnly && (
           <span className="ml-auto h-5 px-1.5 inline-flex items-center rounded text-[10px] font-semibold bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
-            Lecture seule · univers non attribué
+            Lecture seule · non attribué
           </span>
         )}
       </div>

@@ -665,6 +665,35 @@ describe('budgets acheteurs', () => {
     await assertSucceeds(updateDoc(doc(as('dirgen'), 'budget_marques', 'golf'), { nom: 'PING' }))
     await assertFails(getDocs(collection(as('veloA'), 'budget_marques')))
   })
+  it("univers partagé : un acheteur limité à un segment (TEXTILE › LOISIR) ne touche pas l'autre", async () => {
+    const ligne = segment => ({ univers: 'TEXTILE HOMME', segId: `t-${segment}`, segment, nom: 'NIKE', saisie: {} })
+    await env.withSecurityRulesDisabled(async ctx => {
+      const db = ctx.firestore()
+      await setDoc(doc(db, 'users', 'acheteurLoisir'), { role: 'acheteur', univers: ['TEXTILE HOMME', 'CYCLE'], universSegments: { 'TEXTILE HOMME': ['LOISIR'] } })
+      await setDoc(doc(db, 'budgets', 'b', 'marques', 'loisir'), ligne('LOISIR'))
+      await setDoc(doc(db, 'budgets', 'b', 'marques', 'multi'), ligne('MULTISPORT'))
+      await setDoc(doc(db, 'budget_marques', 'loisir'), ligne('LOISIR'))
+      await setDoc(doc(db, 'budget_marques', 'multi'), ligne('MULTISPORT'))
+    })
+    const db = as('acheteurLoisir')
+    await assertSucceeds(updateDoc(doc(db, 'budgets', 'b', 'marques', 'loisir'), { 'saisie.a': 10 }))
+    await assertSucceeds(setDoc(doc(db, 'budgets', 'b', 'marques', 'n'), ligne('LOISIR')))
+    await assertFails(updateDoc(doc(db, 'budgets', 'b', 'marques', 'multi'), { 'saisie.a': 10 }))
+    await assertFails(setDoc(doc(db, 'budgets', 'b', 'marques', 'm'), ligne('MULTISPORT')))
+    await assertFails(deleteDoc(doc(db, 'budgets', 'b', 'marques', 'multi')))
+    // Pas de déplacement vers l'autre segment ; un univers non limité reste entier
+    await assertFails(updateDoc(doc(db, 'budgets', 'b', 'marques', 'loisir'), { segment: 'MULTISPORT' }))
+    await assertSucceeds(updateDoc(doc(db, 'budgets', 'b', 'marques', 'cycle'), { 'saisie.a': 10 }))
+    // Le N-1 de l'autre segment reste importable (champs N-1 seulement)
+    await assertSucceeds(setDoc(doc(db, 'budgets', 'b', 'marques', 'multi'), { n1: { a: 5 } }, { merge: true }))
+    // Liste des marques
+    await assertSucceeds(updateDoc(doc(db, 'budget_marques', 'loisir'), { nom: 'NIKE Q3' }))
+    await assertFails(updateDoc(doc(db, 'budget_marques', 'multi'), { nom: 'NIKE Q3' }))
+    await assertFails(deleteDoc(doc(db, 'budget_marques', 'multi')))
+    // L'acheteur ne change pas lui-même ses segments
+    await assertFails(updateDoc(doc(db, 'users', 'acheteurLoisir'), { universSegments: {} }))
+    await assertSucceeds(updateDoc(doc(as('dirgen'), 'budgets', 'b', 'marques', 'multi'), { 'saisie.a': 10 }))
+  })
   it("un acheteur ne peut pas s'attribuer d'univers", async () => {
     await assertFails(updateDoc(doc(as('acheteurCycle'), 'users', 'acheteurCycle'), { univers: ['CYCLE', 'GOLF'] }))
   })

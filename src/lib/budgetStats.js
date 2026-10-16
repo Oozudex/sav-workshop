@@ -63,12 +63,13 @@ export function byMagasin(rows) {
   return t
 }
 
-// Enveloppes (base, budget groupe) des segments gardés : total, par univers et par magasin.
+// Enveloppes (base, budget groupe) des segments gardés (keepUnivers : univers, segment → booléen) : total,
+// par univers et par magasin.
 // Une base négative compte pour 0 dans l'objectif (rien à répartir).
 export function envelopes({ segments, totals, magIds, hasGroupe, keepUnivers = () => true }) {
   const res = { base: 0, groupe: 0, objectif: 0, parUnivers: new Map(), parMag: {} }
   for (const s of segments) {
-    if (!keepUnivers(s.univers)) continue
+    if (!keepUnivers(s.univers, s.nom)) continue
     for (const m of magIds) {
       const c = totals[s.id]?.[m]
       if (!c) continue

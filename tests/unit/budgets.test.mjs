@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  FILTRE_SANS_ACHETEUR, addTotals, budgetRank, fournisseurResolver, coefMarque, computeAdapte, fournisseurKey, noteMarque, withAdapte, evolution, formatPct, groupeRatio, groupeTotal, objectif, brandsBySegment, budgetName, buyerFilterTest, defaultBuyerFilter, filtreAcheteur, canEditUnivers, computeTotals, segmentsCatalog, findN1Sheet, linesFromBudget, magasinMatcher, mergeSegments, n1Columns,
+  FILTRE_SANS_ACHETEUR, acheteurCouvre, segmentsAuChoix, universLabel, addTotals, budgetRank, fournisseurResolver, coefMarque, computeAdapte, fournisseurKey, noteMarque, withAdapte, evolution, formatPct, groupeRatio, groupeTotal, objectif, brandsBySegment, budgetName, buyerFilterTest, defaultBuyerFilter, filtreAcheteur, canEditUnivers, computeTotals, segmentsCatalog, findN1Sheet, linesFromBudget, magasinMatcher, mergeSegments, n1Columns,
   parseBaseSheet, parseN1Sheet, planN1Import, previousSeason, segmentId, sortSegments, mergeCommandes, parseCommandeSheet, saisieFromNextN1, planCommande, cibleCommande, CIBLE_IGNORER, CIBLE_NOUVELLE,
 } from '../../src/lib/budgets.js'
 
@@ -53,7 +53,7 @@ describe('droits', () => {
 
 describe('filtre par acheteur', () => {
   const ACHETEURS = [{ id: 'paul', univers: ['CYCLE', 'GOLF'] }, { id: 'lea', univers: ['RUNNING'] }]
-  const garde = (filtre, univers) => univers.filter(buyerFilterTest(filtre, ACHETEURS))
+  const garde = (filtre, univers) => { const keep = buyerFilterTest(filtre, ACHETEURS); return univers.filter(u => keep(u)) }
   const TOUS = ['CYCLE', 'GOLF', 'RUNNING', 'PECHE']
 
   it("un acheteur part de ses univers, la direction de tout", () => {
@@ -66,6 +66,36 @@ describe('filtre par acheteur', () => {
     assert.deepEqual(garde(filtreAcheteur('paul'), TOUS), ['CYCLE', 'GOLF'])
     assert.deepEqual(garde(FILTRE_SANS_ACHETEUR, TOUS), ['PECHE'])
     assert.deepEqual(garde(filtreAcheteur('inconnu'), TOUS), [])
+  })
+})
+
+describe('univers partagé par segment (TEXTILE : LOISIR / MULTISPORT)', () => {
+  const loisir = { id: 'paul', role: 'acheteur', univers: ['TEXTILE HOMME', 'CYCLE'], universSegments: { 'TEXTILE HOMME': ['LOISIR'] } }
+  const multi = { id: 'lea', role: 'acheteur', univers: ['TEXTILE HOMME'], universSegments: { 'TEXTILE HOMME': ['MULTISPORT'] } }
+
+  it('propose Loisir / Multisport seulement aux univers qui ont les deux', () => {
+    assert.deepEqual(segmentsAuChoix(['LOISIR', 'MULTISPORT']), ['LOISIR', 'MULTISPORT'])
+    assert.deepEqual(segmentsAuChoix(['Multisport', 'Loisir', 'AUTRE']), ['Loisir', 'Multisport'])
+    assert.deepEqual(segmentsAuChoix(['LOISIR', 'VELO']), [])
+  })
+
+  it('un acheteur limité à un segment ne modifie que celui-là', () => {
+    assert.equal(canEditUnivers(loisir, 'TEXTILE HOMME', 'LOISIR'), true)
+    assert.equal(canEditUnivers(loisir, 'TEXTILE HOMME', 'MULTISPORT'), false)
+    assert.equal(canEditUnivers(loisir, 'CYCLE', 'VELO'), true) // univers non limité : tous ses segments
+    assert.equal(acheteurCouvre(loisir, 'TEXTILE HOMME'), true) // l'univers en partie
+    assert.equal(universLabel(loisir, 'TEXTILE HOMME'), 'TEXTILE HOMME (LOISIR)')
+    assert.equal(universLabel(loisir, 'CYCLE'), 'CYCLE')
+  })
+
+  it('le filtre par acheteur garde ses segments ; « sans acheteur » ce que personne n’a', () => {
+    const keepPaul = buyerFilterTest(filtreAcheteur('paul'), [loisir, multi])
+    assert.equal(keepPaul('TEXTILE HOMME', 'LOISIR'), true)
+    assert.equal(keepPaul('TEXTILE HOMME', 'MULTISPORT'), false)
+    const sans = buyerFilterTest(FILTRE_SANS_ACHETEUR, [loisir])
+    assert.equal(sans('TEXTILE HOMME', 'LOISIR'), false)
+    assert.equal(sans('TEXTILE HOMME', 'MULTISPORT'), true)
+    assert.equal(buyerFilterTest(FILTRE_SANS_ACHETEUR, [loisir, multi])('TEXTILE HOMME', 'MULTISPORT'), false)
   })
 })
 
@@ -233,7 +263,7 @@ describe('commandes fournisseur', () => {
     const p = planCommande(r, { brands, segments, budgetLines, user: acheteur })
     assert.deepEqual(p.items.map(i => [i.identity.univers, i.nouvelle]), [['BAGAGERIE', true], ['RANDONNEE', false]])
     assert.deepEqual(p.items[0].identity, { univers: 'BAGAGERIE', segId: segmentId('BAGAGERIE'), segment: '', nom: 'ENERGETICS' })
-    assert.deepEqual(p.horsDroits, ['ACCESSOIRE TEXTILE'])
+    assert.deepEqual(p.horsDroits, ['ACCESSOIRE TEXTILE › CEINTURE'])
     assert.deepEqual(p.newSegments.map(s => s.id), [segmentId('BAGAGERIE')])
   })
 })

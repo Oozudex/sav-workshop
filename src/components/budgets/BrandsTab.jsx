@@ -76,7 +76,7 @@ export default function BrandsTab() {
   const groups = useMemo(() => {
     const g = []
     for (const s of segments) {
-      if (!keep(s.univers)) continue
+      if (!keep(s.univers, s.nom)) continue
       const list = (bySeg.get(s.id) || []).filter(b => !needle || normLabel(b.nom).includes(needle))
       if (needle && !list.length) continue
       if (g.at(-1)?.univers !== s.univers) g.push({ univers: s.univers, segments: [] })
@@ -118,7 +118,7 @@ export default function BrandsTab() {
       ) : (
         <ul className="divide-y divide-gray-100 dark:divide-neutral-800">
           {groups.map(g => {
-            const editable = canEditUnivers(user, g.univers)
+            const editable = g.segments.some(({ seg }) => canEditUnivers(user, g.univers, seg.nom))
             const count = g.segments.reduce((t, s) => t + s.all.length, 0)
             return (
               <li key={g.univers}>
@@ -133,7 +133,7 @@ export default function BrandsTab() {
                 </button>
                 {isOpen(g.univers) && (
                   <div className="px-4 pb-4 space-y-4">
-                    {g.segments.map(({ seg, list, all }) => (
+                    {g.segments.map(({ seg, list, all }) => { const editable = canEditUnivers(user, g.univers, seg.nom); return (
                       <div key={seg.id} className="rounded-xl border border-gray-200 dark:border-neutral-800 p-3 space-y-2">
                         <p className="text-xs font-semibold text-gray-700 dark:text-neutral-200">
                           {seg.nom || 'Sans segment'} <span className="font-normal text-gray-500 dark:text-neutral-400">· {all.length}</span>
@@ -145,7 +145,7 @@ export default function BrandsTab() {
                         ) : <p className="text-[11px] text-gray-500 dark:text-neutral-400">Aucune marque.</p>}
                         {editable && <AddBrandForm seg={seg} brands={all} user={user} />}
                       </div>
-                    ))}
+                    ) })}
                   </div>
                 )}
               </li>

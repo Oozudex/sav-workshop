@@ -118,7 +118,7 @@ export default function BudgetDetail() {
     return g
   }, [segments])
   const keep = buyerFilterTest(filtre, acheteurs)
-  const shown = groups.filter(g => keep(g.univers))
+  const shown = groups.map(g => ({ ...g, segments: g.segments.filter(s => keep(s.univers, s.nom)) })).filter(g => g.segments.length)
   const filtreLabel = filtre === FILTRE_SANS_ACHETEUR ? ' des univers sans acheteur'
     : filtre ? ` · ${acheteurs.find(a => `a:${a.id}` === filtre)?.displayName || ''}` : ''
 
@@ -135,13 +135,13 @@ export default function BudgetDetail() {
   const saisie = (seg, mag) => (
     <div className="px-2 py-2 bg-gray-50 dark:bg-neutral-950/50 border-b border-gray-100 dark:border-neutral-800">
       <SegmentSaisie budgetId={budget.id} seg={seg} magasin={mag} cell={cellOf([seg], [mag])} hasGroupe={hasGroupe} adapte={adapte}
-        brands={brandsBySeg.get(seg.id) || []} user={user} readOnly={!canEditUnivers(user, seg.univers)} />
+        brands={brandsBySeg.get(seg.id) || []} user={user} readOnly={!canEditUnivers(user, seg.univers, seg.nom)} />
     </div>
   )
   const grid = seg => (
     <div className="px-2 py-2 bg-gray-50 dark:bg-neutral-950/50 border-b border-gray-100 dark:border-neutral-800">
       <BrandGrid budgetId={budget.id} seg={seg} magasins={magasins} totals={totals[seg.id]} hasGroupe={hasGroupe} adapte={adapte}
-        brands={brandsBySeg.get(seg.id) || []} user={user} readOnly={!canEditUnivers(user, seg.univers)} />
+        brands={brandsBySeg.get(seg.id) || []} user={user} readOnly={!canEditUnivers(user, seg.univers, seg.nom)} />
     </div>
   )
 

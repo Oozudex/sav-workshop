@@ -69,15 +69,40 @@ export const DEFAULT_MAGASINS = [
 
 // ── Droits ──────────────────────────────────────────────────────────────────────
 // La direction (administrateurs compris) modifie tous les univers ; un acheteur, ses univers attitrés
-// (users/{uid}.univers). Les règles Firestore appliquent la même règle aux lignes par marque.
+// (users/{uid}.univers). Un univers partagé entre deux acheteurs (TEXTILE : LOISIR / MULTISPORT) peut être
+// limité à certains segments (users/{uid}.universSegments : { univers: [segments] }, absent = tous).
+// Les règles Firestore appliquent la même règle aux lignes par marque et à la liste des marques.
 
-export function canEditUnivers(user, univers) {
+// Segments qu'on peut répartir entre acheteurs dans un univers qui a les deux
+export const SEGMENTS_PARTAGEABLES = ['LOISIR', 'MULTISPORT']
+
+// Segments proposés au choix pour un univers (noms de ses segments) : LOISIR et MULTISPORT s'il a les deux
+export function segmentsAuChoix(segmentNames) {
+  const choix = SEGMENTS_PARTAGEABLES.map(p => segmentNames.find(n => normLabel(n) === p)).filter(Boolean)
+  return choix.length === SEGMENTS_PARTAGEABLES.length ? choix : []
+}
+
+// L'acheteur a cet univers (et ce segment). Sans segment : l'univers, en tout ou en partie.
+export function acheteurCouvre(a, univers, segment) {
+  if (!(a?.univers || []).includes(univers)) return false
+  const limite = a.universSegments?.[univers]
+  if (!limite?.length || segment == null) return true
+  return limite.map(normLabel).includes(normLabel(segment))
+}
+
+// Libellé d'un univers attribué : « TEXTILE HOMME » ou « TEXTILE HOMME (LOISIR) »
+export function universLabel(a, univers) {
+  const limite = a?.universSegments?.[univers]
+  return limite?.length ? `${univers} (${limite.join(', ')})` : univers
+}
+
+export function canEditUnivers(user, univers, segment) {
   if (user?.role === 'directeurgen') return true
-  return user?.role === 'acheteur' && (user.univers || []).includes(univers)
+  return user?.role === 'acheteur' && acheteurCouvre(user, univers, segment)
 }
 
 // ── Filtre par acheteur ─────────────────────────────────────────────────────────
-// '' : tout ; 'a:<uid>' : les univers attribués à cet acheteur ; FILTRE_SANS_ACHETEUR : les univers
+// '' : tout ; 'a:<uid>' : les univers (et segments) attribués à cet acheteur ; FILTRE_SANS_ACHETEUR : ceux
 // que personne n'a en charge.
 
 export const FILTRE_SANS_ACHETEUR = '!sans'
@@ -88,16 +113,14 @@ export function defaultBuyerFilter(user) {
   return user?.role === 'acheteur' && user.univers?.length ? filtreAcheteur(user.uid) : ''
 }
 
-// Univers retenus par le filtre : fonction (univers → booléen)
+// Segments retenus par le filtre : fonction (univers, segment → booléen). Sans segment : l'univers.
 export function buyerFilterTest(filtre, acheteurs) {
   if (!filtre) return () => true
   if (filtre === FILTRE_SANS_ACHETEUR) {
-    const pris = new Set(acheteurs.flatMap(a => a.univers || []))
-    return u => !pris.has(u)
+    return (u, segment) => !acheteurs.some(a => acheteurCouvre(a, u, segment) && (segment != null || !a.universSegments?.[u]?.length))
   }
   const a = acheteurs.find(x => filtreAcheteur(x.id) === filtre)
-  const siens = new Set(a?.univers || [])
-  return u => siens.has(u)
+  return (u, segment) => acheteurCouvre(a, u, segment)
 }
 
 // ── Noms et identifiants ────────────────────────────────────────────────────────
@@ -451,8 +474,9 @@ export function cibleCommande(line, segBrands) {
 // remplacement de la saisie (montants et quantités ; un magasin sans pièce est vidé) ou ajout (ajouter).
 // Les univers que l'utilisateur ne peut pas modifier sont écartés (horsDroits). Valeur null : à effacer.
 export function planCommande(commande, { brands, segments, budgetLines, user, ajouter = false, choix = {} }) {
-  const permis = commande.lines.filter(l => canEditUnivers(user, l.univers))
-  const horsDroits = [...new Set(commande.lines.filter(l => !canEditUnivers(user, l.univers)).map(l => l.univers))]
+  const permis = commande.lines.filter(l => canEditUnivers(user, l.univers, l.segment))
+  const horsDroits = [...new Set(commande.lines.filter(l => !canEditUnivers(user, l.univers, l.segment))
+    .map(l => (l.segment ? `${l.univers} › ${l.segment}` : l.univers)))]
   const bySeg = new Map()
   for (const b of brands) bySeg.set(b.segId, [...(bySeg.get(b.segId) || []), b])
   for (const list of bySeg.values()) list.sort((a, b) => a.nom.localeCompare(b.nom, 'fr'))

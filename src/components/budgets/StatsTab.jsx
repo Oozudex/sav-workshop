@@ -3,7 +3,7 @@
 // répartitions (camemberts), comparatif par magasin et tableaux par univers, fournisseur et acheteur.
 import { useMemo, useState } from 'react'
 import { EmptyState } from '../admin/ui'
-import { buyerFilterTest, defaultBuyerFilter, formatBudget, formatPct, formatQte, normLabel } from '../../lib/budgets'
+import { acheteurCouvre, buyerFilterTest, defaultBuyerFilter, formatBudget, formatPct, formatQte, normLabel } from '../../lib/budgets'
 import { byMagasin, envelopes, evol, groupRows, part, statsRows, sumRows, topWithOthers } from '../../lib/budgetStats'
 import { useAcheteurs, useBudgetUser, useBudgets } from '../../lib/budgetsStore'
 import { useBudgetModel } from '../../lib/useBudgetModel'
@@ -56,7 +56,7 @@ function Stats({ id, budgets, onBudget, user }) {
   const [allF, setAllF] = useState(false)
 
   const keep = useMemo(() => buyerFilterTest(filtre, acheteurs), [filtre, acheteurs])
-  const segs = useMemo(() => segments.filter(s => keep(s.univers)), [segments, keep])
+  const segs = useMemo(() => segments.filter(s => keep(s.univers, s.nom)), [segments, keep])
   const allRows = useMemo(() => statsRows({ segments: segs, brandsBySeg, adapte, fournisseur, magId: magId || null }),
     [segs, brandsBySeg, adapte, fournisseur, magId])
   const fournisseurs = useMemo(() => groupRows(allRows, r => r.fKey, r => r.fournisseur)
@@ -81,10 +81,9 @@ function Stats({ id, budgets, onBudget, user }) {
   const prixMoyenN1 = t.qteN1 > 0 ? t.n1 / t.qteN1 : null
 
   const parAcheteur = !filtre && !fKey ? acheteurs.map(a => {
-    const u = new Set(a.univers || [])
-    const r = sumRows(rows.filter(x => u.has(x.univers)))
-    const e = envelopes({ segments, totals, magIds, hasGroupe, keepUnivers: x => u.has(x) })
-    return { a, ...r, objectif: e.objectif, nbUnivers: u.size }
+    const r = sumRows(rows.filter(x => acheteurCouvre(a, x.univers, x.segment)))
+    const e = envelopes({ segments, totals, magIds, hasGroupe, keepUnivers: (u, segment) => acheteurCouvre(a, u, segment) })
+    return { a, ...r, objectif: e.objectif, nbUnivers: (a.univers || []).length }
   }).filter(x => x.nbUnivers > 0) : []
 
   if (model.loading) return <p className="text-xs text-gray-500 dark:text-neutral-400">Chargement…</p>

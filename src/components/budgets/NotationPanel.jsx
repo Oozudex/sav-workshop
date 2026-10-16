@@ -247,7 +247,7 @@ export default function NotationPanel({ budget, segments, brandsBySeg, adapte, f
     })).sort((a, b) => a.nom.localeCompare(b.nom, 'fr'))
   }, [segments, brandsBySeg, fournisseur])
 
-  const shown = fournisseurs.filter(f => f.univers.some(keep)
+  const shown = fournisseurs.filter(f => f.univers.some(u => keep(u))
     && (!needle || normLabel(f.nom).includes(needle) || f.decl.some(d => d.nom.includes(needle))))
   const run = p => p.then(() => setError(''), err => setError(err.message))
   const toggle = k => setOpen(s => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n })

@@ -585,9 +585,20 @@ service cloud.firestore {
     // Réservés aux acheteurs et à la direction : listes des univers et des magasins du budget,
     // budgets du groupe (base, segments) et leurs lignes par marque. Les lignes par marque
     // (marques, N-1, saisie) d'un univers ne sont modifiables que par la direction et les acheteurs
-    // à qui cet univers est attribué (users/{uid}.univers). Seule la direction supprime un budget.
-    function canEditBudgetUnivers(u) {
-      return isDirGen() || (isAcheteur() && u in userDoc().get('univers', []));
+    // à qui cet univers est attribué (users/{uid}.univers), limité le cas échéant à certains segments
+    // (users/{uid}.universSegments : { univers: [segments] }, ex. TEXTILE partagé LOISIR / MULTISPORT).
+    // Seule la direction supprime un budget.
+    function canEditBudgetLigne(d) {
+      let profil = userDoc();
+      let u = d.get('univers', '');
+      let limites = profil.get('universSegments', {});
+      return isDirGen() || (isAcheteur() && u in profil.get('univers', []) &&
+        (!(u in limites) || d.get('segment', '') in limites[u]));
+    }
+    // Une ligne ou une marque ne change pas d'univers ni de segment
+    function memePlace() {
+      return request.resource.data.univers == resource.data.univers &&
+        request.resource.data.get('segment', '') == resource.data.get('segment', '');
     }
     // Champs d'une ligne écrits par l'import ou la reprise du N-1
     function n1Fields() {
@@ -609,9 +620,8 @@ service cloud.firestore {
     match /budget_marques/{id} {
       allow read: if isSignedIn() && isGlobal();
       allow create: if isSignedIn() && isGlobal();
-      allow update: if isSignedIn() && canEditBudgetUnivers(resource.data.univers) &&
-        request.resource.data.univers == resource.data.univers;
-      allow delete: if isSignedIn() && canEditBudgetUnivers(resource.data.univers);
+      allow update: if isSignedIn() && canEditBudgetLigne(resource.data) && memePlace();
+      allow delete: if isSignedIn() && canEditBudgetLigne(resource.data);
     }
     // Le budget groupe (budgets/{id}.groupe) n'est fixé que par la direction
     match /budgets/{budgetId} {
@@ -634,12 +644,12 @@ service cloud.firestore {
       // la saisie reste réservée aux univers qui lui sont attribués
       match /marques/{marqueId} {
         allow read: if isSignedIn() && isGlobal();
-        allow create: if isSignedIn() && (canEditBudgetUnivers(request.resource.data.univers) ||
+        allow create: if isSignedIn() && (canEditBudgetLigne(request.resource.data) ||
           (isAcheteur() && request.resource.data.keys().hasOnly(n1Fields())));
-        allow update: if isSignedIn() && request.resource.data.univers == resource.data.univers &&
-          (canEditBudgetUnivers(resource.data.univers) ||
+        allow update: if isSignedIn() && memePlace() &&
+          (canEditBudgetLigne(resource.data) ||
            (isAcheteur() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(n1Fields())));
-        allow delete: if isSignedIn() && canEditBudgetUnivers(resource.data.univers);
+        allow delete: if isSignedIn() && canEditBudgetLigne(resource.data);
       }
     }
   }
