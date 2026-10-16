@@ -205,6 +205,11 @@ export default function SortieInfo({ total, labelN, labelN1, filtre }) {
           <p className={H}>À retenir</p>
           <ul className="list-disc pl-4 space-y-0.5">
             <li>Les filtres changent le total : il ne compte que les lignes filtrées.</li>
+            <li>
+              Les filtres se limitent les uns les autres : avec l’univers TEXTILE HOMME coché, la liste Segment ne propose que les segments du
+              textile homme (et de même pour familles, marques, couleurs…) ; une marque cochée limite aussi les univers et les magasins.
+              Une valeur cochée qui ne correspond plus aux autres filtres reste en haut de sa liste, en gris : décoche-la si elle ne sert plus.
+            </li>
             <li>La ligne de total en bas du fichier Excel est ignorée à l’import ; l’application refait ses propres totaux.</li>
             <li>Les magasins sont rapprochés de la liste des budgets : « INTERSPORT LAVAL » devient « LAVAL ».</li>
             <li>Réimporter une semaine remplace ses lignes ; tout se recalcule aussitôt.</li>

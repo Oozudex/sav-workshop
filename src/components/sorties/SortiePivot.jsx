@@ -2,7 +2,7 @@
 // choisi (Magasin › Univers › Marque…), filtres sur les valeurs de chaque axe, 15 colonnes : le libellé,
 // puis CANet, MtMrg, Marge %, QtRecep, QtVte, QtStkFin et taux de sortie pour N (à gauche) et pour N-1 (à droite).
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
-import { DIMS, classement, dimLabel, dimValues, indicateurs, pivot } from '../../lib/sorties'
+import { DIMS, classement, dimLabel, dimValues, indicateurs, pivot, possibleValues } from '../../lib/sorties'
 import { RANG_CLS, RangNuancier, rangStyle, rangTexte } from './rang'
 import SortieInfo from './SortieInfo'
 
@@ -60,8 +60,9 @@ const DOWN = { cls: 'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300
 const SELECT = 'h-8 px-2 rounded-lg border text-xs bg-white dark:bg-neutral-950 border-gray-200 dark:border-neutral-700 text-gray-900 dark:text-white'
 const CHIP = 'h-7 inline-flex items-center gap-1 rounded-lg border px-2 text-xs font-semibold'
 
-// Filtre d'un axe : liste de valeurs à cocher, avec recherche
-function FilterButton({ dim, values, selected, onChange }) {
+// Filtre d'un axe : liste de valeurs à cocher, avec recherche. possible : valeurs qui existent encore avec
+// les autres filtres (les autres sont masquées) ; une valeur cochée qui n'existe plus reste en haut, grisée.
+function FilterButton({ dim, values, possible, selected, onChange }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const ref = useRef(null)
@@ -72,7 +73,10 @@ function FilterButton({ dim, values, selected, onChange }) {
     return () => document.removeEventListener('mousedown', close)
   }, [open])
   const needle = q.trim().toUpperCase()
-  const shown = needle ? values.filter(v => v.toUpperCase().includes(needle)) : values
+  const match = v => !needle || v.toUpperCase().includes(needle)
+  const live = values.filter(v => possible.has(v))
+  const shown = live.filter(match)
+  const stale = values.filter(v => selected.has(v) && !possible.has(v) && match(v))
   const toggle = v => { const n = new Set(selected); if (n.has(v)) n.delete(v); else n.add(v); onChange(n) }
   const active = selected.size > 0
   return (
@@ -83,7 +87,7 @@ function FilterButton({ dim, values, selected, onChange }) {
       </button>
       {open && (
         <div className="absolute z-30 mt-1 w-72 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 shadow-lg p-2 space-y-2">
-          <input autoFocus type="search" value={q} onChange={e => setQ(e.target.value)} placeholder={`Rechercher (${values.length})…`}
+          <input autoFocus type="search" value={q} onChange={e => setQ(e.target.value)} placeholder={`Rechercher (${live.length})…`}
             aria-label={`Rechercher dans ${dim.label}`} className="Input h-8 text-xs w-full" />
           <div className="flex gap-2 text-[11px]">
             <button type="button" className="underline text-gray-600 dark:text-neutral-300"
@@ -91,6 +95,15 @@ function FilterButton({ dim, values, selected, onChange }) {
             {active && <button type="button" className="underline text-gray-600 dark:text-neutral-300" onClick={() => onChange(new Set())}>Effacer</button>}
           </div>
           <ul className="max-h-64 overflow-y-auto space-y-0.5">
+            {stale.map(v => (
+              <li key={v}>
+                <label title="Aucune donnée avec les autres filtres" className="flex items-center gap-2 px-1 py-0.5 rounded text-xs text-gray-400 dark:text-neutral-500 hover:bg-gray-50 dark:hover:bg-neutral-800 cursor-pointer">
+                  <input type="checkbox" checked onChange={() => toggle(v)} />
+                  <span className="truncate">{v}</span>
+                  <span className="ml-auto shrink-0 text-[10px] italic">aucune donnée avec ces filtres</span>
+                </label>
+              </li>
+            ))}
             {shown.slice(0, PAGE).map(v => (
               <li key={v}>
                 <label className="flex items-center gap-2 px-1 py-0.5 rounded text-xs text-gray-800 dark:text-neutral-200 hover:bg-gray-50 dark:hover:bg-neutral-800 cursor-pointer">
@@ -100,7 +113,7 @@ function FilterButton({ dim, values, selected, onChange }) {
               </li>
             ))}
             {shown.length > PAGE && <li className="px-1 text-[11px] text-gray-500 dark:text-neutral-400">… {shown.length - PAGE} autres : affine la recherche.</li>}
-            {shown.length === 0 && <li className="px-1 text-[11px] text-gray-500 dark:text-neutral-400">Aucune valeur.</li>}
+            {shown.length === 0 && !stale.length && <li className="px-1 text-[11px] text-gray-500 dark:text-neutral-400">Aucune valeur.</li>}
           </ul>
         </div>
       )}
@@ -142,6 +155,7 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
   const [sort, setSort] = useState({ key: 'caNet', period: 'n', dir: -1 })
 
   const values = useMemo(() => Object.fromEntries(DIMS.map(d => [d.key, dimValues([n, n1], d.key)])), [n, n1])
+  const possible = useMemo(() => possibleValues([n, n1], filters), [n, n1, filters])
   const p = useMemo(() => pivot({ n, n1, levels, filters }), [n, n1, levels, filters])
   const available = DIMS.filter(d => !levels.includes(d.key))
   const activeFilters = DIMS.filter(d => filters[d.key]?.size)
@@ -229,7 +243,7 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold text-gray-700 dark:text-neutral-200 w-20">Filtres</span>
           {DIMS.map(d => (
-            <FilterButton key={d.key} dim={d} values={values[d.key]} selected={filters[d.key] || new Set()}
+            <FilterButton key={d.key} dim={d} values={values[d.key]} possible={possible[d.key]} selected={filters[d.key] || new Set()}
               onChange={set => setFilters(f => ({ ...f, [d.key]: set }))} />
           ))}
           {activeFilters.length > 0 && (

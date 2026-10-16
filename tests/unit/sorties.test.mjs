@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   autoMapping, chunkBytes, datasetTotals, dimValues, findHeaderRow, gunzipJson, gzipJson, indicateurs, isoWeek, joinBytes,
-  classement, matchSemaine, missingMeasures, parseSortie, pivot, semaineId, semaineN1, semaineNom,
+  classement, matchSemaine, missingMeasures, parseSortie, pivot, possibleValues, semaineId, semaineN1, semaineNom,
 } from '../../src/lib/sorties.js'
 
 const HEADER = ['Magasin', 'Univers', 'Segment', 'Famille', 'Sous-famille', 'Marque', 'Fournisseur', 'Modèle', 'Référence', 'Couleur',
@@ -114,6 +114,25 @@ describe('taux de sortie : tableau croisé', () => {
     assert.deepEqual(p.total.n1, [1000, 150, 8, 2, 8])
     assert.deepEqual(p.children('').map(c => c.label).sort(), ['ASICS', 'NIKE'])
     assert.deepEqual(dimValues([n, n1], 'magasin'), ['CHECY', 'LAVAL', 'SARAN'])
+  })
+  it('limite les listes des filtres les unes par les autres (tous les sens)', () => {
+    const sorted = set => [...set].sort()
+    const sans = possibleValues([n, n1])
+    assert.deepEqual(sorted(sans.univers), ['CYCLE', 'RUNNING'])
+    // Univers coché : les autres axes se limitent au running, la liste des univers reste entière
+    const run = possibleValues([n, n1], { univers: new Set(['RUNNING']) })
+    assert.deepEqual(sorted(run.marque), ['ASICS', 'NIKE'])
+    assert.deepEqual(sorted(run.couleur), ['NOIR'])
+    assert.deepEqual(sorted(run.univers), ['CYCLE', 'RUNNING'])
+    // Dans l'autre sens : une marque limite les univers et les magasins (N et N-1 confondus)
+    const asics = possibleValues([n, n1], { marque: new Set(['ASICS']) })
+    assert.deepEqual(sorted(asics.univers), ['RUNNING'])
+    assert.deepEqual(sorted(asics.magasin), ['LAVAL', 'SARAN'])
+    // Deux filtres : chacun est limité par l'autre seulement
+    const deux = possibleValues([n, n1], { magasin: new Set(['CHECY']), marque: new Set(['ASICS']) })
+    assert.deepEqual(sorted(deux.magasin), ['LAVAL', 'SARAN'])
+    assert.deepEqual(sorted(deux.marque), ['NIKE'])
+    assert.deepEqual(sorted(deux.univers), [])
   })
   it('sans niveau : seulement le total', () => {
     const p = pivot({ n, n1: null, levels: [] })

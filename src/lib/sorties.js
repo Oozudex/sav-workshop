@@ -200,6 +200,28 @@ export function dimValues(datasets, key) {
   return [...set].sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }))
 }
 
+// Valeurs encore possibles de chaque axe avec les filtres des autres axes (comme les segments d'Excel) :
+// { clé: Set }. Un filtre ne limite pas sa propre liste (on peut cocher un deuxième univers), mais limite
+// toutes les autres, dans tous les sens (univers → segments, marque → univers…).
+export function possibleValues(datasets, filters = {}) {
+  const out = Object.fromEntries(DIMS.map(d => [d.key, new Set()]))
+  for (const ds of datasets) {
+    if (!ds) continue
+    const fs = Object.entries(filters).filter(([, set]) => set?.size)
+      .map(([k, set]) => ({ k, codes: ds.codes[k], ok: ds.dims[k].map(v => set.has(v)) }))
+    const seen = DIMS.map(d => new Uint8Array(ds.dims[d.key].length))
+    for (let i = 0; i < ds.n; i++) {
+      // Ligne écartée par un seul filtre : elle compte encore pour la liste de cet axe-là
+      let fail = null, nb = 0
+      for (const f of fs) if (!f.ok[f.codes[i]]) { fail = f.k; if (++nb > 1) break }
+      if (nb > 1) continue
+      DIMS.forEach((d, j) => { if (!nb || d.key === fail) seen[j][ds.codes[d.key][i]] = 1 })
+    }
+    DIMS.forEach((d, j) => seen[j].forEach((s, c) => { if (s) out[d.key].add(ds.dims[d.key][c]) }))
+  }
+  return out
+}
+
 // Sommes par chemin de valeurs (« LAVAL␟RUNNING ») pour chaque profondeur de levels.
 // filters : { clé: Set de valeurs gardées }
 function aggregate(ds, levels, filters) {
