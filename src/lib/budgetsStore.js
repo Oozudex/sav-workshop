@@ -179,7 +179,9 @@ export async function fillFromNextN1(budget, next, user) {
   return { count: lines.length }
 }
 
+// suppression : le N-1 du budget suivant, recopié de celui-ci (Cloud Function majN1Suivant), n'est pas vidé
 export async function deleteBudget(id) {
+  await updateDoc(doc(db, 'budgets', id), { suppression: true })
   const snap = await getDocs(collection(db, 'budgets', id, 'marques'))
   await runBatches(snap.docs.map(d => b => b.delete(d.ref)))
   await deleteDoc(doc(db, 'budgets', id))

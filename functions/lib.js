@@ -65,3 +65,33 @@ export function limiteRdvClient(now = new Date()) {
   d.setMonth(d.getMonth() - 1)
   return d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Paris' })
 }
+
+// ── Budgets : N-1 du budget suivant tenu à jour ───────────────────────────────
+// Quand le budget suivant (AH28) a repris la saisie de celui-ci (AH27) comme N-1, chaque modification
+// d'une ligne de AH27 (montants, quantités, commentaire) est recopiée dans le N-1 de la même marque de AH28.
+
+// Repris de ce budget (et pas importé d'un fichier Excel)
+export function n1RepriseDe(suivant, budget) {
+  return !!suivant && !!budget && !suivant.suppression && suivant.n1Import?.source === budget.nom
+}
+
+const tri = m => JSON.stringify(Object.entries(m || {}).filter(([, v]) => typeof v === 'number').sort(([a], [b]) => a.localeCompare(b)))
+
+/**
+ * Champs N-1 à écrire dans la ligne du budget suivant après la modification d'une ligne (avant / après,
+ * null si absente), ou null si rien à recopier. Une ligne supprimée vide le N-1 ; la saisie reprise
+ * garde la même forme que la reprise du N-1 (linesFromBudget) : saisie → n1, quantite → quantiteN1,
+ * commentaire → commentaireN1.
+ */
+export function n1DepuisLigne(avant, apres) {
+  const ligne = apres || avant
+  if (!ligne) return null
+  const pareil = avant && apres && tri(avant.saisie) === tri(apres.saisie) && tri(avant.quantite) === tri(apres.quantite)
+    && (avant.commentaire || '') === (apres.commentaire || '')
+  if (pareil) return null
+  const nombres = m => Object.fromEntries(Object.entries(m || {}).filter(([, v]) => typeof v === 'number'))
+  return {
+    univers: ligne.univers || '', segId: ligne.segId || '', segment: ligne.segment || '', nom: ligne.nom || '',
+    n1: nombres(apres?.saisie), quantiteN1: nombres(apres?.quantite), commentaireN1: apres?.commentaire || '',
+  }
+}

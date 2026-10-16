@@ -10,14 +10,19 @@
 //   (téléphone perdu) ; la personne en configure une nouvelle à sa prochaine connexion.
 // - nettoyageNocturne : RDV client de plus d'un mois (RGPD), anciens événements rangés dans les
 //   calendriers des rayons, todo lists personnelles des comptes supprimés.
+// - majN1Suivant : une ligne de budget modifiée (AH27) met à jour le N-1 du budget suivant (AH28) quand
+//   celui-ci a repris sa saisie comme N-1.
 import { applicationDefault, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { setGlobalOptions } from 'firebase-functions/v2'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
+import { onDocumentWritten } from 'firebase-functions/v2/firestore'
 import { logger } from 'firebase-functions'
-import { canManageStaff, limiteRdvClient, migrationEvenement, newPassword, peutReinitialiserDoubleAuth } from './lib.js'
+import {
+  canManageStaff, limiteRdvClient, migrationEvenement, n1DepuisLigne, n1RepriseDe, newPassword, peutReinitialiserDoubleAuth,
+} from './lib.js'
 
 initializeApp()
 setGlobalOptions({ region: 'europe-west1', maxInstances: 2 })
@@ -114,6 +119,31 @@ export const nettoyageNocturne = onSchedule(
     logger.info('Nettoyage de la nuit', { rdvSupprimes: rdvAnciens.length, evenementsRanges: aRanger.length, todosSupprimees: orphelins.length })
   },
 )
+
+/* ── Budgets : N-1 du budget suivant tenu à jour ───────────────────────── */
+// Les écritures de cette fonction ne touchent que les champs N-1 du budget suivant : elles ne relancent
+// rien (la saisie de AH28 ne change pas). Un budget en cours de suppression (suppression: true) ou déjà
+// supprimé ne vide pas le N-1 du suivant.
+const N1_CHAMPS = ['univers', 'segId', 'segment', 'nom', 'n1', 'quantiteN1', 'commentaireN1']
+
+// Déclencheur Firestore : même région que la base (Paris, europe-west9)
+export const majN1Suivant = onDocumentWritten({ document: 'budgets/{budgetId}/marques/{marqueId}', region: 'europe-west9' }, async event => {
+  const avant = event.data?.before?.exists ? event.data.before.data() : null
+  const apres = event.data?.after?.exists ? event.data.after.data() : null
+  const n1 = n1DepuisLigne(avant, apres)
+  if (!n1) return
+  const budget = (await db.doc(`budgets/${event.params.budgetId}`).get()).data()
+  if (!budget || budget.suppression) return
+  const snap = await db.collection('budgets').where('saison', '==', budget.saison).where('annee', '==', budget.annee + 1).limit(1).get()
+  const suivant = snap.docs[0]
+  if (!suivant || !n1RepriseDe(suivant.data(), budget)) return
+  await suivant.ref.collection('marques').doc(event.params.marqueId).set(n1, { mergeFields: N1_CHAMPS })
+  // Segment nouveau dans AH27 : ajouté à AH28 (budget de base à 0)
+  if (n1.segId && !(suivant.get('segments') || []).some(s => s.id === n1.segId)) {
+    await suivant.ref.update({ segments: FieldValue.arrayUnion({ id: n1.segId, univers: n1.univers, nom: n1.segment }) })
+  }
+  logger.info('N-1 mis à jour', { de: budget.nom, vers: suivant.get('nom'), marque: n1.nom })
+})
 
 /* ── Retrait d'un collaborateur : nouveau mot de passe pour le compte du rayon ── */
 export const retirerCollaborateur = onCall({ enforceAppCheck: APP_CHECK_OBLIGATOIRE }, async request => {
