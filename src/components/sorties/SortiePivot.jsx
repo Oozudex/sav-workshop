@@ -18,6 +18,8 @@ const COLS = [
   { key: 'qtStkFin', label: 'QtStkFin', fmt: 'qte' },
   { key: 'taux', label: 'Taux de sortie', fmt: 'pct', compare: true },
 ]
+// Colonnes dont le fond classe les lignes entre elles (plus haut = meilleur)
+const CLASSES = ['marge', 'taux']
 // Couleur de chaque période : N-1 en gris (le passé, comme dans les budgets), N en bleu canard (la semaine
 // analysée, couleur de la carte Statistiques Achats)
 const PERIOD = {
@@ -107,8 +109,8 @@ function FilterButton({ dim, values, selected, onChange }) {
 }
 
 // Cellules d'une période ; en N, comparaison avec N-1 : vert ▲ en hausse, rouge ▼ en baisse.
-// rang : classement du taux de sortie parmi les lignes du même niveau (fond bleu → jaune → orange) ; sur cette
-// case, l'évolution N-1 n'est plus donnée que par la flèche colorée.
+// rang : { marge, taux } classement parmi les lignes du même niveau (fond bleu → jaune → orange) ; sur ces
+// cases, l'évolution N-1 n'est plus donnée que par la flèche colorée.
 function Cells({ s, ref1, n1 = false, total = false, rang = null }) {
   const v = indicateurs(s)
   const r = ref1 ? indicateurs(ref1) : null
@@ -118,7 +120,7 @@ function Cells({ s, ref1, n1 = false, total = false, rang = null }) {
     let dir = null
     if (!n1 && c.compare && r && v[c.key] && r[c.key]
       && Math.abs(v[c.key] - r[c.key]) > Math.abs(r[c.key]) * 0.0005) dir = v[c.key] > r[c.key] ? UP : DOWN
-    const rk = c.key === 'taux' ? rang : null
+    const rk = rang?.[c.key] || null
     const cls = rk ? `${rangNuance(rk.t).cls || plain} font-semibold` : dir ? dir.cls : plain
     const title = [rk && `Classement : ${rangTexte(rk)}`, dir && `N-1 : ${fmt(r[c.key], c.fmt)} · ${ecart(v[c.key], r[c.key], c.fmt)}`].filter(Boolean).join(' · ')
     return (
@@ -160,9 +162,13 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
 
   function renderRows(path) {
     const rows = children(path)
-    // Classement du taux de sortie entre les lignes de ce niveau, en N et en N-1
-    const rangN = classement(rows.map(r => indicateurs(r.n).taux))
-    const rangN1 = classement(rows.map(r => indicateurs(r.n1).taux))
+    // Classement de la marge % et du taux de sortie entre les lignes de ce niveau, en N et en N-1
+    const rangs = period => {
+      const v = rows.map(r => indicateurs(r[period]))
+      const c = Object.fromEntries(CLASSES.map(k => [k, classement(v.map(x => x[k]))]))
+      return idx => Object.fromEntries(CLASSES.map(k => [k, c[k][idx]]))
+    }
+    const rangN = rangs('n'), rangN1 = rangs('n1')
     const limit = more[path] || PAGE
     return <>
       {rows.slice(0, limit).map((r, idx) => {
@@ -180,8 +186,8 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
                   </button>
                 ) : <span className="block truncate max-w-[18rem]" title={r.label}>{r.label}</span>}
               </th>
-              <Cells s={r.n} ref1={r.n1} rang={rangN[idx]} />
-              <Cells s={r.n1} n1 rang={rangN1[idx]} />
+              <Cells s={r.n} ref1={r.n1} rang={rangN(idx)} />
+              <Cells s={r.n1} n1 rang={rangN1(idx)} />
             </tr>
             {canOpen && isOpen && renderRows(r.path)}
           </Fragment>
@@ -275,7 +281,7 @@ export default function SortiePivot({ n, n1, labelN, labelN1, defaultFilters = {
         <li><span className={`px-1.5 py-0.5 rounded ${UP.cls}`}>▲ En hausse par rapport à N-1</span></li>
         <li><span className={`px-1.5 py-0.5 rounded ${DOWN.cls}`}>▼ En baisse par rapport à N-1</span></li>
         <li className="inline-flex items-center gap-1">
-          Taux de sortie, classement entre lignes du même niveau :
+          Marge % et taux de sortie, classement entre lignes du même niveau :
           <span className={`px-1.5 py-0.5 rounded font-semibold ${RANG[4].cls}`}>meilleurs</span>
           <span className={`px-1.5 py-0.5 rounded font-semibold ${RANG[3].cls}`}>…</span>
           <span className={`px-1.5 py-0.5 rounded font-semibold ${RANG[2].cls}`}>moyenne</span>

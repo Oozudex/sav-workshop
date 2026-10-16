@@ -38,6 +38,9 @@ const LAVAL = ex(600, 228, 2, 8), SARAN = ex(5400, 1944, 90, 10), GROUPE = ex(60
 // Exemple du classement : taux de sortie N-1 et N de 5 magasins
 const MAGS = [['SARAN', 0.62, 0.72], ['VITRE', 0.66, 0.70], ['CHECY', 0.70, 0.66], ['ST BERTHEVIN', 0.55, 0.64], ['CHATEAU GONTIER', 0.58, 0.60]]
 const MAGS_RANG = classement(MAGS.map(m => m[2]))
+// Même exemple pour la marge % (N-1, N) : classement indépendant de celui du taux
+const MARGES = [0.370, 0.352, 0.372, 0.368, 0.330, 0.360, 0.385, 0.371, 0.392, 0.384]
+const MARGES_RANG = classement(MAGS.map((_, i) => MARGES[i * 2 + 1]))
 
 // total : { n, n1 } sommes du tableau affiché (pivot.total)
 export default function SortieInfo({ total, labelN, labelN1, filtre }) {
@@ -120,7 +123,7 @@ export default function SortieInfo({ total, labelN, labelN1, filtre }) {
             <li>Seulement sur <strong>CANet, MtMrg, Marge %, QtVte et Taux de sortie</strong>, où une hausse est une bonne nouvelle.</li>
             <li><strong>QtRecep et QtStkFin restent sans couleur</strong> : recevoir ou stocker plus n’est ni bien ni mal en soi.</li>
             <li>Pas de couleur si N ou N-1 vaut 0 ou est vide, ni pour un écart minuscule (moins de 0,05 %).</li>
-            <li>Sur le <strong>taux de sortie</strong>, le fond sert au classement (étape 6) : l’évolution n’y est donnée que par la flèche ▲ / ▼ colorée.</li>
+            <li>Sur la <strong>marge %</strong> et le <strong>taux de sortie</strong>, le fond sert au classement (étape 6) : l’évolution n’y est donnée que par la flèche ▲ / ▼ colorée.</li>
           </ul>
           <p className="mt-1">En survolant une case colorée, on voit la valeur N-1 et l’écart :</p>
           <ExTable head={['Exemple', 'N-1', 'N', 'Écart affiché']}
@@ -140,20 +143,21 @@ export default function SortieInfo({ total, labelN, labelN1, filtre }) {
         </section>
 
         <section>
-          <p className={H}>6. Le classement du taux de sortie : du bleu à l’orange</p>
+          <p className={H}>6. Le classement de la marge % et du taux de sortie : du bleu à l’orange</p>
           <p>
             Progresser par rapport à N-1 ne suffit pas : un magasin qui gagne 2 points mais dont le taux reste en dessous de tous les autres
-            est quand même le moins bon. Le fond de la case <strong>Taux de sortie</strong> classe donc les lignes <strong>entre elles</strong>, au même
-            niveau (les magasins entre eux, les marques d’un magasin entre elles…), <strong>sans regarder N-1</strong> :
+            est quand même le moins bon. Le fond des cases <strong>Marge %</strong> et <strong>Taux de sortie</strong> classe donc les lignes <strong>entre elles</strong>, au même
+            niveau (les magasins entre eux, les marques d’un magasin entre elles…), <strong>sans regarder N-1</strong>. Chaque colonne a son
+            propre classement : un magasin peut être bleu en marge et orange en taux de sortie.
           </p>
           <ul className="list-disc pl-4 space-y-0.5">
-            <li><span className={`px-1 rounded font-semibold ${RANG[4].cls}`}>bleu foncé</span> : parmi les meilleurs taux, <span className={`px-1 rounded font-semibold ${RANG[3].cls}`}>bleu clair</span> : plutôt meilleur ;</li>
+            <li><span className={`px-1 rounded font-semibold ${RANG[4].cls}`}>bleu foncé</span> : parmi les meilleurs, <span className={`px-1 rounded font-semibold ${RANG[3].cls}`}>bleu clair</span> : plutôt meilleur ;</li>
             <li><span className={`px-1 rounded font-semibold ${RANG[2].cls}`}>jaune</span> : dans la moyenne ;</li>
             <li><span className={`px-1 rounded font-semibold ${RANG[1].cls}`}>orange clair</span> : plutôt moins bon, <span className={`px-1 rounded font-semibold ${RANG[0].cls}`}>orange foncé</span> : parmi les moins bons.</li>
           </ul>
           <p className="mt-1">
             La nuance dépend de la <strong>place</strong> dans le classement, découpé en 5 parts égales : le premier est toujours bleu foncé et le dernier
-            orange foncé, même si les taux sont proches. N et N-1 sont classés chacun de leur côté. Le total n’est pas classé.
+            orange foncé, même si les valeurs sont proches. N et N-1 sont classés chacun de leur côté. Le total n’est pas classé.
           </p>
           <ExTable head={['Exemple · 5 magasins', 'Taux N-1', 'Taux N', 'Évolution', 'Classement N']}
             rows={MAGS.map(([m, a, b], i) => [
@@ -163,8 +167,31 @@ export default function SortieInfo({ total, labelN, labelN1, filtre }) {
             ])} />
           <p>
             CHATEAU GONTIER progresse (▲ vert, +2 points) mais a le plus faible taux de la semaine : il est en orange foncé. À l’inverse, CHECY
-            recule (▼ rouge) mais reste dans la moyenne (jaune). Survole une case de taux pour lire sa place (« 3e sur 10 »).
+            recule (▼ rouge) mais reste dans la moyenne (jaune).
           </p>
+          <p className="mt-2">
+            <strong>La marge % se classe de la même façon, dans sa propre colonne</strong> : la plus forte marge en bleu foncé, la plus faible en
+            orange foncé. Les mêmes 5 magasins :
+          </p>
+          <ExTable head={['Exemple · 5 magasins', 'Marge N-1', 'Marge N', 'Évolution', 'Classement marge N', 'Classement taux N']}
+            rows={MAGS.map(([m], i) => {
+              const a = MARGES[i * 2], b = MARGES[i * 2 + 1]
+              return [
+                m, pct(a), pct(b),
+                <span key="e" className={`font-semibold ${b > a ? UP : DOWN}`}>{b > a ? '▲' : '▼'} {evolPt(b, a)}</span>,
+                <span key="r" className={`px-1.5 py-0.5 rounded ${rangNuance(MARGES_RANG[i].t).cls}`}>{rangTexte(MARGES_RANG[i])}</span>,
+                <span key="t" className={`px-1.5 py-0.5 rounded ${rangNuance(MAGS_RANG[i].t).cls}`}>{rangTexte(MAGS_RANG[i])}</span>,
+              ]
+            })} />
+          <ul className="list-disc pl-4 space-y-0.5">
+            <li>CHECY gagne 3 points de marge (▲ vert), la plus forte hausse, mais reste 4e sur 5 : orange clair.</li>
+            <li>
+              Les deux classements se lisent ensemble : SARAN est 1er en taux de sortie mais dernier en marge (ses produits partent bien, mais
+              rapportent moins : promotions, remises ?). CHATEAU GONTIER est l’inverse : la meilleure marge, mais le stock part le moins vite.
+            </li>
+            <li>Un magasin bleu dans les deux colonnes vend vite <strong>et</strong> bien ; orange dans les deux, c’est lui qu’il faut regarder en premier.</li>
+          </ul>
+          <p className="mt-1">Survole une case de marge ou de taux pour lire sa place (« 3e sur 10 »).</p>
         </section>
 
         <section>

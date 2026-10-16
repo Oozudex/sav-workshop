@@ -1,4 +1,4 @@
-// Couleur du classement du taux de sortie entre lignes du même niveau (ex. les magasins), sans rapport
+// Couleur du classement de la marge % et du taux de sortie entre lignes du même niveau (ex. les magasins), sans rapport
 // avec l'évolution N-1 (vert / rouge) : dégradé bleu (meilleurs) → jaune (moyenne) → orange (moins bons),
 // 5 nuances selon t (1 = meilleur, 0 = moins bon).
 export const RANG = [
