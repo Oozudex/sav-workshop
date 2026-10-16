@@ -10,7 +10,7 @@ import GroupeCards from '../components/budgets/GroupeCards'
 import NotationPanel, { AdapteInfo } from '../components/budgets/NotationPanel'
 import SegmentSaisie from '../components/budgets/SegmentSaisie'
 import { Legend, SplitBar, TONE } from '../components/budgets/tones'
-import { ImportBaseDialog, ImportN1Dialog } from '../components/budgets/ImportDialogs'
+import { ImportBaseDialog, ImportCommandeDialog, ImportN1Dialog } from '../components/budgets/ImportDialogs'
 import { BTN_PRIMARY, BTN_SECONDARY, EmptyState, Notice } from '../components/admin/ui'
 import {
   FILTRE_SANS_ACHETEUR, SAISONS, addTotals, buyerFilterTest, canEditUnivers, defaultBuyerFilter, formatBudget, formatQte, objectif,
@@ -88,7 +88,7 @@ export default function BudgetDetail() {
   const navigate = useNavigate()
   const user = useBudgetUser()
   const {
-    budget, loading, brands, universList, magasins, segments, sums, hasGroupe, brandsBySeg, prev, fiche, reglages, liens,
+    budget, loading, lines, brands, universList, magasins, segments, sums, hasGroupe, brandsBySeg, prev, fiche, reglages, liens,
     fournisseur, adapte, totals, groupeMontant,
   } = useBudgetModel(id)
   // Budget entier (sans filtre) pour l'explication du budget adapté
@@ -188,6 +188,7 @@ export default function BudgetDetail() {
             {budget.baseImport ? 'Réimporter la base' : 'Importer la base'}
           </button>
           <button type="button" onClick={() => setDialog('n1')} className={BTN_SECONDARY}>Importer le N-1 (Excel)</button>
+          {segments.length > 0 && <button type="button" onClick={() => setDialog('commande')} className={BTN_SECONDARY}>Importer des commandes</button>}
           {segments.length > 0 && <button type="button" onClick={exportExcel} disabled={busy} className={BTN_SECONDARY}>Exporter (Excel)</button>}
           {prev && <button type="button" onClick={carryOver} disabled={busy} className={BTN_SECONDARY}>Reprendre le N-1 de {prev.nom}</button>}
           {isDirection && (
@@ -314,6 +315,7 @@ export default function BudgetDetail() {
       </>}
 
       {dialog === 'base' && <ImportBaseDialog budget={budget} univers={universList} magasins={magasins} user={user} onClose={() => setDialog(null)} />}
+      {dialog === 'commande' && <ImportCommandeDialog budget={budget} brands={brands} lines={lines} univers={universList} magasins={magasins} user={user} onClose={() => setDialog(null)} />}
       {dialog === 'n1' && <ImportN1Dialog budget={budget} brands={brands} univers={universList} magasins={magasins} user={user} onClose={() => setDialog(null)} />}
     </Page>
   )

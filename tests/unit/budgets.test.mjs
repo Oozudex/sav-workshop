@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   FILTRE_SANS_ACHETEUR, addTotals, budgetRank, fournisseurResolver, coefMarque, computeAdapte, fournisseurKey, noteMarque, withAdapte, evolution, formatPct, groupeRatio, groupeTotal, objectif, brandsBySegment, budgetName, buyerFilterTest, defaultBuyerFilter, filtreAcheteur, canEditUnivers, computeTotals, segmentsCatalog, findN1Sheet, linesFromBudget, magasinMatcher, mergeSegments, n1Columns,
-  parseBaseSheet, parseN1Sheet, planN1Import, previousSeason, segmentId, sortSegments,
+  parseBaseSheet, parseN1Sheet, planN1Import, previousSeason, segmentId, sortSegments, mergeCommandes, parseCommandeSheet, planCommande,
 } from '../../src/lib/budgets.js'
 
 const MAGASINS = [
@@ -150,6 +150,91 @@ describe('parseN1Sheet', () => {
 
   it("refuse une colonne absente", () => {
     assert.ok(parseN1Sheet(N1, { univers: UNIVERS, matchMagasin, column: 'BUDGET AH30' }).error)
+  })
+})
+
+// Extrait d'une commande MesAchats (« CDE ENERGETICS AH27 ») : colonne Note au milieu des magasins
+const CDE_HEAD = ['Code modèle Fournisseur', 'Libellé modèle', 'Libellé Couleur', 'Univers', 'Segment', 'Famille', 'Marque', 'PAJA',
+  '% Remise', 'PA net saisi', 'PV', 'Total', 'CHT 274/0', 'Note', 'LF 458/0', 'XYZ 1/0']
+const cde = (ref, coul, univ, seg, marque, paja, remise, paNet, total, cht, lf, xyz = '') =>
+  [ref, `MODELE ${ref}`, coul, univ, seg, 'FAM', marque, paja, remise, paNet, 19.99, total, cht, 'D:\\pas-note.png', lf, xyz]
+const CDE = [CDE_HEAD,
+  cde('A1', 'NOIR', 'RANDONNEE', 'BAGAGERIE', 'Energetics', 10, 0, 0, 36, 24, 12),
+  cde('A1', 'BLEU', 'RANDONNEE', 'BAGAGERIE', 'ENERGETICS', 10, 0, 0, 12, '', 12),
+  cde('B2', 'GRIS', 'RANDONNEE', 'BAGAGERIE', 'ENERGETICS', 10, 10, 0, 12, 12, ''), // remise 10 %
+  cde('C3', 'NOIR', 'BAGAGERIE', 'BAGAGERIE', 'ENERGETICS', 5, 0, 4, 10, 6, 4, 3), // PA net saisi, univers sans segment
+  cde('D4', 'NOIR', 'ACCESSOIRE TEXTILE', 'CEINTURE', 'ENERGETICS', '', 0, 0, 20, 12, 6), // sans prix, Total faux
+  cde('E5', 'NOIR', 'SURF', 'SURF', 'ENERGETICS', 10, 0, 0, 12, 12, ''),
+  ['', '', '', '', '', '', '', '', '', '', '', 102, 66, '', 34, 3],
+]
+
+describe('commandes fournisseur', () => {
+  const r = parseCommandeSheet(CDE, { univers: UNIVERS, matchMagasin })
+  const rando = r.lines.find(l => l.univers === 'RANDONNEE')
+
+  it('regroupe par marque : pièces et montant au prix d’achat net', () => {
+    assert.equal(rando.nom, 'ENERGETICS')
+    assert.equal(rando.segId, segmentId('RANDONNEE', 'BAGAGERIE'))
+    assert.deepEqual(rando.quantite, { cht: 36, lf: 24 })
+    assert.deepEqual(rando.saisie, { cht: 24 * 10 + 12 * 9, lf: 24 * 10 }) // B2 : 10 € − 10 %
+    assert.equal(rando.lignes, 3)
+  })
+
+  it('prend le PA net saisi, range un univers sans segment, ignore la colonne Note', () => {
+    const bag = r.lines.find(l => l.univers === 'BAGAGERIE')
+    assert.equal(bag.segId, segmentId('BAGAGERIE'))
+    assert.deepEqual(bag.saisie, { cht: 24, lf: 16 })
+  })
+
+  it('signale magasins et univers inconnus, lignes sans prix et Total faux', () => {
+    assert.deepEqual(r.magIds, ['cht', 'lf'])
+    assert.deepEqual(r.unknownMagasins, ['XYZ 1/0'])
+    assert.deepEqual(r.unknownUnivers, ['SURF'])
+    assert.deepEqual(r.sansPrix, ['MODELE D4 NOIR'])
+    assert.deepEqual(r.ecartsTotal, ['MODELE D4 NOIR (Total 20, magasins 18)'])
+    assert.equal(r.lignes, 5)
+  })
+
+  it('refuse un fichier qui n’est pas une commande', () => {
+    assert.ok(parseCommandeSheet(BASE, { univers: UNIVERS, matchMagasin }).error)
+    assert.ok(parseCommandeSheet([CDE_HEAD.map(c => (c.endsWith('/0') ? 'X' : c))], { univers: UNIVERS, matchMagasin }).error)
+  })
+
+  it('additionne une même marque venue de plusieurs fichiers', () => {
+    const m = mergeCommandes([r, r])
+    assert.deepEqual(m.lines.find(l => l.univers === 'RANDONNEE').quantite, { cht: 72, lf: 48 })
+    assert.equal(m.lignes, 10)
+  })
+
+  const segId = segmentId('RANDONNEE', 'BAGAGERIE')
+  const brands = [{ id: 'en', univers: 'RANDONNEE', segId, segment: 'BAGAGERIE', nom: 'ENERGETICS' }]
+  const budgetLines = [{ id: 'en', saisie: { cht: 100, lf: 50, autre: 7 }, quantite: { cht: 5 } }]
+  const segments = [{ id: segId, univers: 'RANDONNEE', nom: 'BAGAGERIE' }]
+  const direction = { role: 'directeurgen' }
+
+  it('remplace la saisie dans les magasins du fichier (un magasin sans pièce est vidé)', () => {
+    const one = { ...r, lines: [{ ...rando, saisie: { cht: 348 }, quantite: { cht: 36 } }] }
+    const it0 = planCommande(one, { brands, segments, budgetLines, user: direction }).items[0]
+    assert.equal(it0.id, 'en')
+    assert.deepEqual(it0.saisie, { cht: 348, lf: null })
+    assert.deepEqual(it0.quantite, { cht: 36, lf: null })
+    assert.equal(it0.avant, 157)
+    assert.equal(it0.apres, 355) // le magasin absent du fichier garde sa saisie
+  })
+
+  it('ou s’ajoute à la saisie existante', () => {
+    const it0 = planCommande({ ...r, lines: [rando] }, { brands, segments, budgetLines, user: direction, ajouter: true }).items[0]
+    assert.deepEqual(it0.saisie, { cht: 448, lf: 290 })
+    assert.deepEqual(it0.quantite, { cht: 41, lf: 24 })
+  })
+
+  it('ajoute les marques et segments absents, écarte les univers de l’acheteur qui ne sont pas les siens', () => {
+    const acheteur = { role: 'acheteur', univers: ['RANDONNEE', 'BAGAGERIE'] }
+    const p = planCommande(r, { brands, segments, budgetLines, user: acheteur })
+    assert.deepEqual(p.items.map(i => [i.line.univers, i.nouvelle]), [['BAGAGERIE', true], ['RANDONNEE', false]])
+    assert.deepEqual(p.items[0].identity, { univers: 'BAGAGERIE', segId: segmentId('BAGAGERIE'), segment: '', nom: 'ENERGETICS' })
+    assert.deepEqual(p.horsDroits, ['ACCESSOIRE TEXTILE'])
+    assert.deepEqual(p.newSegments.map(s => s.id), [segmentId('BAGAGERIE')])
   })
 })
 

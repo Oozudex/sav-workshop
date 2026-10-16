@@ -1,20 +1,21 @@
-// Imports d'un budget : base (« BASE BUDGET AH27 ») et budget N-1 par marque (fichier Excel)
+// Imports d'un budget : base (« BASE BUDGET AH27 »), budget N-1 par marque (fichier Excel) et commandes
+// fournisseur (export MesAchats) qui remplissent la saisie
 import { useMemo, useState } from 'react'
 import { BTN_PRIMARY, BTN_SECONDARY, Field, Modal, Notice } from '../admin/ui'
 import { readWorkbook } from '../../lib/excel'
 import {
-  findN1Sheet, formatBudget, magasinMatcher, n1Columns, parseBaseSheet, parseN1Sheet, planN1Import, previousSeason,
-  seasonCode, sumValues,
+  findN1Sheet, formatBudget, formatQte, magasinMatcher, mergeCommandes, n1Columns, parseBaseSheet, parseCommandeSheet,
+  parseN1Sheet, planCommande, planN1Import, previousSeason, seasonCode, sumValues,
 } from '../../lib/budgets'
-import { applyN1, saveBase } from '../../lib/budgetsStore'
+import { applyCommande, applyN1, saveBase } from '../../lib/budgetsStore'
 
 const SELECT = 'w-full h-9 px-2 rounded-lg border text-sm bg-white dark:bg-neutral-950 border-gray-200 dark:border-neutral-700 text-gray-900 dark:text-white'
 
-function FileField({ label, onFile, busy }) {
+function FileField({ label, onFile, busy, multiple = false }) {
   return (
-    <Field label={label} hint={busy ? 'Lecture du fichier…' : 'Fichier Excel (.xlsx)'}>
-      <input type="file" accept=".xlsx,.xls,.xlsm" disabled={busy}
-        onChange={e => e.target.files[0] && onFile(e.target.files[0])}
+    <Field label={label} hint={busy ? 'Lecture…' : multiple ? 'Un ou plusieurs fichiers Excel (.xlsx)' : 'Fichier Excel (.xlsx)'}>
+      <input type="file" accept=".xlsx,.xls,.xlsm" disabled={busy} multiple={multiple}
+        onChange={e => e.target.files.length && onFile(multiple ? [...e.target.files] : e.target.files[0])}
         className="block w-full text-xs text-gray-700 dark:text-neutral-300 file:mr-3 file:h-8 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-gray-100 file:text-gray-800 dark:file:bg-neutral-800 dark:file:text-neutral-200" />
     </Field>
   )
@@ -189,6 +190,126 @@ export function ImportN1Dialog({ budget, brands, univers, magasins, user, onClos
             items={plan.newSegments.map(s => `${s.univers} › ${s.nom || 'sans segment'}`)} />
           <Warning title="Magasins non reconnus (colonnes ignorées) : ajoute ce nom dans l’onglet Magasins." items={parsed.unknownMagasins} />
           <Warning title="Univers non reconnus (lignes ignorées) :" items={parsed.unknownUnivers} />
+        </>}
+      </>}
+    </Modal>
+  )
+}
+
+// Commandes fournisseur : chaque fichier (une marque, une ligne par modèle × couleur, une colonne par magasin)
+// remplit la saisie et les quantités des marques, dans les univers que l'utilisateur peut modifier
+export function ImportCommandeDialog({ budget, brands, lines, univers, magasins, user, onClose }) {
+  const [files, setFiles] = useState([])
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [ajouter, setAjouter] = useState(false)
+  const [done, setDone] = useState(null)
+  const notReady = listsMissing(univers, magasins)
+  const magNom = useMemo(() => new Map(magasins.map(m => [m.id, m.nom])), [magasins])
+
+  async function read(list) {
+    setBusy(true); setError(''); setFiles([])
+    const ok = [], errors = []
+    for (const f of list) {
+      try {
+        const wb = await readWorkbook(f)
+        const opts = { univers: univers.map(u => u.nom), matchMagasin: magasinMatcher(magasins) }
+        const results = wb.sheetNames.map(n => parseCommandeSheet(wb.rows(n), opts))
+        const r = results.find(x => !x.error) || results[0]
+        if (r.error) errors.push(`${f.name} : ${r.error}`)
+        else ok.push({ name: f.name, result: r })
+      } catch (err) { errors.push(`${f.name} : lecture impossible (${err.message})`) }
+    }
+    setFiles(ok)
+    setError(errors.join('\n'))
+    setBusy(false)
+  }
+
+  const commande = useMemo(() => (files.length ? mergeCommandes(files.map(f => f.result)) : null), [files])
+  const plan = useMemo(() => (commande ? planCommande(commande, { brands, segments: budget.segments, budgetLines: lines, user, ajouter }) : null),
+    [commande, brands, budget.segments, lines, user, ajouter])
+
+  async function save() {
+    setBusy(true)
+    try { await applyCommande(budget, plan, user); setDone(plan) } catch (err) { setError(err.message) }
+    setBusy(false)
+  }
+
+  const montant = plan ? plan.items.reduce((t, it) => t + it.commande, 0) : 0
+  const pieces = plan ? plan.items.reduce((t, it) => t + it.pieces, 0) : 0
+  const TD = 'py-1 px-1.5 text-right tabular-nums whitespace-nowrap'
+  return (
+    <Modal title="Importer des commandes" subtitle={`${budget.nom} · remplit la saisie des marques`} size="max-w-3xl" onClose={onClose}
+      footer={done ? <button type="button" onClick={onClose} className={BTN_PRIMARY}>Fermer</button> : <>
+        <button type="button" onClick={onClose} className={BTN_SECONDARY}>Annuler</button>
+        <button type="button" onClick={save} disabled={!plan?.items.length || busy} className={BTN_PRIMARY}>{busy && plan ? 'Import…' : 'Remplir la saisie'}</button>
+      </>}>
+      {notReady ? <Notice notice={{ text: notReady }} /> : done ? (
+        <Notice notice={{ tone: 'ok', text: `Saisie remplie : ${done.items.length} marque(s)${done.items.some(i => i.nouvelle) ? `, dont ${done.items.filter(i => i.nouvelle).length} ajoutée(s) à la liste des marques` : ''}. Elles restent en prévisionnel : passe-les en engagé dans le tableau quand la commande est validée.` }} />
+      ) : <>
+        <div className="text-xs text-gray-600 dark:text-neutral-300 leading-relaxed space-y-1">
+          <p>
+            Fichier de commande exporté de MesAchats (« CDE ENERGETICS AH27 ») : une ligne par modèle et couleur, une colonne de pièces
+            par magasin. Pour chaque marque et chaque magasin : <strong>quantité = pièces commandées</strong>,{' '}
+            <strong>montant = pièces × prix d’achat net</strong> (« PA net saisi » s’il est rempli, sinon PAJA moins la remise).
+          </p>
+          <p>Les marques restent en <strong>prévisionnel</strong>. Tu peux choisir plusieurs fichiers d’un coup.</p>
+        </div>
+        <FileField label="Fichiers de commande" onFile={read} busy={busy && !plan} multiple />
+        {error && <Notice notice={{ text: error }} />}
+        {plan && <>
+          <label className="flex items-start gap-2 text-xs text-gray-700 dark:text-neutral-200">
+            <input type="checkbox" checked={ajouter} onChange={e => setAjouter(e.target.checked)} className="mt-0.5" />
+            <span>
+              <strong>Ajouter à ce qui est déjà saisi</strong> (complément d’une commande déjà importée).
+              Sinon, la saisie de la marque est <strong>remplacée</strong> dans les magasins du fichier.
+            </span>
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <Stat label="Fichiers" value={files.length} />
+            <Stat label="Marques" value={plan.items.length} />
+            <Stat label="Pièces" value={formatQte(pieces)} />
+            <Stat label="Montant (prix d’achat)" value={formatBudget(montant)} />
+          </div>
+          {plan.items.length > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-neutral-800">
+              <table className="w-full text-xs">
+                <thead className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-neutral-400">
+                  <tr className="border-b border-gray-200 dark:border-neutral-800">
+                    <th scope="col" className="py-1.5 px-1.5 text-left">Univers › Segment</th>
+                    <th scope="col" className="py-1.5 px-1.5 text-left">Marque</th>
+                    <th scope="col" className="py-1.5 px-1.5 text-right">Pièces</th>
+                    <th scope="col" className="py-1.5 px-1.5 text-right">Commande</th>
+                    <th scope="col" className="py-1.5 px-1.5 text-right">Saisi avant</th>
+                    <th scope="col" className="py-1.5 px-1.5 text-right">Saisi après</th>
+                  </tr>
+                </thead>
+                <tbody className="text-gray-900 dark:text-white">
+                  {plan.items.map(it => (
+                    <tr key={`${it.line.segId}|${it.line.nom}`} className="border-t border-gray-100 dark:border-neutral-800 align-top"
+                      title={commande.magIds.map(m => `${magNom.get(m)} : ${formatQte(it.line.quantite[m] || 0)} · ${formatBudget(it.line.saisie[m] || 0)}`).join('\n')}>
+                      <td className="py-1 px-1.5">{it.line.univers} › {it.line.segment || 'sans segment'}</td>
+                      <td className="py-1 px-1.5 font-semibold">
+                        {it.line.nom}
+                        {it.nouvelle && <span className="ml-1.5 px-1 rounded text-[10px] font-semibold bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200">nouvelle</span>}
+                      </td>
+                      <td className={TD}>{formatQte(it.pieces)}</td>
+                      <td className={TD}>{formatBudget(it.commande)}</td>
+                      <td className={`${TD} text-gray-500 dark:text-neutral-400`}>{it.avant ? formatBudget(it.avant) : '—'}</td>
+                      <td className={`${TD} font-semibold`}>{formatBudget(it.apres)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <Warning title="Univers que tu ne peux pas modifier (lignes ignorées) :" items={plan.horsDroits} />
+          <Warning title="Segments absents du budget, ajoutés avec un budget de base à 0 :"
+            items={plan.newSegments.map(s => `${s.univers} › ${s.nom || 'sans segment'}`)} />
+          <Warning title="Magasins non reconnus (colonnes ignorées) : ajoute ce code dans l’onglet Magasins puis réimporte." items={commande.unknownMagasins} />
+          <Warning title="Univers non reconnus (lignes ignorées) :" items={commande.unknownUnivers} />
+          <Warning title="Lignes sans prix d’achat (comptées dans les pièces, pas dans le montant) :" items={commande.sansPrix} />
+          <Warning title="Lignes dont le Total ne correspond pas à la somme des magasins (les magasins sont pris) :" items={commande.ecartsTotal} />
         </>}
       </>}
     </Modal>

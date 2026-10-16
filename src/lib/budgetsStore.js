@@ -231,6 +231,28 @@ export async function carryOverN1(budget, prev, user) {
   return { count: lines.length }
 }
 
+// Commande fournisseur importée (plan de planCommande) : saisie et quantités par magasin des marques,
+// ajoutées à la liste des marques au besoin. L'état engagé / prévisionnel de la marque n'est pas touché.
+export async function applyCommande(budget, plan, user) {
+  const now = serverTimestamp()
+  const brandsColl = collection(db, 'budget_marques')
+  const values = map => Object.fromEntries(Object.entries(map).map(([k, v]) => [k, v == null ? deleteField() : v]))
+  const ops = []
+  for (const it of plan.items) {
+    let id = it.id
+    if (!id) {
+      const ref = doc(brandsColl)
+      id = ref.id
+      ops.push(b => b.set(ref, { ...it.identity, createdAt: now, createdBy: author(user) }))
+    }
+    ops.push(b => b.set(lineRef(budget.id, id), {
+      ...it.identity, saisie: values(it.saisie), quantite: values(it.quantite), updatedAt: now, updatedBy: author(user),
+    }, { merge: true }))
+  }
+  if (plan.newSegments.length) await updateDoc(doc(db, 'budgets', budget.id), { segments: [...budget.segments, ...plan.newSegments] })
+  await runBatches(ops)
+}
+
 // ── Liste des marques ───────────────────────────────────────────────────────────
 
 export function addBrand(seg, nom, user) {

@@ -294,6 +294,136 @@ export function parseN1Sheet(rows, { univers, matchMagasin, column }) {
   }
 }
 
+// ── Commandes fournisseur (export MesAchats « CDE ENERGETICS AH27 ») ────────────
+// Une ligne par modèle × couleur : Univers, Segment, Marque, PAJA (prix d'achat), % Remise, PA net saisi,
+// Total, puis une colonne de pièces par magasin (« SB 414/0 » : code du magasin dans Budgets › Magasins).
+// Regroupée par marque du budget : quantité = pièces commandées, montant = pièces × PA net
+// (PA net saisi s'il est rempli, sinon PAJA moins la remise).
+
+const STORE_CODE = /\d+\s*\/\s*\d+$/
+
+// « 10 » ou 10 % (0,1 dans Excel) → 0,1
+function remiseRate(v) {
+  const r = toAmount(v)
+  if (!r || r < 0) return 0
+  return r >= 1 ? r / 100 : r
+}
+
+export function parseCommandeSheet(rows, { univers, matchMagasin }) {
+  const h = rows.findIndex(r => {
+    const c = r.map(normLabel)
+    return c.includes('UNIVERS') && c.includes('MARQUE') && c.some(x => x === 'PAJA' || x.startsWith('PA NET'))
+  })
+  if (h < 0) return { error: 'Colonnes « Univers », « Marque » et « PAJA » introuvables : est-ce bien un fichier de commande ?' }
+  const header = rows[h].map(normLabel)
+  const col = name => header.indexOf(name)
+  const colUnivers = col('UNIVERS'), colSegment = col('SEGMENT'), colMarque = col('MARQUE'), colPaja = col('PAJA')
+  const colRemise = header.findIndex(c => c.includes('REMISE')), colPaNet = header.findIndex(c => c.startsWith('PA NET'))
+  const colTotal = col('TOTAL'), colModele = header.findIndex(c => c.startsWith('LIBELLE MODELE'))
+  const colCouleur = header.findIndex(c => c.startsWith('LIBELLE COULEUR'))
+  const known = new Set([colUnivers, colSegment, colMarque, colPaja, colRemise, colPaNet, colTotal])
+
+  const storeCols = [], unknownMagasins = []
+  rows[h].forEach((label, j) => {
+    if (known.has(j) || !cleanText(label)) return
+    const magId = matchMagasin(label)
+    if (magId) storeCols.push({ magId, j })
+    else if (STORE_CODE.test(cleanText(label))) unknownMagasins.push(cleanText(label))
+  })
+  if (!storeCols.length) return { error: 'Aucune colonne magasin reconnue (« SB 414/0 »…) : vérifie les codes dans l’onglet Magasins des budgets.' }
+
+  const matchUnivers = universMatcher(univers)
+  const unknownUnivers = new Set(), ecartsTotal = [], sansPrix = []
+  const lines = new Map()
+  let lignes = 0
+  for (const row of rows.slice(h + 1)) {
+    const marque = cleanMarque(row[colMarque]).toUpperCase()
+    const uLabel = cleanText(row[colUnivers])
+    if (!marque || !uLabel) continue // ligne vide ou total
+    const u = matchUnivers(uLabel)
+    if (!u) { unknownUnivers.add(uLabel); continue }
+    lignes++
+    let segment = colSegment >= 0 ? cleanText(row[colSegment]) : ''
+    if (normLabel(segment) === normLabel(u)) segment = ''
+    const segId = segmentId(u, segment)
+    const key = marqueKey(segId, marque)
+    const line = lines.get(key) ?? { segId, univers: u, segment, nom: marque, saisie: {}, quantite: {}, lignes: 0 }
+    line.lignes++
+    lines.set(key, line)
+
+    const paNet = colPaNet >= 0 ? toAmount(row[colPaNet]) : null
+    const prix = paNet > 0 ? paNet : (toAmount(row[colPaja]) || 0) * (1 - remiseRate(row[colRemise]))
+    const article = [row[colModele], row[colCouleur]].map(cleanText).filter(Boolean).join(' ') || marque
+    let pieces = 0
+    for (const { magId, j } of storeCols) {
+      const q = toAmount(row[j])
+      if (!q) continue
+      pieces += q
+      line.quantite[magId] = (line.quantite[magId] || 0) + q
+      line.saisie[magId] = Math.round(((line.saisie[magId] || 0) + q * prix) * 100) / 100
+    }
+    const total = colTotal >= 0 ? toAmount(row[colTotal]) : null
+    if (total != null && Math.abs(total - pieces) > 0.001) ecartsTotal.push(`${article} (Total ${total}, magasins ${pieces})`)
+    if (pieces > 0 && !(prix > 0)) sansPrix.push(article)
+  }
+
+  return {
+    lines: [...lines.values()], lignes, magIds: [...new Set(storeCols.map(s => s.magId))],
+    unknownMagasins, unknownUnivers: [...unknownUnivers], ecartsTotal, sansPrix,
+  }
+}
+
+// Plusieurs fichiers de commande lus ensemble : une même marque s'additionne
+export function mergeCommandes(results) {
+  const lines = new Map()
+  const add = (a, b) => { for (const [k, v] of Object.entries(b)) a[k] = Math.round(((a[k] || 0) + v) * 100) / 100 }
+  for (const r of results) {
+    for (const l of r.lines) {
+      const key = marqueKey(l.segId, l.nom)
+      const cur = lines.get(key)
+      if (!cur) { lines.set(key, { ...l, saisie: { ...l.saisie }, quantite: { ...l.quantite } }); continue }
+      add(cur.saisie, l.saisie); add(cur.quantite, l.quantite); cur.lignes += l.lignes
+    }
+  }
+  const all = k => [...new Set(results.flatMap(r => r[k]))]
+  return {
+    lines: [...lines.values()], lignes: results.reduce((t, r) => t + r.lignes, 0), magIds: all('magIds'),
+    unknownMagasins: all('unknownMagasins'), unknownUnivers: all('unknownUnivers'), ecartsTotal: all('ecartsTotal'), sansPrix: all('sansPrix'),
+  }
+}
+
+// Ce qu'une commande écrit dans le budget, marque par marque, dans les magasins du fichier (magIds) :
+// remplace la saisie (montants et quantités ; un magasin sans pièce est vidé) ou s'y ajoute (ajouter).
+// Les univers que l'utilisateur ne peut pas modifier sont écartés (horsDroits). Valeur null : à effacer.
+export function planCommande(commande, { brands, segments, budgetLines, user, ajouter = false }) {
+  const permis = commande.lines.filter(l => canEditUnivers(user, l.univers))
+  const horsDroits = [...new Set(commande.lines.filter(l => !canEditUnivers(user, l.univers)).map(l => l.univers))]
+  const { matched, missing, newSegments } = planN1Import(permis, brands, segments)
+  const byId = new Map(budgetLines.map(l => [l.id, l]))
+  const items = [...matched.map(m => ({ id: m.id, line: m.line, brand: brands.find(b => b.id === m.id) })),
+    ...missing.map(line => ({ id: null, line, brand: null }))]
+    .map(({ id, line, brand }) => {
+      const cur = (id && byId.get(id)) || {}
+      const values = k => Object.fromEntries(commande.magIds.flatMap(m => {
+        const v = line[k][m]
+        if (!ajouter) return [[m, v || null]]
+        if (!v) return []
+        return [[m, Math.round(((cur[k]?.[m] || 0) + v) * 100) / 100]]
+      }))
+      const saisie = values('saisie'), quantite = values('quantite')
+      const avant = sumValues(cur.saisie)
+      const apres = sumValues({ ...(cur.saisie || {}), ...saisie })
+      const identity = brand || line
+      return {
+        id, line, nouvelle: !id, identity: { univers: identity.univers, segId: identity.segId, segment: identity.segment || '', nom: identity.nom },
+        saisie, quantite, avant, apres, commande: sumValues(line.saisie), pieces: sumValues(line.quantite),
+      }
+    })
+  items.sort((a, b) => a.line.univers.localeCompare(b.line.univers, 'fr') || (a.line.segment || '').localeCompare(b.line.segment || '', 'fr')
+    || a.line.nom.localeCompare(b.line.nom, 'fr'))
+  return { items, horsDroits, newSegments }
+}
+
 // ── Marques ─────────────────────────────────────────────────────────────────────
 // Liste commune des marques (budget_marques : univers, segment, segId, nom). Dans un budget, la ligne
 // d'une marque (N-1, saisie, commentaire) porte l'id de la marque : budgets/{id}/marques/{idMarque}.
