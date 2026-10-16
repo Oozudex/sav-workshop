@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   FILTRE_SANS_ACHETEUR, acheteurCouvre, segmentsAuChoix, universLabel, addTotals, budgetRank, fournisseurResolver, coefMarque, computeAdapte, fournisseurKey, noteMarque, withAdapte, evolution, formatPct, groupeRatio, groupeTotal, objectif, brandsBySegment, budgetName, buyerFilterTest, defaultBuyerFilter, filtreAcheteur, canEditUnivers, computeTotals, segmentsCatalog, findN1Sheet, linesFromBudget, magasinMatcher, mergeSegments, n1Columns,
-  parseBaseSheet, parseN1Sheet, planN1Import, previousSeason, segmentId, sortSegments, mergeCommandes, parseCommandeSheet, saisieFromNextN1, planCommande, cibleCommande, CIBLE_IGNORER, CIBLE_NOUVELLE,
+  parseBaseSheet, parseN1Sheet, planN1Import, previousSeason, segmentId, sortSegments, mergeCommandes, parseCommandeSheet, parseMoreSheet, saisieFromNextN1, planCommande, cibleCommande, CIBLE_IGNORER, CIBLE_NOUVELLE,
 } from '../../src/lib/budgets.js'
 
 const MAGASINS = [
@@ -317,6 +317,55 @@ describe('commandes : déclinaisons de marque', () => {
     assert.equal(vers('h').aChoisir, 0)
     assert.deepEqual(vers(CIBLE_NOUVELLE).items.find(i => i.nouvelle).identity.nom, 'ENERGETICS')
     assert.equal(vers(CIBLE_IGNORER).items.length, 2)
+  })
+})
+
+describe('commandes MORE (Bestseller)', () => {
+  const HEAD = ['Marque', 'Sous-marque', 'Style numéro', 'Nom du style', 'Catégorie', 'Sous-catégorie', 'Nom de la couleur', 'Taille', 'Genre',
+    'Style NOOS', 'Quantité', 'WSP', 'Prix net unitaire', 'ID du compte', 'Nom du compte', 'Total commande line prix', 'Total unit prix']
+  const row = (taille, q, genre = 'Homme', noos = 'Noos', compte = 'Intersport / Franck III sarl') =>
+    ['Jack & Jones', 'JACK&JONES PREMIUM', '12136668', 'JPRPAULOS SS POLO NOOS', 'T-Shirts et tops', 'Polos', 'Navy Blazer', taille, genre, noos, q, 10.71, 10.65, '335213', compte, '127.87', String(q * 10.65)]
+  const mags = magasinMatcher([...MAGASINS, { id: 'sar', nom: 'SARAN', code: 'SAR 650/0', alias: ['INTERSPORT / FRANCK III SARL'] }])
+  const rows = [HEAD, row('M', 3), row('L', 3), row('XL', 2, 'Femme', '')]
+
+  it('reconnaît le magasin par le nom du compte, additionne les tailles au prix net (pas le total de groupe répété)', () => {
+    const r = parseMoreSheet(rows, { matchMagasin: mags, fichier: 'Order_53896835' })
+    assert.deepEqual(r.magIds, ['sar'])
+    const homme = r.lines.find(l => l.genre === 'Homme')
+    assert.deepEqual(homme.quantite, { sar: 6 })
+    assert.deepEqual(homme.saisie, { sar: 63.9 })
+    assert.equal(homme.segId, null)
+    assert.equal(r.lines.length, 2)
+  })
+
+  it('demande le magasin si le compte n’est reconnu nulle part', () => {
+    const r = parseMoreSheet([HEAD, row('M', 1, 'Homme', 'Noos', 'Autre sarl')], { matchMagasin: mags })
+    assert.deepEqual(r.magasinManquant, { id: '335213', nom: 'Autre sarl' })
+    assert.deepEqual(parseMoreSheet([HEAD, row('M', 1, 'Homme', 'Noos', 'Autre sarl')], { matchMagasin: mags, magasinId: 'cht' }).magIds, ['cht'])
+    assert.ok(parseMoreSheet(CDE, { matchMagasin: mags }).error)
+  })
+
+  it('trouve la ligne de budget par la marque, le genre et NOOS ; sinon à choisir', () => {
+    const seg = (u, s2) => ({ univers: u, segId: segmentId(u, s2), segment: s2 })
+    const brands = [
+      { id: 'noos', nom: 'JACK & JONES noos', ...seg('TEXTILE HOMME', 'LOISIR') },
+      { id: 'bas', nom: 'JACK & JONES NOOS BAS', ...seg('TEXTILE HOMME', 'LOISIR') },
+      { id: 'col', nom: 'JACK & JONES COL', ...seg('TEXTILE HOMME', 'LOISIR') },
+      { id: 'jr', nom: 'JACK & JONES', ...seg('TEXTILE GARCON JUNIOR', 'LOISIR') },
+      { id: 'f1', nom: 'JACK & JONES', ...seg('TEXTILE FEMME', 'LOISIR') },
+      { id: 'f2', nom: 'JACK & JONES', ...seg('TEXTILE FEMME', 'MULTISPORT') },
+    ]
+    const cde = parseMoreSheet(rows, { matchMagasin: mags, fichier: 'Order_53896835' })
+    const p = planCommande(cde, { brands, segments: [], budgetLines: [], user: { role: 'directeurgen' } })
+    const homme = p.rows.find(r => r.familles[0].startsWith('Homme'))
+    assert.equal(homme.cible, 'noos')
+    assert.equal(homme.univers, 'TEXTILE HOMME')
+    const femme = p.rows.find(r => r.familles[0].startsWith('Femme'))
+    assert.equal(femme.cible, '') // deux segments possibles
+    assert.deepEqual(femme.options.map(b => b.id), ['f1', 'f2'])
+    assert.equal(p.aChoisir, 1)
+    assert.deepEqual(p.items.map(i => [i.id, i.quantite]), [['noos', { sar: 6 }]])
+    assert.deepEqual(planCommande(cde, { brands: [], segments: [], budgetLines: [], user: { role: 'directeurgen' } }).absentes, ['JACK & JONES'])
   })
 })
 

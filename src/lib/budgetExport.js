@@ -1,10 +1,13 @@
 // Export Excel d'un budget rempli. Fonction pure (tests/unit/budgetExport.test.mjs) : renvoie les feuilles
 // { name, table, merges, formats, firstRow } ; le téléchargement est fait par downloadWorkbook (lib/excel.js).
 // 1. BUDGET PAR MARQUES : même présentation que le fichier N-1 (univers, segment, marques, puis par magasin
-//    N-1 / adapté / budget / quantité) : le fichier se réimporte tel quel comme N-1 l'année suivante
-//    (colonne « BUDGET AH27 »).
-// 2. SYNTHESE : univers et segments (base, groupe, adapté, N-1, saisi, engagé, reste…).
-// 3. PAR MAGASIN. 4. FOURNISSEURS : notes, budget demandé, adapté, saisi.
+//    N-1 / budget / quantité) ; en tête de chaque segment, son budget de base et son budget groupe par
+//    magasin (lignes « BUDGET PAR SEGMENT », ignorées à la réimport). Le fichier se réimporte tel quel
+//    comme N-1 l'année suivante (colonne « BUDGET AH27 »).
+// 2. SYNTHESE : univers et segments (base, groupe, N-1, saisi, engagé, reste…).
+// 3. PAR MAGASIN. 4. FOURNISSEURS : notes, budget demandé, saisi.
+// Le budget adapté (répartition calculée par la notation) n'apparaît pas dans l'export : on y parle du
+// budget de base et du budget groupe.
 import { CRITERES, addTotals, coefMarque, emptyCell, noteMarque, notationReglages, objectif, seasonCode } from './budgets.js'
 
 const EUR = '#,##0 "€";-#,##0 "€"'
@@ -23,7 +26,7 @@ function sheet(name, table, { merges = [], formats = {}, firstRow = 1 } = {}) {
 }
 
 export function budgetWorkbook({
-  budget, segments, magasins, totals, brandsBySeg, adapte, fournisseur, fiche, hasGroupe, groupeMontant, reglages,
+  budget, segments, magasins, totals, brandsBySeg, fournisseur, fiche, hasGroupe, groupeMontant, reglages,
   exportedAt = new Date(),
 }) {
   const code = seasonCode(budget.saison, budget.annee)
@@ -31,58 +34,73 @@ export function budgetWorkbook({
   const cell = (segId, magId) => totals[segId]?.[magId] || emptyCell()
 
   // ── 1. BUDGET PAR MARQUES ─────────────────────────────────────────────────────
-  const SUBS = [`BUDGET ${prevCode}`, `ADAPTÉ ${code}`, `BUDGET ${code}`, `QTÉ ${code}`]
-  const TOTAL_SUBS = ['N-1 TOTAL', 'ADAPTÉ TOTAL', 'BUDGET TOTAL', 'QTÉ TOTAL']
+  const SUBS = [`BUDGET ${prevCode}`, `BUDGET ${code}`, `QTÉ ${code}`]
+  const TOTAL_SUBS = ['N-1 TOTAL', 'BUDGET TOTAL', 'QTÉ TOTAL']
+  const W = SUBS.length
   const head = ['UNIVERS', 'SEGMENT', 'MARQUES']
   const sub = ['', '', '']
   const merges = []
   for (const m of [...magasins.map(x => x.nom), 'TOTAL']) {
     const c = head.length
-    head.push(m, '', '', '')
+    head.push(m, ...Array(W - 1).fill(''))
     sub.push(...(m === 'TOTAL' ? TOTAL_SUBS : SUBS))
-    merges.push({ s: { r: 0, c }, e: { r: 0, c: c + 3 } })
+    merges.push({ s: { r: 0, c }, e: { r: 0, c: c + W - 1 } })
   }
   const after = head.length
   head.push('COMMENTAIRE', 'STATUT', 'FOURNISSEUR', `QTÉ ${prevCode}`)
   sub.push('', '', '', '')
   const brandRows = [head, sub]
-  const grand = { n1: 0, adapte: 0, saisie: 0, qte: 0, mags: {} }
+  const grand = { n1: 0, saisie: 0, qte: 0, base: 0, groupe: 0, mags: {} }
+  // Enveloppe d'un segment par magasin (base ou groupe), dans la colonne « BUDGET AH27 »
+  const enveloppeRow = (univers, segment, label, key, cells) => {
+    const row = [univers, segment, label]
+    for (const c of cells) row.push('', r0(c[key]), '')
+    row.push('', r0(cells.reduce((t, c) => t + c[key], 0)), '', '', '', '', '')
+    return row
+  }
   for (const s of segments) {
+    const cells = magasins.map(m => cell(s.id, m.id))
+    brandRows.push(enveloppeRow(s.univers, s.nom || s.univers, 'BUDGET PAR SEGMENT · BUDGET DE BASE', 'base', cells))
+    if (hasGroupe) brandRows.push(enveloppeRow(s.univers, s.nom || s.univers, 'BUDGET PAR SEGMENT · BUDGET GROUPE', 'groupe', cells))
+    magasins.forEach((m, i) => {
+      const g = (grand.mags[m.id] ??= { n1: 0, saisie: 0, qte: 0, base: 0, groupe: 0 })
+      g.base += cells[i].base; g.groupe += cells[i].groupe
+    })
     for (const b of brandsBySeg.get(s.id) || []) {
       const l = b.line || {}
-      const ad = adapte.byBrand.get(b.id) || {}
       const row = [s.univers, s.nom || s.univers, b.nom]
       for (const m of magasins) {
-        row.push(val(l.n1, m.id), b.orphan ? '' : r0(ad[m.id]), val(l.saisie, m.id), val(l.quantite, m.id))
-        const g = (grand.mags[m.id] ??= { n1: 0, adapte: 0, saisie: 0, qte: 0 })
-        g.n1 += l.n1?.[m.id] || 0; g.adapte += b.orphan ? 0 : ad[m.id] || 0; g.saisie += l.saisie?.[m.id] || 0; g.qte += l.quantite?.[m.id] || 0
+        row.push(val(l.n1, m.id), val(l.saisie, m.id), val(l.quantite, m.id))
+        const g = grand.mags[m.id]
+        g.n1 += l.n1?.[m.id] || 0; g.saisie += l.saisie?.[m.id] || 0; g.qte += l.quantite?.[m.id] || 0
       }
-      const t = { n1: sum(l.n1), adapte: b.orphan ? 0 : sum(ad), saisie: sum(l.saisie), qte: sum(l.quantite) }
-      grand.n1 += t.n1; grand.adapte += t.adapte; grand.saisie += t.saisie; grand.qte += t.qte
+      const t = { n1: sum(l.n1), saisie: sum(l.saisie), qte: sum(l.quantite) }
+      grand.n1 += t.n1; grand.saisie += t.saisie; grand.qte += t.qte
       const filled = Object.keys(l.saisie || {}).length || Object.keys(l.quantite || {}).length
-      row.push(r2(t.n1), r0(t.adapte), r2(t.saisie), r2(t.qte) || '',
+      row.push(r2(t.n1), r2(t.saisie), r2(t.qte) || '',
         l.commentaire || '', filled ? (l.engage === true ? 'Engagé' : 'Prévisionnel') : '',
         fournisseur(b.nom).nom + (b.orphan ? ' (marque retirée)' : ''), sum(l.quantiteN1) || '')
       brandRows.push(row)
     }
   }
+  // Totaux : budget de base, budget groupe, puis N-1 / saisi / quantités (marque « TOTAL », ignorée à la réimport)
+  const mags = magasins.map(m => grand.mags[m.id] || { n1: 0, saisie: 0, qte: 0, base: 0, groupe: 0 })
+  brandRows.push(enveloppeRow('TOTAL', 'BUDGET DE BASE', 'TOTAL', 'base', mags))
+  if (hasGroupe) brandRows.push(enveloppeRow('TOTAL', 'BUDGET GROUPE', 'TOTAL', 'groupe', mags))
   const totalRow = ['TOTAL', '', 'TOTAL']
-  for (const m of magasins) {
-    const g = grand.mags[m.id] || { n1: 0, adapte: 0, saisie: 0, qte: 0 }
-    totalRow.push(r2(g.n1), r0(g.adapte), r2(g.saisie), r2(g.qte) || '')
-  }
-  totalRow.push(r2(grand.n1), r0(grand.adapte), r2(grand.saisie), r2(grand.qte) || '')
+  for (const g of mags) totalRow.push(r2(g.n1), r2(g.saisie), r2(g.qte) || '')
+  totalRow.push(r2(grand.n1), r2(grand.saisie), r2(grand.qte) || '')
   brandRows.push(totalRow)
   const brandFormats = {}
-  for (let c = 3; c < after; c++) brandFormats[c] = (c - 3) % 4 === 3 ? QTE : EUR
+  for (let c = 3; c < after; c++) brandFormats[c] = (c - 3) % W === W - 1 ? QTE : EUR
   brandFormats[after + 3] = QTE
 
   // ── 2. SYNTHESE (univers puis segments) ───────────────────────────────────────
-  const SYN_HEAD = ['UNIVERS', 'SEGMENT', 'BUDGET DE BASE', 'BUDGET GROUPE', 'BUDGET ADAPTÉ', `N-1 (${prevCode})`,
+  const SYN_HEAD = ['UNIVERS', 'SEGMENT', 'BUDGET DE BASE', 'BUDGET GROUPE', `N-1 (${prevCode})`,
     `SAISI (${code})`, 'ENGAGÉ', 'PRÉVISIONNEL', 'RESTE À RÉPARTIR', 'ÉVOL. SAISI / N-1', 'QUANTITÉS', 'QUANTITÉS N-1']
   const synRow = (u, segLabel, c) => {
     const reste = Math.max(objectif(c, hasGroupe), 0) - c.saisie
-    return [u, segLabel, r0(c.base), hasGroupe ? r0(c.groupe) : '', r0(c.adapte), r2(c.n1), r2(c.saisie), r2(c.engage),
+    return [u, segLabel, r0(c.base), hasGroupe ? r0(c.groupe) : '', r2(c.n1), r2(c.saisie), r2(c.engage),
       r2(c.saisie - c.engage), r0(reste), evol(c.saisie, c.n1), r2(c.qte) || '', r2(c.qteN1) || '']
   }
   const groupeLabel = groupeMontant == null ? 'non fixé'
@@ -108,12 +126,12 @@ export function budgetWorkbook({
     allCells.push(uc)
   }
   syn.push(synRow('TOTAL', '', addTotals(allCells)))
-  const synFormats = { 2: EUR, 3: EUR, 4: EUR, 5: EUR, 6: EUR, 7: EUR, 8: EUR, 9: EUR, 10: PCT, 11: QTE, 12: QTE }
+  const synFormats = { 2: EUR, 3: EUR, 4: EUR, 5: EUR, 6: EUR, 7: EUR, 8: EUR, 9: PCT, 10: QTE, 11: QTE }
 
   // ── 3. PAR MAGASIN ────────────────────────────────────────────────────────────
-  const MAG_HEAD = ['MAGASIN', 'BUDGET DE BASE', 'BUDGET GROUPE', 'BUDGET ADAPTÉ', `N-1 (${prevCode})`, `SAISI (${code})`,
+  const MAG_HEAD = ['MAGASIN', 'BUDGET DE BASE', 'BUDGET GROUPE', `N-1 (${prevCode})`, `SAISI (${code})`,
     'ENGAGÉ', 'PRÉVISIONNEL', 'RESTE À RÉPARTIR', 'ÉVOL. SAISI / N-1', 'QUANTITÉS']
-  const magRow = (label, c) => [label, r0(c.base), hasGroupe ? r0(c.groupe) : '', r0(c.adapte), r2(c.n1), r2(c.saisie),
+  const magRow = (label, c) => [label, r0(c.base), hasGroupe ? r0(c.groupe) : '', r2(c.n1), r2(c.saisie),
     r2(c.engage), r2(c.saisie - c.engage), r0(Math.max(objectif(c, hasGroupe), 0) - c.saisie), evol(c.saisie, c.n1), r2(c.qte) || '']
   const mag = [MAG_HEAD]
   const magCells = magasins.map(m => {
@@ -122,7 +140,7 @@ export function budgetWorkbook({
     return c
   })
   mag.push(magRow('TOTAL', addTotals(magCells)))
-  const magFormats = { 1: EUR, 2: EUR, 3: EUR, 4: EUR, 5: EUR, 6: EUR, 7: EUR, 8: EUR, 9: PCT, 10: QTE }
+  const magFormats = { 1: EUR, 2: EUR, 3: EUR, 4: EUR, 5: EUR, 6: EUR, 7: EUR, 8: PCT, 9: QTE }
 
   // ── 4. FOURNISSEURS ───────────────────────────────────────────────────────────
   const { poids, amplitude } = notationReglages(reglages)
@@ -139,22 +157,21 @@ export function budgetWorkbook({
     }
   }
   const F_HEAD = ['FOURNISSEUR', 'DÉCLINAISONS', 'UNIVERS', ...CRITERES.map(c => c.label.toUpperCase()), 'NOTE', 'COEFFICIENT',
-    'BUDGET DEMANDÉ', `N-1 (${prevCode})`, 'BUDGET ADAPTÉ', `SAISI (${code})`, 'ENGAGÉ', 'ÉCART SAISI / ADAPTÉ', 'NOTES REPRISES DE']
+    'BUDGET DEMANDÉ', `N-1 (${prevCode})`, `SAISI (${code})`, 'ENGAGÉ', 'NOTES REPRISES DE']
   const fRows = [F_HEAD]
   for (const e of [...fourn.values()].sort((a, b) => a.nom.localeCompare(b.nom, 'fr'))) {
     const fi = fiche(e.key)
     const note = noteMarque(fi?.notes, poids)
-    const info = adapte.marques.get(e.key)
     fRows.push([
       e.nom, [...e.decl].sort().join(', '), [...e.univers].sort().join(', '),
       ...CRITERES.map(c => (typeof fi?.notes?.[c.key] === 'number' ? fi.notes[c.key] : '')),
       note == null ? '' : Math.round(note * 10) / 10, Math.round(coefMarque(note, amplitude) * 100) / 100,
-      typeof fi?.demande === 'number' ? fi.demande : '', r2(e.n1), r0(info?.total), r2(e.saisie), r2(e.engage),
-      e.saisie ? r0(e.saisie - (info?.total || 0)) : '', fi?.herite ? fi.source || 'budget précédent' : '',
+      typeof fi?.demande === 'number' ? fi.demande : '', r2(e.n1), r2(e.saisie), r2(e.engage),
+      fi?.herite ? fi.source || 'budget précédent' : '',
     ])
   }
   const nc = CRITERES.length
-  const fFormats = { [3 + nc]: NOTE, [4 + nc]: '0.00', [5 + nc]: EUR, [6 + nc]: EUR, [7 + nc]: EUR, [8 + nc]: EUR, [9 + nc]: EUR, [10 + nc]: EUR }
+  const fFormats = { [3 + nc]: NOTE, [4 + nc]: '0.00', [5 + nc]: EUR, [6 + nc]: EUR, [7 + nc]: EUR, [8 + nc]: EUR }
 
   return [
     sheet('BUDGET PAR MARQUES', brandRows, { merges, formats: brandFormats, firstRow: 2 }),

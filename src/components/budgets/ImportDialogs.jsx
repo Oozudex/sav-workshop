@@ -5,6 +5,7 @@ import { BTN_PRIMARY, BTN_SECONDARY, Field, Modal, Notice } from '../admin/ui'
 import { readWorkbook } from '../../lib/excel'
 import {
   CIBLE_IGNORER, CIBLE_NOUVELLE, findN1Sheet, formatBudget, formatQte, magasinMatcher, mergeCommandes, n1Columns, parseBaseSheet, parseCommandeSheet,
+  parseMoreSheet,
   parseN1Sheet, planCommande, planN1Import, previousSeason, seasonCode, sumValues,
 } from '../../lib/budgets'
 import { applyCommande, applyN1, saveBase } from '../../lib/budgetsStore'
@@ -196,13 +197,30 @@ export function ImportN1Dialog({ budget, brands, univers, magasins, user, onClos
   )
 }
 
-// Commandes fournisseur : chaque fichier (une marque, une ligne par modèle × couleur, une colonne par magasin)
-// remplit la saisie et les quantités des marques, dans les univers que l'utilisateur peut modifier
+// Commandes fournisseur : chaque fichier remplit la saisie et les quantités des marques, dans les univers que
+// l'utilisateur peut modifier. L'acheteur choisit d'où vient le fichier (FORMATS_COMMANDE) : un format de plus
+// = une entrée de plus (lecture dans lib/budgets.js).
+const FORMATS_COMMANDE = [
+  {
+    id: 'mesachats', label: 'MesAchats', hint: 'Une ligne par modèle et couleur, une colonne de pièces par magasin (« CDE ENERGETICS AH27 »).',
+    lire: (rows, { univers, matchMagasin, fichier }) => parseCommandeSheet(rows, { univers, matchMagasin, fichier }),
+  },
+  {
+    id: 'more', label: 'MORE (Bestseller)', hint: 'Jack & Jones, Name It, Only… Une ligne par article et taille, un fichier par magasin (« Order_53896835 »).',
+    lire: (rows, { matchMagasin, fichier, magasinId }) => parseMoreSheet(rows, { matchMagasin, fichier, magasinId }),
+  },
+]
 export function ImportCommandeDialog({ budget, brands, lines, univers, magasins, user, onClose }) {
+  // Fichiers lus : { name, fichier, sheets: [lignes de chaque onglet] } ; magasin choisi à la main pour un
+  // fichier MORE dont le compte n'est reconnu dans aucun magasin : { [name]: magId }
   const [files, setFiles] = useState([])
+  const [format, setFormat] = useState('mesachats')
+  const [magasinFichier, setMagasinFichier] = useState({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [ajouter, setAjouter] = useState(false)
+  // Quand une ligne de marque a déjà une saisie : la commande s'additionne (true) ou la remplace (false) ;
+  // null tant que l'utilisateur n'a pas répondu
+  const [ajouter, setAjouter] = useState(null)
   // Ligne du budget choisie à la main pour une ligne de l'aperçu : { [row.key]: id | CIBLE_NOUVELLE | CIBLE_IGNORER }
   const [choix, setChoix] = useState({})
   const [done, setDone] = useState(null)
@@ -210,16 +228,12 @@ export function ImportCommandeDialog({ budget, brands, lines, univers, magasins,
   const magNom = useMemo(() => new Map(magasins.map(m => [m.id, m.nom])), [magasins])
 
   async function read(list) {
-    setBusy(true); setError(''); setFiles([]); setChoix({})
+    setBusy(true); setError(''); setFiles([]); setChoix({}); setAjouter(null); setMagasinFichier({})
     const ok = [], errors = []
     for (const f of list) {
       try {
         const wb = await readWorkbook(f)
-        const opts = { univers: univers.map(u => u.nom), matchMagasin: magasinMatcher(magasins), fichier: f.name.replace(/\.[^.]+$/, '') }
-        const results = wb.sheetNames.map(n => parseCommandeSheet(wb.rows(n), opts))
-        const r = results.find(x => !x.error) || results[0]
-        if (r.error) errors.push(`${f.name} : ${r.error}`)
-        else ok.push({ name: f.name, result: r })
+        ok.push({ name: f.name, fichier: f.name.replace(/\.[^.]+$/, ''), sheets: wb.sheetNames.map(n => wb.rows(n)) })
       } catch (err) { errors.push(`${f.name} : lecture impossible (${err.message})`) }
     }
     setFiles(ok)
@@ -227,9 +241,33 @@ export function ImportCommandeDialog({ budget, brands, lines, univers, magasins,
     setBusy(false)
   }
 
-  const commande = useMemo(() => (files.length ? mergeCommandes(files.map(f => f.result)) : null), [files])
-  const plan = useMemo(() => (commande ? planCommande(commande, { brands, segments: budget.segments, budgetLines: lines, user, ajouter, choix }) : null),
+  // Lecture de chaque fichier dans le format choisi (premier onglet lisible)
+  const fmt = FORMATS_COMMANDE.find(f => f.id === format)
+  const lus = useMemo(() => {
+    const matchMagasin = magasinMatcher(magasins)
+    return files.map(f => {
+      const essais = f.sheets.map(rows => fmt.lire(rows, { univers: univers.map(u => u.nom), matchMagasin, fichier: f.fichier, magasinId: magasinFichier[f.name] || null }))
+      const result = essais.find(x => !x.error && !(x.magasinManquant && !x.lines)) || essais.find(x => x.magasinManquant) || essais[0]
+      const autre = FORMATS_COMMANDE.find(o => o.id !== fmt.id && f.sheets.some(rows => !o.lire(rows, { univers: univers.map(u => u.nom), matchMagasin, fichier: f.fichier }).error))
+      return { ...f, result: result.error && autre ? { error: `${result.error} Ce fichier ressemble à un export ${autre.label} : choisis ce format en haut.` } : result }
+    })
+  }, [files, magasins, univers, magasinFichier, fmt])
+  // Fichiers MORE dont le compte n'est pas reconnu (magasin à choisir), ou dont le magasin a été choisi à la main
+  const sansMagasin = lus.filter(f => f.result.magasinManquant || magasinFichier[f.name])
+  const magNomDe = id => magasins.find(m => m.id === id)?.nom || id
+  // Fichiers MORE reconnus automatiquement : magasin retenu
+  const moreAuto = lus.filter(f => f.result.format === 'MORE' && f.result.lines?.length && !magasinFichier[f.name])
+  const erreurs = lus.filter(f => f.result.error).map(f => `${f.name} : ${f.result.error}`)
+  const valides = lus.filter(f => f.result.lines?.length)
+  const commande = useMemo(() => (valides.length ? mergeCommandes(valides.map(f => f.result)) : null), [valides])
+  const plan = useMemo(() => (commande ? planCommande(commande, { brands, segments: budget.segments, budgetLines: lines, user, ajouter: ajouter === true, choix }) : null),
     [commande, brands, budget.segments, lines, user, ajouter, choix])
+  // Lignes de marque visées qui ont déjà une saisie (montants ou quantités) : il faut savoir si la commande s'additionne
+  const lineById = useMemo(() => new Map(lines.map(l => [l.id, l])), [lines])
+  const dejaSaisies = plan ? plan.items.filter(it => it.id && (sumValues(lineById.get(it.id)?.saisie) || sumValues(lineById.get(it.id)?.quantite))) : []
+  const aRepondre = dejaSaisies.length > 0 && ajouter === null
+  // Montant de cette commande pour une ligne de marque (somme des lignes de l'aperçu qui y vont)
+  const commandeDe = it => plan.rows.filter(r => r.item === it).reduce((t, r) => t + r.commande, 0)
 
   async function save() {
     setBusy(true)
@@ -245,38 +283,109 @@ export function ImportCommandeDialog({ budget, brands, lines, univers, magasins,
   return (
     <Modal title="Importer des commandes" subtitle={`${budget.nom} · remplit la saisie des marques`} size="max-w-5xl" onClose={onClose}
       footer={done ? <button type="button" onClick={onClose} className={BTN_PRIMARY}>Fermer</button> : <>
-        {plan?.aChoisir > 0 && <span className="mr-auto text-xs font-semibold text-amber-700 dark:text-amber-300">{plan.aChoisir} ligne(s) à choisir</span>}
+        {(plan?.aChoisir > 0 || aRepondre) && (
+          <span className="mr-auto text-xs font-semibold text-amber-700 dark:text-amber-300">
+            {plan.aChoisir > 0 ? `${plan.aChoisir} ligne(s) à choisir` : 'Dis si la commande s’additionne ou remplace'}
+          </span>
+        )}
         <button type="button" onClick={onClose} className={BTN_SECONDARY}>Annuler</button>
-        <button type="button" onClick={save} disabled={!plan?.items.length || plan.aChoisir > 0 || busy} className={BTN_PRIMARY}>{busy && plan ? 'Import…' : 'Remplir la saisie'}</button>
+        <button type="button" onClick={save} disabled={!plan?.items.length || plan.aChoisir > 0 || aRepondre || busy} className={BTN_PRIMARY}>{busy && plan ? 'Import…' : 'Remplir la saisie'}</button>
       </>}>
       {notReady ? <Notice notice={{ text: notReady }} /> : done ? (
-        <Notice notice={{ tone: 'ok', text: `Saisie remplie : ${done.items.length} ligne(s) de marque${done.items.some(i => i.nouvelle) ? `, dont ${done.items.filter(i => i.nouvelle).length} ajoutée(s) à la liste des marques` : ''}. Elles restent en prévisionnel : passe-les en engagé dans le tableau quand la commande est validée.` }} />
+        <Notice notice={{ tone: 'ok', text: `Saisie ${ajouter ? 'complétée (commande additionnée)' : 'remplie'} : ${done.items.length} ligne(s) de marque${done.items.some(i => i.nouvelle) ? `, dont ${done.items.filter(i => i.nouvelle).length} ajoutée(s) à la liste des marques` : ''}. Elles restent en prévisionnel : passe-les en engagé dans le tableau quand la commande est validée.` }} />
       ) : <>
+        <div role="radiogroup" aria-label="D’où vient le fichier ?" className="space-y-1.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-neutral-400">D’où vient le fichier ?</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {FORMATS_COMMANDE.map(f => (
+              <button key={f.id} type="button" role="radio" aria-checked={format === f.id} onClick={() => { setFormat(f.id); setChoix({}); setAjouter(null) }}
+                className={`text-left rounded-xl border px-3 py-2 ${format === f.id
+                  ? 'border-gray-900 ring-1 ring-gray-900 dark:border-white dark:ring-white'
+                  : 'border-gray-200 hover:bg-gray-50 dark:border-neutral-700 dark:hover:bg-neutral-800'}`}>
+                <span className="block text-sm font-semibold text-gray-900 dark:text-white">{f.label}</span>
+                <span className="block text-[11px] text-gray-500 dark:text-neutral-400 leading-snug">{f.hint}</span>
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="text-xs text-gray-600 dark:text-neutral-300 leading-relaxed space-y-1">
           <p>
-            Fichier de commande exporté de MesAchats (« CDE ENERGETICS AH27 ») : une ligne par modèle et couleur, une colonne de pièces
-            par magasin. Pour chaque marque et chaque magasin : <strong>quantité = pièces commandées</strong>,{' '}
-            <strong>montant = pièces × prix d’achat net</strong> (« PA net saisi » s’il est rempli, sinon PAJA moins la remise).
+            Pour chaque marque et chaque magasin : <strong>quantité = pièces commandées</strong>, <strong>montant = pièces × prix d’achat net</strong>
+            {format === 'mesachats' ? ' (« PA net saisi » s’il est rempli, sinon PAJA moins la remise).' : ' (« Prix net unitaire »).'}
           </p>
           <p>
-            Quand le budget a plusieurs lignes pour la marque dans un segment (« ENERGETICS FEMME », « NIKE Q3 »…), chaque article va
-            dans celle qui correspond à sa <strong>famille, sous-famille, gamme ou au nom du fichier</strong> ; sinon dans la marque seule.
-            Vérifie la colonne « Ligne du budget » et change-la au besoin.
+            {format === 'mesachats'
+              ? 'Quand le budget a plusieurs lignes pour la marque dans un segment (« ENERGETICS FEMME », « NIKE Q3 »…), chaque article va dans celle qui correspond à sa famille, sous-famille, gamme ou au nom du fichier ; sinon dans la marque seule.'
+              : 'Le fichier ne donne ni univers ni segment : la ligne de budget est cherchée parmi les marques de ce nom, d’après le genre (Homme, Femme…), la catégorie, la sous-marque et NOOS. Le magasin est reconnu par le nom du compte MORE dans les autres noms du magasin.'}
+            {' '}Vérifie la colonne « Ligne du budget » et change-la au besoin.
           </p>
           <p>Les marques restent en <strong>prévisionnel</strong>. Tu peux choisir plusieurs fichiers d’un coup.</p>
         </div>
         <FileField label="Fichiers de commande" onFile={read} busy={busy && !plan} multiple />
-        {error && <Notice notice={{ text: error }} />}
+        {(error || erreurs.length > 0) && <Notice notice={{ text: [error, ...erreurs].filter(Boolean).join('\n') }} />}
+        {moreAuto.map(f => (
+          <p key={f.name} className="text-xs text-gray-700 dark:text-neutral-200">
+            <strong>{f.name}</strong> : magasin <strong>{f.result.magIds.map(magNomDe).join(', ')}</strong>
+            {f.result.comptes?.[0]?.nom && ` (compte MORE « ${f.result.comptes[0].nom} »)`}
+          </p>
+        ))}
+        {sansMagasin.map(f => {
+          const compte = f.result.magasinManquant || f.result.comptes?.[0] || {}
+          const aChoisir = !magasinFichier[f.name]
+          return (
+          <div key={f.name} role={aChoisir ? 'alert' : undefined} className={`rounded-xl border px-3 py-2.5 text-xs space-y-2 ${aChoisir
+            ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100'
+            : 'border-gray-200 bg-gray-50 text-gray-700 dark:border-neutral-700 dark:bg-neutral-800/40 dark:text-neutral-200'}`}>
+            <p>
+              <strong>{f.name}</strong> : le compte MORE <strong>{compte.id}</strong> « {compte.nom} » n’est reconnu dans aucun magasin.
+              {aChoisir ? ' Choisis le magasin de cette commande.' : ''} Pour que ce soit automatique la prochaine fois, ajoute
+              « {compte.nom} » dans les autres noms du magasin (Budgets › Magasins).
+            </p>
+            <select value={magasinFichier[f.name] || ''} onChange={e => setMagasinFichier(m => ({ ...m, [f.name]: e.target.value }))}
+              aria-label={`Magasin de la commande ${f.name}`} className={`${SELECT} max-w-xs`}>
+              <option value="">Choisir le magasin…</option>
+              {magasins.map(m => <option key={m.id} value={m.id}>{m.nom}</option>)}
+            </select>
+          </div>
+          )
+        })}
         {plan && <>
-          <label className="flex items-start gap-2 text-xs text-gray-700 dark:text-neutral-200">
-            <input type="checkbox" checked={ajouter} onChange={e => setAjouter(e.target.checked)} className="mt-0.5" />
-            <span>
-              <strong>Ajouter à ce qui est déjà saisi</strong> (complément d’une commande déjà importée).
-              Sinon, la saisie de la ligne de marque est <strong>remplacée</strong> dans les magasins du fichier.
-            </span>
-          </label>
+          {dejaSaisies.length > 0 && (
+            <div role={aRepondre ? 'alert' : undefined} className={`rounded-xl border px-3 py-2.5 text-xs space-y-2 ${aRepondre
+              ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100'
+              : 'border-gray-200 bg-gray-50 text-gray-700 dark:border-neutral-700 dark:bg-neutral-800/40 dark:text-neutral-200'}`}>
+              <p className="font-semibold">
+                {dejaSaisies.length} ligne(s) de marque ont déjà une saisie. Cette commande s’additionne-t-elle à ce qui est déjà saisi ?
+              </p>
+              <ul className="space-y-0.5">
+                {dejaSaisies.slice(0, 8).map(it => {
+                  const avant = sumValues(lineById.get(it.id)?.saisie)
+                  const cmd = commandeDe(it)
+                  return (
+                    <li key={it.tKey} className="tabular-nums">
+                      <strong>{it.identity.nom}</strong> ({it.identity.univers} › {it.identity.segment || 'sans segment'}) : déjà {formatBudget(avant)},
+                      cette commande {formatBudget(cmd)} → <strong>{formatBudget(avant + cmd)}</strong> si on additionne, {formatBudget(cmd)} si elle remplace
+                    </li>
+                  )
+                })}
+                {dejaSaisies.length > 8 && <li>… et {dejaSaisies.length - 8} autre(s).</li>}
+              </ul>
+              <div role="radiogroup" aria-label="La commande s’additionne ou remplace" className="flex flex-wrap gap-2">
+                {[[true, 'Oui, elle s’additionne', 'commande en plus : on ajoute pièces et montants'],
+                  [false, 'Non, elle remplace', 'nouvelle version de la même commande']].map(([v, label, hint]) => (
+                  <button key={label} type="button" role="radio" aria-checked={ajouter === v} onClick={() => setAjouter(v)}
+                    className={`px-3 py-1.5 rounded-lg border text-left ${ajouter === v
+                      ? 'bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900 dark:border-white'
+                      : 'bg-white border-gray-300 text-gray-800 hover:bg-gray-100 dark:bg-neutral-900 dark:border-neutral-600 dark:text-neutral-200'}`}>
+                    <span className="block font-semibold">{label}</span>
+                    <span className="block text-[10px] opacity-80">{hint}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <Stat label="Fichiers" value={files.length} />
+            <Stat label="Fichiers" value={valides.length} />
             <Stat label="Lignes de marque" value={plan.items.length} />
             <Stat label="Pièces" value={formatQte(pieces)} />
             <Stat label="Montant (prix d’achat)" value={formatBudget(montant)} />
@@ -299,7 +408,7 @@ export function ImportCommandeDialog({ budget, brands, lines, univers, magasins,
                     const exacte = r.options.some(b => b.nom.toUpperCase() === r.nom)
                     return (
                       <tr key={r.key} className={`border-t border-gray-100 dark:border-neutral-800 align-top ${r.cible ? '' : 'bg-amber-50 dark:bg-amber-500/10'}`}>
-                        <td className="py-1 px-1.5">{r.univers} › {r.segment || 'sans segment'}</td>
+                        <td className="py-1 px-1.5">{r.global && !r.univers ? '—' : `${r.univers} › ${r.segment || 'sans segment'}`}</td>
                         <td className="py-1 px-1.5" title={detail(r)}>
                           <span className="font-semibold">{r.nom}</span>
                           {r.familles.length > 0 && <span className="block text-[10px] text-gray-500 dark:text-neutral-400">{r.familles.slice(0, 4).join(', ')}{r.familles.length > 4 ? `… (+${r.familles.length - 4})` : ''}</span>}
@@ -311,8 +420,8 @@ export function ImportCommandeDialog({ budget, brands, lines, univers, magasins,
                             aria-label={`Ligne du budget pour ${r.nom} (${r.univers} › ${r.segment || 'sans segment'})`}
                             className={`${SELECT} !h-8 !text-xs min-w-[11rem] ${r.cible ? '' : '!border-amber-400'}`}>
                             {!r.cible && <option value="">— À choisir —</option>}
-                            {r.options.map(b => <option key={b.id} value={b.id}>{b.nom}</option>)}
-                            {!exacte && <option value={CIBLE_NOUVELLE}>Nouvelle marque « {r.nom} »</option>}
+                            {r.options.map(b => <option key={b.id} value={b.id}>{r.global ? `${b.nom} (${b.univers} › ${b.segment || 'sans segment'})` : b.nom}</option>)}
+                            {!exacte && !r.global && <option value={CIBLE_NOUVELLE}>Nouvelle marque « {r.nom} »</option>}
                             <option value={CIBLE_IGNORER}>Ne pas importer</option>
                           </select>
                         </td>
@@ -330,6 +439,7 @@ export function ImportCommandeDialog({ budget, brands, lines, univers, magasins,
             </div>
           )}
           <Warning title="Univers que tu ne peux pas modifier (lignes ignorées) :" items={plan.horsDroits} />
+          <Warning title="Marques absentes des budgets (lignes ignorées) : ajoute-les dans l’onglet Marques puis réimporte." items={plan.absentes} />
           <Warning title="Segments absents du budget, ajoutés avec un budget de base à 0 :"
             items={plan.newSegments.map(s => `${s.univers} › ${s.nom || 'sans segment'}`)} />
           <Warning title="Magasins non reconnus (colonnes ignorées) : ajoute ce code dans l’onglet Magasins puis réimporte." items={commande.unknownMagasins} />

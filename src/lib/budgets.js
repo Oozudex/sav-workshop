@@ -434,6 +434,61 @@ export function parseCommandeSheet(rows, { univers, matchMagasin, fichier = '' }
   }
 }
 
+// ── Commandes de la plateforme MORE (Bestseller : Jack & Jones, Name It, Only…) ──
+// Une ligne par article × couleur × taille, pour un seul compte client (= un magasin, reconnu par son nom
+// ou son numéro de compte dans les « autres noms » du magasin). Ni univers ni segment : la ligne de budget
+// est cherchée parmi les marques de ce nom (cibleCommandeGlobale), d'après le genre, la catégorie, la
+// sous-marque, NOOS et le nom du fichier. Montant = pièces × « Prix net unitaire » de chaque ligne (la colonne
+// « Total commande line prix » est le total d'un groupe d'articles, répété sur chacune de ses tailles).
+// magasinId : magasin choisi à la main quand le compte n'est pas reconnu.
+export function parseMoreSheet(rows, { matchMagasin, fichier = '', magasinId = null }) {
+  const h = rows.findIndex(r => {
+    const c = r.map(normLabel)
+    return c.includes('MARQUE') && c.includes('QUANTITE') && c.includes('PRIX NET UNITAIRE')
+  })
+  if (h < 0) return { error: 'Colonnes « Marque », « Quantité » et « Prix net unitaire » introuvables : est-ce bien une commande MORE ?' }
+  const header = rows[h].map(normLabel)
+  const col = name => header.indexOf(name)
+  const c = {
+    marque: col('MARQUE'), sousMarque: col('SOUS-MARQUE'), style: col('NOM DU STYLE'), couleur: col('NOM DE LA COULEUR'),
+    categorie: col('CATEGORIE'), sousCategorie: col('SOUS-CATEGORIE'), genre: col('GENRE'), noos: col('STYLE NOOS'),
+    qte: col('QUANTITE'), prix: col('PRIX NET UNITAIRE'), totalLigne: col('TOTAL UNIT PRIX'),
+    compteId: col('ID DU COMPTE'), compteNom: col('NOM DU COMPTE'),
+  }
+  const cell = (row, j) => (j >= 0 ? cleanText(row[j]) : '')
+  const lines = new Map(), sansPrix = [], comptes = new Map()
+  let lignes = 0, manquant = null
+  for (const row of rows.slice(h + 1)) {
+    const marque = cleanMarque(row[c.marque]).toUpperCase()
+    const q = toAmount(row[c.qte])
+    if (!marque || !q) continue
+    const compte = { id: cell(row, c.compteId), nom: cell(row, c.compteNom) }
+    const magId = magasinId || matchMagasin(compte.nom) || matchMagasin(compte.id)
+    if (!magId) { manquant ??= compte; continue }
+    comptes.set(magId, compte)
+    lignes++
+    const genre = cell(row, c.genre)
+    const contexte = [...new Set([genre, cell(row, c.categorie), cell(row, c.sousCategorie), cell(row, c.sousMarque), cell(row, c.noos), fichier].flatMap(mots))].join(' ')
+    const key = `?|${normLabel(marque)}|${contexte}`
+    const line = lines.get(key) ?? {
+      key, segId: null, univers: null, segment: null, nom: marque, genre, famille: [genre, cell(row, c.sousCategorie)].filter(Boolean).join(' · '),
+      contexte, saisie: {}, quantite: {}, lignes: 0,
+    }
+    line.lignes++
+    lines.set(key, line)
+    const prix = toAmount(row[c.prix])
+    const montant = prix > 0 ? q * prix : (c.totalLigne >= 0 ? toAmount(row[c.totalLigne]) || 0 : 0)
+    line.quantite[magId] = (line.quantite[magId] || 0) + q
+    line.saisie[magId] = Math.round(((line.saisie[magId] || 0) + montant) * 100) / 100
+    if (!(montant > 0)) sansPrix.push([cell(row, c.style), cell(row, c.couleur)].filter(Boolean).join(' ') || marque)
+  }
+  if (manquant && !lines.size) return { magasinManquant: manquant }
+  return {
+    format: 'MORE', lines: [...lines.values()], lignes, magIds: [...comptes.keys()], comptes: [...comptes.values()],
+    magasinManquant: manquant, unknownMagasins: [], unknownUnivers: [], ecartsTotal: [], sansPrix,
+  }
+}
+
 const addValues = (a, b) => { for (const [k, v] of Object.entries(b)) a[k] = Math.round(((a[k] || 0) + v) * 100) / 100 }
 
 // Plusieurs fichiers de commande lus ensemble : un même groupe (segment, marque, contexte) s'additionne
@@ -462,8 +517,18 @@ export const CIBLE_IGNORER = 'ignorer'
 // la marque n'existe pas encore dans le segment.
 export function cibleCommande(line, segBrands) {
   const marque = normLabel(line.nom)
-  const contexte = new Set(line.contexte.split(' '))
   const candidates = segBrands.filter(b => normLabel(b.nom) === marque || normLabel(b.nom).startsWith(`${marque} `))
+  const best = meilleureDeclinaison(line, candidates)
+  if (best !== undefined) return best
+  const exacte = candidates.find(b => normLabel(b.nom) === marque)
+  if (exacte) return exacte.id
+  return candidates.length ? '' : CIBLE_NOUVELLE
+}
+
+// Déclinaison dont la fin du nom est dans le contexte : son id, '' si plusieurs à égalité, undefined si aucune
+function meilleureDeclinaison(line, candidates) {
+  const marque = normLabel(line.nom)
+  const contexte = new Set(line.contexte.split(' '))
   let best = [], bestScore = 0
   for (const b of candidates) {
     const suffixe = mots(normLabel(b.nom).slice(marque.length))
@@ -471,10 +536,29 @@ export function cibleCommande(line, segBrands) {
     if (suffixe.length > bestScore) { best = [b]; bestScore = suffixe.length } else if (suffixe.length === bestScore) best.push(b)
   }
   if (best.length === 1) return best[0].id
-  if (best.length > 1) return ''
-  const exacte = candidates.find(b => normLabel(b.nom) === marque)
-  if (exacte) return exacte.id
-  return candidates.length ? '' : CIBLE_NOUVELLE
+  return best.length > 1 ? '' : undefined
+}
+
+// Lignes de marque possibles pour un groupe sans segment (commande MORE) : celles qui portent ce nom de
+// marque dans tous les segments, en gardant celles du bon genre (« Homme » → univers ou déclinaison HOMME)
+export function candidatsMarque(line, brands) {
+  const marque = normLabel(line.nom)
+  const toutes = brands.filter(b => normLabel(b.nom) === marque || normLabel(b.nom).startsWith(`${marque} `))
+  const genre = mots(line.genre || '')
+  if (!genre.length) return toutes
+  const duGenre = toutes.filter(b => genre.some(w => mots(b.univers).includes(w) || mots(b.nom).includes(w)))
+  return duGenre.length ? duGenre : toutes
+}
+
+// Ligne de budget d'un groupe sans segment : la déclinaison du contexte, sinon la marque seule si elle n'est
+// que dans un segment ; '' à choisir ; CIBLE_IGNORER si la marque n'est dans aucun budget
+export function cibleCommandeGlobale(line, candidates) {
+  if (!candidates.length) return CIBLE_IGNORER
+  const best = meilleureDeclinaison(line, candidates)
+  if (best !== undefined) return best
+  const exactes = candidates.filter(b => normLabel(b.nom) === normLabel(line.nom))
+  if (exactes.length === 1) return exactes[0].id
+  return candidates.length === 1 ? candidates[0].id : ''
 }
 
 // Ce qu'une commande écrit dans le budget. Lignes affichées (rows) : un groupe par segment, marque et
@@ -483,9 +567,11 @@ export function cibleCommande(line, segBrands) {
 // remplacement de la saisie (montants et quantités ; un magasin sans pièce est vidé) ou ajout (ajouter).
 // Les univers que l'utilisateur ne peut pas modifier sont écartés (horsDroits). Valeur null : à effacer.
 export function planCommande(commande, { brands, segments, budgetLines, user, ajouter = false, choix = {} }) {
-  const permis = commande.lines.filter(l => canEditUnivers(user, l.univers, l.segment))
-  const horsDroits = [...new Set(commande.lines.filter(l => !canEditUnivers(user, l.univers, l.segment))
-    .map(l => (l.segment ? `${l.univers} › ${l.segment}` : l.univers)))]
+  const avecSegment = commande.lines.filter(l => l.segId)
+  const permis = avecSegment.filter(l => canEditUnivers(user, l.univers, l.segment))
+  const horsDroits = new Set(avecSegment.filter(l => !canEditUnivers(user, l.univers, l.segment))
+    .map(l => (l.segment ? `${l.univers} › ${l.segment}` : l.univers)))
+  const absentes = new Set()
   const bySeg = new Map()
   for (const b of brands) bySeg.set(b.segId, [...(bySeg.get(b.segId) || []), b])
   for (const list of bySeg.values()) list.sort((a, b) => a.nom.localeCompare(b.nom, 'fr'))
@@ -504,9 +590,29 @@ export function planCommande(commande, { brands, segments, budgetLines, user, aj
     addValues(row.saisie, l.saisie); addValues(row.quantite, l.quantite); row.lignes += l.lignes
     rowsByKey.set(key, row)
   }
-  const rows = [...rowsByKey.values()].map(r => ({
-    ...r, cible: choix[r.key] ?? r.auto, commande: sumValues(r.saisie), pieces: sumValues(r.quantite),
-  }))
+  // Groupes sans segment (commande MORE) : la ligne de budget est cherchée parmi les marques de ce nom
+  const editable = b => canEditUnivers(user, b.univers, b.segment || '')
+  for (const l of commande.lines.filter(x => !x.segId)) {
+    const candidats = candidatsMarque(l, brands)
+    const options = candidats.filter(editable).sort((a, b) => a.univers.localeCompare(b.univers, 'fr') || (a.segment || '').localeCompare(b.segment || '', 'fr') || a.nom.localeCompare(b.nom, 'fr'))
+    if (!candidats.length) { absentes.add(l.nom); continue }
+    if (!options.length) { candidats.forEach(b => horsDroits.add(b.segment ? `${b.univers} › ${b.segment}` : b.univers)); continue }
+    const auto = cibleCommandeGlobale(l, options)
+    const key = `?|${normLabel(l.nom)}|${auto}`
+    const row = rowsByKey.get(key) ?? { key, auto, global: true, segId: null, univers: '', segment: '', nom: l.nom, familles: [], options, saisie: {}, quantite: {}, lignes: 0 }
+    if (l.famille && !row.familles.includes(l.famille)) row.familles.push(l.famille)
+    addValues(row.saisie, l.saisie); addValues(row.quantite, l.quantite); row.lignes += l.lignes
+    rowsByKey.set(key, row)
+  }
+  const rows = [...rowsByKey.values()].map(r => {
+    const cible = choix[r.key] ?? r.auto
+    // Sans segment : univers et segment de la ligne de budget choisie
+    const b = r.global ? brandById.get(cible) : null
+    return {
+      ...r, cible, commande: sumValues(r.saisie), pieces: sumValues(r.quantite),
+      ...(r.global ? { univers: b?.univers || '', segment: b?.segment || '', segId: b?.segId || null } : {}),
+    }
+  })
   rows.sort((a, b) => a.univers.localeCompare(b.univers, 'fr') || (a.segment || '').localeCompare(b.segment || '', 'fr')
     || a.nom.localeCompare(b.nom, 'fr') || a.familles.join().localeCompare(b.familles.join(), 'fr'))
 
@@ -551,7 +657,7 @@ export function planCommande(commande, { brands, segments, budgetLines, user, aj
     segIds.add(it.identity.segId)
     newSegments.push({ id: it.identity.segId, univers: it.identity.univers, nom: it.identity.segment })
   }
-  return { rows, items, horsDroits, newSegments, aChoisir: rows.filter(r => !r.cible).length }
+  return { rows, items, horsDroits: [...horsDroits], absentes: [...absentes], newSegments, aChoisir: rows.filter(r => !r.cible).length }
 }
 
 // ── Marques ─────────────────────────────────────────────────────────────────────
