@@ -69,17 +69,26 @@ export const DEFAULT_MAGASINS = [
 
 // ── Droits ──────────────────────────────────────────────────────────────────────
 // La direction (administrateurs compris) modifie tous les univers ; un acheteur, ses univers attitrés
-// (users/{uid}.univers). Un univers partagé entre deux acheteurs (TEXTILE : LOISIR / MULTISPORT) peut être
-// limité à certains segments (users/{uid}.universSegments : { univers: [segments] }, absent = tous).
+// (users/{uid}.univers). Un univers partagé entre deux acheteurs (TEXTILE : LOISIR / MULTISPORT, TRAINING :
+// HABILLEMENT / CHAUSSURES) peut être limité à certains segments (users/{uid}.universSegments :
+// { univers: [segments] }, absent = tous).
 // Les règles Firestore appliquent la même règle aux lignes par marque et à la liste des marques.
 
-// Segments qu'on peut répartir entre acheteurs dans un univers qui a les deux
-export const SEGMENTS_PARTAGEABLES = ['LOISIR', 'MULTISPORT']
+// Segments qu'on peut répartir entre acheteurs : LOISIR / MULTISPORT dans tout univers qui a les deux,
+// HABILLEMENT / CHAUSSURES seulement dans TRAINING (les autres univers de sport restent entiers)
+export const SEGMENTS_PARTAGEABLES = [
+  { segments: ['LOISIR', 'MULTISPORT'], univers: () => true },
+  { segments: ['HABILLEMENT', 'CHAUSSURES'], univers: u => normLabel(u) === 'TRAINING' },
+]
 
-// Segments proposés au choix pour un univers (noms de ses segments) : LOISIR et MULTISPORT s'il a les deux
-export function segmentsAuChoix(segmentNames) {
-  const choix = SEGMENTS_PARTAGEABLES.map(p => segmentNames.find(n => normLabel(n) === p)).filter(Boolean)
-  return choix.length === SEGMENTS_PARTAGEABLES.length ? choix : []
+// Segments proposés au choix pour un univers (noms de ses segments), [] si l'univers n'est pas partagé
+export function segmentsAuChoix(univers, segmentNames) {
+  for (const p of SEGMENTS_PARTAGEABLES) {
+    if (!p.univers(univers)) continue
+    const choix = p.segments.map(nom => segmentNames.find(n => normLabel(n) === nom)).filter(Boolean)
+    if (choix.length === p.segments.length) return choix
+  }
+  return []
 }
 
 // L'acheteur a cet univers (et ce segment). Sans segment : l'univers, en tout ou en partie.

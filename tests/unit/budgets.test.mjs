@@ -73,10 +73,12 @@ describe('univers partagé par segment (TEXTILE : LOISIR / MULTISPORT)', () => {
   const loisir = { id: 'paul', role: 'acheteur', univers: ['TEXTILE HOMME', 'CYCLE'], universSegments: { 'TEXTILE HOMME': ['LOISIR'] } }
   const multi = { id: 'lea', role: 'acheteur', univers: ['TEXTILE HOMME'], universSegments: { 'TEXTILE HOMME': ['MULTISPORT'] } }
 
-  it('propose Loisir / Multisport seulement aux univers qui ont les deux', () => {
-    assert.deepEqual(segmentsAuChoix(['LOISIR', 'MULTISPORT']), ['LOISIR', 'MULTISPORT'])
-    assert.deepEqual(segmentsAuChoix(['Multisport', 'Loisir', 'AUTRE']), ['Loisir', 'Multisport'])
-    assert.deepEqual(segmentsAuChoix(['LOISIR', 'VELO']), [])
+  it('propose Loisir / Multisport aux univers qui ont les deux, Habillement / Chaussures au TRAINING', () => {
+    assert.deepEqual(segmentsAuChoix('TEXTILE HOMME', ['LOISIR', 'MULTISPORT']), ['LOISIR', 'MULTISPORT'])
+    assert.deepEqual(segmentsAuChoix('TEXTILE FEMME', ['Multisport', 'Loisir', 'AUTRE']), ['Loisir', 'Multisport'])
+    assert.deepEqual(segmentsAuChoix('TEXTILE HOMME', ['LOISIR', 'VELO']), [])
+    assert.deepEqual(segmentsAuChoix('TRAINING', ['CHAUSSURES', 'HABILLEMENT']), ['HABILLEMENT', 'CHAUSSURES'])
+    assert.deepEqual(segmentsAuChoix('RUNNING', ['CHAUSSURES', 'HABILLEMENT']), [])
   })
 
   it('un acheteur limité à un segment ne modifie que celui-là', () => {

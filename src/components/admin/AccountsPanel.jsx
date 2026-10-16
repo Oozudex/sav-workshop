@@ -71,7 +71,7 @@ function AccountModal({ kind, account, me, magasins, admins, universList, segmen
       const nom = form.nom.trim()
       // Segments retenus seulement pour un univers coché et pas tous ses segments au choix (« Les deux » = rien)
       const universSegments = Object.fromEntries(Object.entries(form.universSegments).filter(([u, l]) =>
-        form.univers.includes(u) && l.length && l.length < segmentsAuChoix(segmentsParUnivers.get(u) || []).length))
+        form.univers.includes(u) && l.length && l.length < segmentsAuChoix(u, segmentsParUnivers.get(u) || []).length))
       const acheteur = { rayons: form.rayons, univers: form.univers, universSegments }
       const extra = kind === 'acheteur' ? acheteur
         : kind === 'directeurmag' ? { magasinId: form.magasinId }
@@ -185,7 +185,7 @@ function PickerHeader({ title, hint, count, actions }) {
 }
 
 // Univers attitrés : marques et saisie des budgets, « Mes univers » des pages B2B et Services. Un univers
-// partagé entre deux acheteurs (TEXTILE : LOISIR / MULTISPORT) se limite à un segment ou garde les deux.
+// partagé entre deux acheteurs (TEXTILE, TRAINING) se limite à un segment ou garde les deux.
 function UniversPicker({ list, value, onChange, segmentsParUnivers, segments, onSegments, autres }) {
   const all = list.length > 0 && list.every(u => value.includes(u.nom))
   return (
@@ -203,9 +203,10 @@ function UniversPicker({ list, value, onChange, segmentsParUnivers, segments, on
   )
 }
 
-// Pour chaque univers coché qui a LOISIR et MULTISPORT : l'un, l'autre ou les deux
+// Pour chaque univers coché partagé par segment (TEXTILE : LOISIR / MULTISPORT, TRAINING : HABILLEMENT /
+// CHAUSSURES) : l'un, l'autre ou les deux
 function SegmentsChoice({ univers, segmentsParUnivers, value, onChange, autres }) {
-  const rows = univers.map(u => ({ u, choix: segmentsAuChoix(segmentsParUnivers.get(u) || []) })).filter(r => r.choix.length)
+  const rows = univers.map(u => ({ u, choix: segmentsAuChoix(u, segmentsParUnivers.get(u) || []) })).filter(r => r.choix.length)
   if (!rows.length) return null
   const pick = (u, l) => onChange({ ...value, [u]: l })
   return (
